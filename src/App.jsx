@@ -24,10 +24,10 @@ const SPOTS = [
   { id:44, name:"白玉楼",             x:48.2, y:83, area:"異世界",           rei:4 },
   { id:45, name:"旧地獄街道",         x:77, y:78, area:"異世界",           rei:4 },
   { id:46, name:"畜生界/地霊殿",      x:87, y:82, area:"異世界",           rei:4 },
-  { id:55, name:"永遠亭",             x:84, y:44, area:"迷いの竹林",       rei:5 },
+  { id:55, name:"永遠亭",             x:85, y:44, area:"迷いの竹林",       rei:5 },
   { id:56, name:"輝針城/迷いの竹林",  x:77.5, y:32.5, area:"迷いの竹林",       rei:5 },
-  { id:66, name:"博麗神社",           x:89, y:29.5, area:"人間の里",         rei:1 },
-  { id:00, name:"夢の世界",           x:90.5, y:54.5, area:"異世界",         rei:4 },
+  { id:66, name:"博麗神社",           x:88.5, y:19.5, area:"人間の里",         rei:1 },
+  { id:00, name:"夢の世界",           x:91, y:54.5, area:"異世界",         rei:4 },
 ];
 
 const NEWSPAPER = {
