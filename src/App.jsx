@@ -6,7 +6,7 @@ const MAP_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 
 // ─── データ定義 ───────────────────────────────────────
 const SPOTS = [
-  { id:11, name:"人間の里",           x:50, y:27, area:"人間の里",         rei:1 },
+  { id:11, name:"人間の里",           x:56, y:27, area:"人間の里",         rei:1 },
   { id:12, name:"命蓮寺",             x:31, y:30, area:"人間の里",         rei:1 },
   { id:13, name:"香霖堂",             x:35, y:41, area:"人間の里",         rei:1 },
   { id:14, name:"神霊廟/マヨヒガ",    x:40, y:52, area:"人間の里",         rei:1 },
