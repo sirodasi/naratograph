@@ -6,12 +6,12 @@ const MAP_SRC = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQE
 
 // ─── データ定義 ───────────────────────────────────────
 const SPOTS = [
-  { id:11, name:"人間の里",           x:56, y:27, area:"人間の里",         rei:1 },
-  { id:12, name:"命蓮寺",             x:31, y:30, area:"人間の里",         rei:1 },
-  { id:13, name:"香霖堂",             x:35, y:41, area:"人間の里",         rei:1 },
-  { id:14, name:"神霊廟/マヨヒガ",    x:40, y:52, area:"人間の里",         rei:1 },
-  { id:15, name:"間欠泉地下センター",  x:55, y:63, area:"人間の里",         rei:1 },
-  { id:16, name:"太陽の畑",           x:57, y:40, area:"人間の里",         rei:1 },
+  { id:11, name:"人間の里",           x:57, y:27, area:"人間の里",         rei:1 },
+  { id:12, name:"命蓮寺",             x:36, y:25, area:"人間の里",         rei:1 },
+  { id:13, name:"香霖堂",             x:40, y:36, area:"人間の里",         rei:1 },
+  { id:14, name:"神霊廟/マヨヒガ",    x:45, y:47, area:"人間の里",         rei:1 },
+  { id:15, name:"間欠泉地下センター",  x:65, y:63, area:"人間の里",         rei:1 },
+  { id:16, name:"太陽の畑",           x:65, y:39, area:"人間の里",         rei:1 },
   { id:22, name:"守矢神社",           x:14, y:31, area:"妖怪の山",         rei:2 },
   { id:23, name:"玄武の沢",           x: 5, y:54, area:"妖怪の山",         rei:2 },
   { id:24, name:"大蝦蟇の池",         x:19, y:54, area:"妖怪の山",         rei:2 },
