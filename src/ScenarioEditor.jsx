@@ -142,8 +142,8 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
             </div>
           </div>
 
-          <Label>概要（PL公開）</Label>
-          <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e=>upd("summary",e.target.value)} placeholder="PLに見せるクエストの概要"/>
+          <Label>概要</Label>
+          <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e=>upd("summary",e.target.value)} placeholder="クエストの概要"/>
 
           <SecTitle>公開条件</SecTitle>
           <div style={{ display:"flex", gap:6, marginBottom:6 }}>
@@ -196,8 +196,8 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
             </div>
           )}
 
-          <Label>クエストの真相（GM専用）</Label>
-          <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e=>upd("truth",e.target.value)} placeholder="真相・GM向けメモ"/>
+          <Label>クエストの真相</Label>
+          <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e=>upd("truth",e.target.value)} placeholder="クエストの真相"/>
 
           <SecTitle>解決方法</SecTitle>
           <div style={{ display:"flex", gap:6, marginBottom:10 }}>
