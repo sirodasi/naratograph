@@ -3,6 +3,9 @@ import { useState, useEffect, useCallback } from "react";
 import { db, auth } from "./firebase";
 import { ref, onValue, set, update, push, remove } from "firebase/database";
 
+// キャラクター名一覧（選択不可設定用・循環import回避のため独立定義）
+const CHAR_NAMES = ["博麗霊夢", "霧雨魔理沙", "チルノ", "紅美鈴", "パチュリー・ノーレッジ", "十六夜咲夜", "レミリア・スカーレット", "フランドール・スカーレット", "アリス・マーガトロイド", "魂魄妖夢", "西行寺幽々子", "八雲藍", "八雲紫", "伊吹萃香", "鈴仙・優曇華院・イナバ", "八意永琳", "蓬莱山輝夜", "藤原妹紅", "射命丸文", "風見幽香", "小野塚小町", "河城にとり", "東風谷早苗", "八坂神奈子", "洩矢諏訪子", "比那名居天子", "星熊勇儀", "古明地さとり", "火焔猫燐", "霊烏路空", "古明地こいし", "ナズーリン", "多々良小傘", "村紗水蜜", "聖白蓮", "封獣ぬえ", "姫海棠はたて", "霍青娥", "物部布都", "豊聡耳神子", "二ツ岩マミゾウ", "秦こころ", "鬼人正邪", "少名針妙丸", "宇佐見菫子", "茨木華扇", "ドレミー・スイート", "クラウンピース", "高麗野あうん", "摩多羅隠岐奈", "依神女苑", "依神紫苑", "庭渡久侘歌", "吉弔八千慧", "埴安神袿姫", "驪駒早鬼", "管牧典", "天弓千亦", "饕餮尤魔", "日白残無"];
+
 // ── 共通スタイル ──────────────────────────────────────
 const BG = "#06080f";
 const C = {
@@ -445,19 +448,19 @@ function ScenarioForm({ initial, onSave, onCancel }) {
             )}
             {/* キャラ一覧グリッド */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(72px,1fr))",gap:4,maxHeight:200,overflowY:"auto"}}>
-              {CHARACTERS.map(c=>{
-                const banned=(sc.bannedChars||[]).includes(c.name);
+              {CHAR_NAMES.map(name=>{
+                const banned=(sc.bannedChars||[]).includes(name);
                 return(
-                  <div key={c.id} onClick={()=>{
+                  <div key={name} onClick={()=>{
                     const cur=sc.bannedChars||[];
-                    upd("bannedChars",banned?cur.filter(x=>x!==c.name):[...cur,c.name]);
+                    upd("bannedChars",banned?cur.filter(x=>x!==name):[...cur,name]);
                   }} style={{
                     padding:"3px 4px",borderRadius:4,cursor:"pointer",textAlign:"center",
                     background:banned?"rgba(192,57,43,0.18)":"rgba(255,255,255,0.02)",
                     border:`1px solid ${banned?C.redBorder:C.border}`,
                     opacity:banned?1:0.7,
                   }}>
-                    <div style={{fontSize:8,color:banned?C.red:C.textDim,lineHeight:1.3}}>{c.name}</div>
+                    <div style={{fontSize:8,color:banned?C.red:C.textDim,lineHeight:1.3}}>{name}</div>
                   </div>
                 );
               })}
