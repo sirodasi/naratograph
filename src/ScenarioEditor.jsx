@@ -68,7 +68,9 @@ const EMPTY_QUEST = () => ({
   name: "",
   summary: "",
   level: 1,
-  unlockCondition: "",
+  unlockType: "start",      // "start" | "quest" | "custom"
+  unlockQuestId: "",        // unlockType==="quest" のとき参照するクエストのid
+  unlockCondition: "",      // unlockType==="custom" のときのテキスト
   solutionType: "行為判定",
   specifiedTag: "",
   location: "",
@@ -82,7 +84,7 @@ const EMPTY_SCENARIO = () => ({
   playerCountMin: 2,
   playerCountMax: 4,
   bannedChars: [],
-  difficulty: "標準",
+  difficulty: "Normal",
   backstory: "",
   limit: "3日目の夜",
   quests: [],
@@ -96,7 +98,7 @@ const SOLUTION_TYPES = ["行為判定","弾幕ごっこ","自動解決"];
 const SOLUTION_COLORS = { "行為判定":C.blue, "弾幕ごっこ":C.red, "自動解決":C.green };
 
 // ── Quest Editor ─────────────────────────────────────
-function QuestEditor({ quest, onChange, onDelete, index }) {
+function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
   const [open, setOpen] = useState(false);
   const upd = (key, val) => onChange({ ...quest, [key]: val });
   const updEnemy = (key, val) => onChange({ ...quest, enemy: { ...quest.enemy, [key]: val } });
@@ -118,6 +120,9 @@ function QuestEditor({ quest, onChange, onDelete, index }) {
           </span>
           {quest.level > 0 && <span style={{ fontSize:9, color:C.textFaint, marginLeft:6 }}>Lv.{quest.level}</span>}
         </div>
+        {(quest.unlockType||"start")==="start" && <Chip label="開始時公開" color={C.textFaint}/>}
+        {(quest.unlockType||"start")==="quest" && <Chip label="条件付き公開" color={C.gold}/>}
+        {(quest.unlockType||"start")==="custom" && <Chip label="手動公開" color="#f9a825"/>}
         <Chip label={quest.solutionType} color={solColor} />
         <button onClick={e=>{e.stopPropagation();onDelete();}}
           style={{ ...btn(C.redBg,C.redBorder,C.red,{padding:"2px 8px",fontSize:10}) }}>✕</button>
@@ -140,8 +145,56 @@ function QuestEditor({ quest, onChange, onDelete, index }) {
           <Label>概要（PL公開）</Label>
           <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e=>upd("summary",e.target.value)} placeholder="PLに見せるクエストの概要"/>
 
-          <Label>公開条件</Label>
-          <input style={iBase} value={quest.unlockCondition} onChange={e=>upd("unlockCondition",e.target.value)} placeholder="例: セッション開始時 / 特定の手がかり取得後"/>
+          <SecTitle>公開条件</SecTitle>
+          <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+            {[["start","探索フェイズ開始時"],["quest","クエスト解決時"],["custom","カスタム"]].map(([v,label])=>(
+              <button key={v} onClick={()=>upd("unlockType",v)}
+                style={{ ...btn(
+                  (quest.unlockType||"start")===v ? C.goldBg : "rgba(255,255,255,0.02)",
+                  (quest.unlockType||"start")===v ? C.goldDim : C.border,
+                  (quest.unlockType||"start")===v ? C.gold : C.textFaint,
+                  {padding:"4px 10px",fontSize:10}
+                )}}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {(quest.unlockType||"start")==="start" && (
+            <div style={{ padding:"5px 8px", background:"rgba(255,255,255,0.02)", borderRadius:3, fontSize:9, color:C.textDim }}>
+              ※探索フェイズ開始時に自動で公開されます
+            </div>
+          )}
+          {(quest.unlockType||"start")==="quest" && (
+            <div>
+              <select style={iBase} value={quest.unlockQuestId||""}
+                onChange={e=>upd("unlockQuestId",e.target.value)}>
+                <option value="">参照するクエストを選択…</option>
+                {(allQuests||[]).filter(q=>q.id!==quest.id&&q.name).map(q=>(
+                  <option key={q.id} value={q.id}>クエスト「{q.name}」</option>
+                ))}
+              </select>
+              {quest.unlockQuestId && (
+                <div style={{ fontSize:9, color:C.textDim, marginTop:4 }}>
+                  ※選択したクエストが解決されると自動で公開されます
+                </div>
+              )}
+              {!quest.unlockQuestId && (
+                <div style={{ fontSize:9, color:"#f9a825", marginTop:4 }}>
+                  ⚠ 参照するクエストを選択してください
+                </div>
+              )}
+            </div>
+          )}
+          {(quest.unlockType||"start")==="custom" && (
+            <div>
+              <input style={iBase} value={quest.unlockCondition||""}
+                onChange={e=>upd("unlockCondition",e.target.value)}
+                placeholder="例: 特定の手がかりを取得後"/>
+              <div style={{ fontSize:9, color:"#f9a825", marginTop:4 }}>
+                ※カスタム条件のためGMが手動でクエストを公開してください
+              </div>
+            </div>
+          )}
 
           <Label>クエストの真相（GM専用）</Label>
           <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e=>upd("truth",e.target.value)} placeholder="真相・GM向けメモ"/>
@@ -416,7 +469,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
                   <button onClick={()=>moveQuest(i,-1)} style={{ ...btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{width:20,height:20,padding:0,fontSize:10}) }}>↑</button>
                   <button onClick={()=>moveQuest(i,1)} style={{ ...btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{width:20,height:20,padding:0,fontSize:10}) }}>↓</button>
                 </div>
-                <QuestEditor quest={q} index={i} onChange={nq=>updateQuest(i,nq)} onDelete={()=>deleteQuest(i)}/>
+                <QuestEditor quest={q} index={i} onChange={nq=>updateQuest(i,nq)} onDelete={()=>deleteQuest(i)} allQuests={sc.quests||[]}/>
               </div>
             ))}
           </div>
