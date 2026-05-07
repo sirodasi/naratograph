@@ -33,18 +33,47 @@ function Chip({label,color="#c8a040"}) {
 }
 
 // ── デフォルト値 ─────────────────────────────────────
+// 公式弾幕スキル一覧
+const OFFICIAL_DANMAKU_SKILLS = [
+  { name:"ホーミング",  desc:"ショットステップでダイスを振った直後に使用。そのショットステップで振ったダイスの出目1つを任意の出目に変更する。" },
+  { name:"ワイドショット", desc:"ショットステップでダイスを振った直後に使用。回避側の弾幕フィールド上の【弾幕】が配置されていない任意マスを1つ以上選ぶ。それらのマスに、それぞれ同じ弾幕フィールド上の任意の【弾幕】を1つ置き直す。" },
+  { name:"弾消し",    desc:"対戦者のラウンド中の任意のタイミングに使用。その弾幕ごっこの対戦者・または観戦者であるキャラクター1人の弾幕フィールド上に配置されている【弾幕】を1つ選び取り除く。" },
+  { name:"不死身",    desc:"【残り人数】を減少させる処理を受けるときに使用。【霊力】を「10点」消費して、その処理を打ち消す。" },
+  { name:"大威力",    desc:"ダイスを振るショットステップ直後に使用。そのショットステップで振ったダイスに同じ出目が2つ以上あった場合、そうした出目から1つを選んで、その出目に対応するマスに【弾幕】を1つ追加で配置する。" },
+  { name:"近接攻撃",  desc:"対戦者のラウンドのショットステップでダイスを振る直前に使用。あなたがいるマスと同じ番号のマスに回避側がいる場合、そのマスに【弾幕】を1つ追加で配置する。" },
+  { name:"低速弾",    desc:"対戦者のラウンド終了時に使用。そのラウンド終了時に取り除かれる【弾幕】を1つ選ぶ。その【弾幕】は取り除かれない。" },
+  { name:"壁抜け",    desc:"対戦者のラウンドの回避ステップ中に使用。1番マスと3番マス、4番マスと6番マスはそれぞれ相互に隣接しているものとして扱う。" },
+  { name:"高速移動",  desc:"対戦者のラウンド中、【弾幕】が配置されていないマスにいるときに使用。任意のマスに移動する。" },
+  { name:"弾貨",      desc:"【グレイズ】を「4点」消費して【スペルカード】を1点獲得することができる。" },
+  { name:"使い魔",    desc:"ショットステップで振るダイスの数は「1」減少する。自身が対戦者であるラウンド中、観戦者として「援護射撃」「かばう」のいずれかを行うことができる。" },
+  { name:"想起",      desc:"（特定キャラ専用）決戦フェイズの任意のタイミングで1度だけ使用。そのフェイズに登場するキャラクター1人の弾幕スキルを1つ選ぶ。このシーンの間、その弾幕スキルを修得する。" },
+  { name:"憑依",      desc:"（依神女苑・紫苑専用）対戦者のラウンド中、観戦者に依神女苑or紫苑がいる場合、観戦者の習得しているスペルカードを自身のスペルカードとして宣言できる。" },
+];
+
+const EMPTY_ENEMY = () => ({
+  name: "",
+  ninzu: 2,        // 残り人数
+  spellcard: 1,    // スペルカード
+  attack: 5,       // 攻撃力
+  danmakuSkillType: "none",   // "none" | "official" | "custom"
+  danmakuSkillName: "",       // official選択時
+  danmakuSkillDesc: "",       // custom入力時
+  danmakuSkillCustomName: "", // custom入力時
+  sc1name: "", sc1effect: "",
+  sc2name: "", sc2effect: "",
+});
+
 const EMPTY_QUEST = () => ({
   id: Date.now() + Math.random(),
   name: "",
   summary: "",
   level: 1,
   unlockCondition: "",
-  solutionType: "行為判定",  // 行為判定 | 弾幕ごっこ | 自動解決
+  solutionType: "行為判定",
   specifiedTag: "",
   location: "",
   truth: "",
-  // 弾幕ごっこ用
-  enemy: { name:"", hp:2, spell:1, attack:5, specials:["",""] },
+  enemy: EMPTY_ENEMY(),
 });
 
 const EMPTY_SCENARIO = () => ({
@@ -53,7 +82,7 @@ const EMPTY_SCENARIO = () => ({
   playerCountMin: 2,
   playerCountMax: 4,
   bannedChars: [],
-  difficulty: "Normal",
+  difficulty: "標準",
   backstory: "",
   limit: "3日目の夜",
   quests: [],
@@ -62,7 +91,7 @@ const EMPTY_SCENARIO = () => ({
   updatedAt: Date.now(),
 });
 
-const DIFFICULTIES = ["Easy","Normal","Hard","Lunatic"];
+const DIFFICULTIES = ["易しい","標準","難しい","激難"];
 const SOLUTION_TYPES = ["行為判定","弾幕ごっこ","自動解決"];
 const SOLUTION_COLORS = { "行為判定":C.blue, "弾幕ごっこ":C.red, "自動解決":C.green };
 
@@ -112,7 +141,7 @@ function QuestEditor({ quest, onChange, onDelete, index }) {
           <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e=>upd("summary",e.target.value)} placeholder="PLに見せるクエストの概要"/>
 
           <Label>公開条件</Label>
-          <input style={iBase} value={quest.unlockCondition} onChange={e=>upd("unlockCondition",e.target.value)} placeholder="例: 探索フェイズ開始時 / クエスト「〇〇」を解決"/>
+          <input style={iBase} value={quest.unlockCondition} onChange={e=>upd("unlockCondition",e.target.value)} placeholder="例: セッション開始時 / 特定の手がかり取得後"/>
 
           <Label>クエストの真相（GM専用）</Label>
           <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e=>upd("truth",e.target.value)} placeholder="真相・GM向けメモ"/>
@@ -149,36 +178,103 @@ function QuestEditor({ quest, onChange, onDelete, index }) {
           )}
 
           {/* 弾幕ごっこ */}
-          {quest.solutionType==="弾幕ごっこ" && (
-            <div style={{ padding:10, background:C.redBg, border:`1px solid ${C.redBorder}60`, borderRadius:4 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 60px 60px", gap:8, marginBottom:8 }}>
-                <div>
-                  <Label>名前</Label>
-                  <input style={iBase} value={quest.enemy?.name||""} onChange={e=>updEnemy("name",e.target.value)} placeholder="例: ルーミア"/>
+          {quest.solutionType==="弾幕ごっこ" && (()=>{
+            const en = quest.enemy || EMPTY_ENEMY();
+            const sc1ok = !!(en.sc1name && en.sc1effect);
+            const sc1partial = !!(en.sc1name || en.sc1effect) && !sc1ok;
+            const sc2ok = !!(en.sc2name && en.sc2effect);
+            const sc2partial = !!(en.sc2name || en.sc2effect) && !sc2ok;
+            return (
+              <div style={{ padding:12, background:C.redBg, border:`1px solid ${C.redBorder}60`, borderRadius:4 }}>
+                {/* 基本ステータス */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 70px 70px", gap:8, marginBottom:4 }}>
+                  <div>
+                    <Label>エネミー名 *</Label>
+                    <input style={iBase} value={en.name} onChange={e=>updEnemy("name",e.target.value)} placeholder="例: 謎の妖怪"/>
+                  </div>
+                  <div>
+                    <Label>残り人数</Label>
+                    <input type="number" min="1" max="99" style={iBase} value={en.ninzu??2} onChange={e=>updEnemy("ninzu",parseInt(e.target.value)||1)}/>
+                  </div>
+                  <div>
+                    <Label>スペルカード</Label>
+                    <input type="number" min="0" max="9" style={iBase} value={en.spellcard??1} onChange={e=>updEnemy("spellcard",parseInt(e.target.value)||0)}/>
+                  </div>
+                  <div>
+                    <Label>攻撃力</Label>
+                    <input type="number" min="0" max="99" style={iBase} value={en.attack??5} onChange={e=>updEnemy("attack",parseInt(e.target.value)||0)}/>
+                  </div>
                 </div>
-                <div>
-                  <Label>残り人数</Label>
-                  <input type="number" min="1" style={iBase} value={quest.enemy?.hp||2} onChange={e=>updEnemy("hp",parseInt(e.target.value)||1)}/>
+
+                {/* 弾幕スキル */}
+                <Label>弾幕スキル（任意）</Label>
+                <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                  {[["none","なし"],["official","公式から選択"],["custom","カスタム"]].map(([v,label])=>(
+                    <button key={v} onClick={()=>updEnemy("danmakuSkillType",v)}
+                      style={{ ...btn(
+                        en.danmakuSkillType===v?"rgba(200,160,64,0.2)":"rgba(255,255,255,0.02)",
+                        en.danmakuSkillType===v?C.goldDim:C.border,
+                        en.danmakuSkillType===v?C.gold:C.textFaint,
+                        {padding:"4px 10px",fontSize:10}
+                      )}}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <Label>スペルカード</Label>
-                  <input type="number" min="0" style={iBase} value={quest.enemy?.spell||1} onChange={e=>updEnemy("spell",parseInt(e.target.value)||0)}/>
+                {en.danmakuSkillType==="official" && (
+                  <div style={{ marginBottom:8 }}>
+                    <select style={iBase} value={en.danmakuSkillName}
+                      onChange={e=>{
+                        const sk=OFFICIAL_DANMAKU_SKILLS.find(s=>s.name===e.target.value);
+                        updEnemy("danmakuSkillName",e.target.value);
+                        updEnemy("danmakuSkillDesc",sk?.desc||"");
+                      }}>
+                      <option value="">スキルを選択…</option>
+                      {OFFICIAL_DANMAKU_SKILLS.map(sk=><option key={sk.name} value={sk.name}>{sk.name}</option>)}
+                    </select>
+                    {en.danmakuSkillName && (
+                      <div style={{ marginTop:5, padding:"5px 8px", background:"rgba(255,255,255,0.03)", borderRadius:3, fontSize:9, color:C.textDim, lineHeight:1.6 }}>
+                        ※公式スキルのため弾幕ごっこ中に自動で処理されます<br/>{en.danmakuSkillDesc}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {en.danmakuSkillType==="custom" && (
+                  <div style={{ marginBottom:8 }}>
+                    <Label>スキル名</Label>
+                    <input style={{...iBase,marginBottom:4}} value={en.danmakuSkillCustomName||""} onChange={e=>updEnemy("danmakuSkillCustomName",e.target.value)} placeholder="スキル名"/>
+                    <Label>効果テキスト</Label>
+                    <textarea style={{...iBase,height:52,resize:"vertical"}} value={en.danmakuSkillDesc||""} onChange={e=>updEnemy("danmakuSkillDesc",e.target.value)} placeholder="効果の説明"/>
+                    <div style={{ fontSize:9, color:"#f9a825", marginTop:3 }}>※カスタムスキルのため弾幕ごっこ中に手動で処理してください</div>
+                  </div>
+                )}
+
+                {/* スペルカード① */}
+                <div style={{ marginTop:8, padding:8, background:"rgba(0,0,0,0.2)", borderRadius:4, border:`1px solid ${sc1partial?"#f9a825":C.border}` }}>
+                  <div style={{ fontSize:9, color: sc1partial?"#f9a825":C.textFaint, marginBottom:4 }}>
+                    スペルカード①（任意・名前と効果は両方必要）{sc1partial&&" ⚠ どちらか一方が未入力"}
+                  </div>
+                  <input style={{...iBase,marginBottom:4}} value={en.sc1name||""} onChange={e=>updEnemy("sc1name",e.target.value)} placeholder="スペルカード名（任意）"/>
+                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc1effect||""} onChange={e=>updEnemy("sc1effect",e.target.value)} placeholder="効果テキスト（任意）"/>
                 </div>
-                <div>
-                  <Label>攻撃力</Label>
-                  <input type="number" min="1" style={iBase} value={quest.enemy?.attack||5} onChange={e=>updEnemy("attack",parseInt(e.target.value)||1)}/>
+
+                {/* スペルカード② */}
+                <div style={{ marginTop:6, padding:8, background:"rgba(0,0,0,0.2)", borderRadius:4, border:`1px solid ${sc2partial?"#f9a825":C.border}` }}>
+                  <div style={{ fontSize:9, color: sc2partial?"#f9a825":C.textFaint, marginBottom:4 }}>
+                    スペルカード②（任意・名前と効果は両方必要）{sc2partial&&" ⚠ どちらか一方が未入力"}
+                  </div>
+                  <input style={{...iBase,marginBottom:4}} value={en.sc2name||""} onChange={e=>updEnemy("sc2name",e.target.value)} placeholder="スペルカード名（任意）"/>
+                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc2effect||""} onChange={e=>updEnemy("sc2effect",e.target.value)} placeholder="効果テキスト（任意）"/>
+                </div>
+
+                {/* 解決場所 */}
+                <div style={{ marginTop:8 }}>
+                  <Label>解決場所（スポットID）</Label>
+                  <input style={{...iBase,width:80}} value={quest.location} onChange={e=>upd("location",e.target.value)} placeholder="例: 11"/>
                 </div>
               </div>
-              <Label>スペルカード①</Label>
-              <input style={{...iBase,marginBottom:6}} value={quest.enemy?.specials?.[0]||""} onChange={e=>updEnemy("specials",[e.target.value,quest.enemy?.specials?.[1]||""])} placeholder="スペルカードの効果"/>
-              <Label>スペルカード②</Label>
-              <input style={iBase} value={quest.enemy?.specials?.[1]||""} onChange={e=>updEnemy("specials",[quest.enemy?.specials?.[0]||"",e.target.value])} placeholder="スペルカードの効果（任意）"/>
-              <div style={{ marginTop:8 }}>
-                <Label>解決場所（スポットID）</Label>
-                <input style={{...iBase,width:80}} value={quest.location} onChange={e=>upd("location",e.target.value)} placeholder="例: 11"/>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 自動解決 */}
           {quest.solutionType==="自動解決" && (
@@ -211,6 +307,18 @@ function ScenarioForm({ initial, onSave, onCancel }) {
 
   const handleSave = async () => {
     if(!sc.name.trim()){alert("シナリオ名を入力してください");return;}
+    // スペルカードの片方未入力チェック
+    const badQuests = (sc.quests||[]).filter(q=>{
+      const en = q.enemy;
+      if(q.solutionType!=="弾幕ごっこ"||!en) return false;
+      const sc1partial = !!(en.sc1name||en.sc1effect) && !(en.sc1name&&en.sc1effect);
+      const sc2partial = !!(en.sc2name||en.sc2effect) && !(en.sc2name&&en.sc2effect);
+      return sc1partial||sc2partial;
+    });
+    if(badQuests.length>0){
+      alert(`クエスト「${badQuests.map(q=>q.name||"(名前なし)").join("・")}」のスペルカードで名前と効果のどちらか一方が未入力です。`);
+      return;
+    }
     setSaving(true);
     await onSave({...sc, updatedAt:Date.now()});
     setSaving(false);
@@ -340,7 +448,7 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
     return()=>unsub();
   },[user]);
 
-  const diffColor = { "Easy":C.green, "Normal":C.blue, "Hard":C.gold, "Lunatic":C.purple };
+  const diffColor = { "易しい":C.green, "標準":C.blue, "難しい":C.gold, "激難":C.red };
 
   if(loading) return <div style={{fontSize:10,color:C.textFaint}}>読み込み中…</div>;
 
@@ -378,70 +486,183 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
 
 // ── Profile Page ──────────────────────────────────────
 function ProfilePage({ onClose }) {
-  const [view, setView] = useState("scenarios"); // scenarios | chars
-  const [editTarget, setEditTarget] = useState(null); // null | "new" | scenario object
+  const [view, setView] = useState("account"); // account | scenarios | rooms
+  const [editTarget, setEditTarget] = useState(null);
+  const [rooms, setRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameSaved, setNameSaved] = useState(false);
   const user = auth.currentUser;
 
-  const saveScenario = async (sc) => {
-    const isNew = !sc.id;
+  useEffect(()=>{
+    setNewName(user?.displayName||"");
+  },[user]);
+
+  // 自分が建てた部屋を取得
+  useEffect(()=>{
+    if(!user)return;
+    const r = ref(db,"rooms");
+    const unsub = onValue(r,snap=>{
+      if(snap.exists()){
+        const arr = Object.entries(snap.val())
+          .filter(([,v])=>v.gmUid===user.uid)
+          .map(([code,v])=>({code,...v}));
+        arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+        setRooms(arr);
+      } else setRooms([]);
+      setRoomsLoading(false);
+    });
+    return()=>unsub();
+  },[user]);
+
+  const saveName = async()=>{
+    if(!newName.trim())return;
+    setNameSaving(true);
+    await updateProfile(user,{displayName:newName.trim()}).catch(()=>{});
+    setNameSaving(false);
+    setNameSaved(true);
+    setTimeout(()=>setNameSaved(false),2500);
+  };
+
+  const saveScenario = async(sc)=>{
     const id = sc.id || push(ref(db,`users/${user.uid}/scenarios`)).key;
-    await set(ref(db,`users/${user.uid}/scenarios/${id}`), {...sc, id});
+    await set(ref(db,`users/${user.uid}/scenarios/${id}`),{...sc,id});
     setEditTarget(null);
   };
 
-  const deleteScenario = async (sc) => {
-    if(!confirm(`「${sc.name}」を削除しますか？`))return;
-    await remove(ref(db,`users/${user.uid}/scenarios/${sc.id}`));
+  const deleteRoom = async(code)=>{
+    if(!confirm(`部屋「${code}」を削除しますか？
+（セッションデータも消去されます）`))return;
+    await remove(ref(db,`rooms/${code}`));
   };
 
-  if(editTarget) return (
+  const phaseLabel = p=>({prep:"準備中",explore:"探索中",scene:"シーン中",end:"終了"}[p]||p||"不明");
+  const phaseColor = p=>({prep:C.blue,explore:C.green,scene:C.purple,end:C.textFaint}[p]||C.textFaint);
+
+  if(editTarget) return(
     <ScenarioForm
-      initial={editTarget==="new" ? null : editTarget}
+      initial={editTarget==="new"?null:editTarget}
       onSave={saveScenario}
       onCancel={()=>setEditTarget(null)}
     />
   );
 
-  return(
-    <div style={{ background:BG, minHeight:"100vh", fontFamily:"serif", color:C.text, padding:16 }}>
-      <style>{`::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a} button:hover{opacity:0.85}`}</style>
+  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"]];
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+  return(
+    <div style={{background:BG,minHeight:"100vh",fontFamily:"serif",color:C.text,padding:16}}>
+      <style>{`::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a} button:hover{opacity:0.85} input{outline:none}`}</style>
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div>
-          <span style={{ fontSize:14, color:C.gold, letterSpacing:2 }}>幻想ナラトグラフ</span>
-          <span style={{ fontSize:10, color:C.textDim, marginLeft:10 }}>プロフィール</span>
+          <span style={{fontSize:14,color:C.gold,letterSpacing:2}}>幻想ナラトグラフ</span>
+          <span style={{fontSize:10,color:C.textDim,marginLeft:10}}>プロフィール</span>
         </div>
         <button onClick={onClose} style={btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{padding:"5px 14px"})}>← ロビーに戻る</button>
       </div>
 
-      <div style={{ display:"flex", gap:6, marginBottom:16 }}>
-        {[["scenarios","シナリオ管理"],["chars","キャラクター成長"]].map(([id,label])=>(
+      <div style={{display:"flex",gap:6,marginBottom:20}}>
+        {TABS.map(([id,label])=>(
           <button key={id} onClick={()=>setView(id)} style={{
             ...btn(view===id?C.goldBg:"rgba(255,255,255,0.02)",view===id?C.goldDim:C.border,view===id?C.gold:C.textFaint),
           }}>{label}</button>
         ))}
       </div>
 
+      {/* ── アカウント ── */}
+      {view==="account"&&(
+        <div style={{maxWidth:480}}>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:16,marginBottom:12}}>
+            <div style={{fontSize:12,color:C.gold,marginBottom:14}}>アカウント情報</div>
+
+            <div style={{marginBottom:6,fontSize:9,color:C.textFaint}}>Googleアカウント</div>
+            <div style={{fontSize:11,color:C.textDim,marginBottom:16,padding:"6px 8px",background:"rgba(255,255,255,0.02)",borderRadius:3,border:`1px solid ${C.border}`}}>
+              {user?.email||"—"}
+            </div>
+
+            <div style={{marginBottom:6,fontSize:9,color:C.textFaint}}>セッション表示名</div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={newName} onChange={e=>setNewName(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&saveName()}
+                style={{...iBase,flex:1,fontSize:13}}
+                placeholder="表示名を入力"/>
+              <button onClick={saveName} disabled={nameSaving||!newName.trim()}
+                style={{...btn(nameSaved?C.greenBg:C.goldBg,nameSaved?C.greenBorder:C.goldDim,nameSaved?C.green:C.gold,{padding:"5px 16px",flexShrink:0})}}>
+                {nameSaved?"✓ 保存済み":nameSaving?"保存中…":"変更する"}
+              </button>
+            </div>
+            <div style={{fontSize:9,color:C.textFaint,marginTop:6}}>この名前はセッション中にGM・PLに表示されます</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── シナリオ ── */}
       {view==="scenarios"&&(
-        <div style={{ maxWidth:700 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <div style={{ fontSize:12, color:C.text }}>保存済みシナリオ</div>
+        <div style={{maxWidth:700}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:12,color:C.text}}>保存済みシナリオ</div>
             <button onClick={()=>setEditTarget("new")} style={btn(C.goldBg,C.goldDim,C.gold,{padding:"6px 16px"})}>
               ＋ 新規シナリオを作成
             </button>
           </div>
-          <ScenarioList
-            onEdit={sc=>setEditTarget(sc)}
-            onSelect={null}
-          />
+          <ScenarioList onEdit={sc=>setEditTarget(sc)} onSelect={null}/>
         </div>
       )}
 
-      {view==="chars"&&(
-        <div style={{ maxWidth:700 }}>
-          <div style={{ fontSize:10, color:C.textFaint, padding:"20px 0" }}>
-            （成長キャラクター管理は今後実装予定）
-          </div>
+      {/* ── 部屋一覧 ── */}
+      {view==="rooms"&&(
+        <div style={{maxWidth:700}}>
+          <div style={{fontSize:12,color:C.text,marginBottom:12}}>自分が作成した部屋</div>
+          {roomsLoading&&<div style={{fontSize:10,color:C.textFaint}}>読み込み中…</div>}
+          {!roomsLoading&&rooms.length===0&&(
+            <div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>作成した部屋はありません</div>
+          )}
+          {rooms.map(room=>{
+            const playerCount = Object.keys(room.players||{}).length;
+            const plCount = Object.values(room.players||{}).filter(p=>p.role==="pl").length;
+            const date = room.createdAt ? new Date(room.createdAt).toLocaleDateString("ja-JP") : "—";
+            return(
+              <div key={room.code} style={{
+                padding:"12px 14px",marginBottom:8,
+                background:C.card,border:`1px solid ${C.border}`,borderRadius:5,
+              }}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                      <span style={{fontSize:13,color:C.gold,letterSpacing:2,fontFamily:"monospace"}}>{room.code}</span>
+                      <Chip label={phaseLabel(room.phase)} color={phaseColor(room.phase)}/>
+                      {room.scenario&&<Chip label={room.scenario} color={C.purple}/>}
+                    </div>
+                    <div style={{display:"flex",gap:12,fontSize:10,color:C.textDim}}>
+                      <span>GM: {room.gmName||"—"}</span>
+                      <span>PL: {plCount}人</span>
+                      <span>作成: {date}</span>
+                    </div>
+                    {plCount>0&&(
+                      <div style={{marginTop:5,display:"flex",gap:4,flexWrap:"wrap"}}>
+                        {Object.values(room.players||{}).filter(p=>p.role==="pl").map(p=>(
+                          <span key={p.uid} style={{fontSize:9,color:C.textFaint}}>
+                            {p.name}{p.charName?` (${p.charName})`:""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:12}}>
+                    <button onClick={()=>{window.open(`${window.location.origin}?room=${room.code}`,"_blank");}}
+                      style={btn(C.blueBg,C.blueBorder,C.blue,{padding:"4px 10px",fontSize:10})}>
+                      開く
+                    </button>
+                    <button onClick={()=>deleteRoom(room.code)}
+                      style={btn(C.redBg,C.redBorder,C.red,{padding:"4px 10px",fontSize:10})}>
+                      削除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
