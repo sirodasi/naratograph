@@ -28,7 +28,7 @@ const SPOTS = [
   { id:46,   name:"畜生界/地霊殿",       x:87,   y:82,   area:"異世界",           rei:4,    reiD6:false },
   { id:55,   name:"永遠亭",              x:85,   y:44.3, area:"迷いの竹林",       rei:5,    reiD6:false },
   { id:56,   name:"輝針城/迷いの竹林",   x:77.5, y:32.5, area:"迷いの竹林",       rei:5,    reiD6:false },
-  { id:66,   name:"博麗神社",            x:88.5, y:19.5, area:"（単独）",         rei:6,    reiD6:true  },
+  { id:66,   name:"博麗神社",            x:88.5, y:19.5, area:"博麗神社",         rei:6,    reiD6:true  },
   { id:null, name:"夢の世界",            x:91,   y:54.5, area:"異世界",           rei:4,    reiD6:false },
 ];
 
@@ -64,7 +64,7 @@ const AREA_COLORS = {
   "霧の湖・魔法の森": { bg:"rgba(21,101,192,0.85)",  border:"#64b5f6" },
   "異世界":           { bg:"rgba(230,81,0,0.88)",    border:"#ffb74d" },
   "迷いの竹林":       { bg:"rgba(46,125,50,0.88)",   border:"#81c784" },
-  "（単独）":         { bg:"rgba(97,97,97,0.88)",    border:"#bdbdbd" },
+  "博麗神社":         { bg:"rgba(97,97,97,0.88)",    border:"#bdbdbd" },
 };
 function areaColor(area){ return AREA_COLORS[area] || { bg:"rgba(30,30,30,0.85)", border:"#555" }; }
 
