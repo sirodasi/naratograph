@@ -44,7 +44,7 @@ const EMPTY_QUEST = () => ({
   location: "",
   truth: "",
   // 弾幕ごっこ用
-  enemy: { name:"", hp:6, attack:1, specials:["",""] },
+  enemy: { name:"", hp:2, spell:1, attack:5, specials:["",""] },
 });
 
 const EMPTY_SCENARIO = () => ({
@@ -53,7 +53,7 @@ const EMPTY_SCENARIO = () => ({
   playerCountMin: 2,
   playerCountMax: 4,
   bannedChars: [],
-  difficulty: "標準",
+  difficulty: "Normal",
   backstory: "",
   limit: "3日目の夜",
   quests: [],
@@ -62,7 +62,7 @@ const EMPTY_SCENARIO = () => ({
   updatedAt: Date.now(),
 });
 
-const DIFFICULTIES = ["易しい","標準","難しい","激難"];
+const DIFFICULTIES = ["Easy","Normal","Hard","Lunatic"];
 const SOLUTION_TYPES = ["行為判定","弾幕ごっこ","自動解決"];
 const SOLUTION_COLORS = { "行為判定":C.blue, "弾幕ごっこ":C.red, "自動解決":C.green };
 
@@ -112,7 +112,7 @@ function QuestEditor({ quest, onChange, onDelete, index }) {
           <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e=>upd("summary",e.target.value)} placeholder="PLに見せるクエストの概要"/>
 
           <Label>公開条件</Label>
-          <input style={iBase} value={quest.unlockCondition} onChange={e=>upd("unlockCondition",e.target.value)} placeholder="例: セッション開始時 / 特定の手がかり取得後"/>
+          <input style={iBase} value={quest.unlockCondition} onChange={e=>upd("unlockCondition",e.target.value)} placeholder="例: 探索フェイズ開始時 / クエスト「〇〇」を解決"/>
 
           <Label>クエストの真相（GM専用）</Label>
           <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e=>upd("truth",e.target.value)} placeholder="真相・GM向けメモ"/>
@@ -153,22 +153,26 @@ function QuestEditor({ quest, onChange, onDelete, index }) {
             <div style={{ padding:10, background:C.redBg, border:`1px solid ${C.redBorder}60`, borderRadius:4 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 60px 60px", gap:8, marginBottom:8 }}>
                 <div>
-                  <Label>エネミー名</Label>
-                  <input style={iBase} value={quest.enemy?.name||""} onChange={e=>updEnemy("name",e.target.value)} placeholder="例: 謎の妖怪"/>
+                  <Label>名前</Label>
+                  <input style={iBase} value={quest.enemy?.name||""} onChange={e=>updEnemy("name",e.target.value)} placeholder="例: ルーミア"/>
                 </div>
                 <div>
-                  <Label>HP</Label>
-                  <input type="number" min="1" style={iBase} value={quest.enemy?.hp||6} onChange={e=>updEnemy("hp",parseInt(e.target.value)||1)}/>
+                  <Label>残り人数</Label>
+                  <input type="number" min="1" style={iBase} value={quest.enemy?.hp||2} onChange={e=>updEnemy("hp",parseInt(e.target.value)||1)}/>
+                </div>
+                <div>
+                  <Label>スペルカード</Label>
+                  <input type="number" min="0" style={iBase} value={quest.enemy?.spell||1} onChange={e=>updEnemy("spell",parseInt(e.target.value)||0)}/>
                 </div>
                 <div>
                   <Label>攻撃力</Label>
-                  <input type="number" min="0" style={iBase} value={quest.enemy?.attack||1} onChange={e=>updEnemy("attack",parseInt(e.target.value)||0)}/>
+                  <input type="number" min="1" style={iBase} value={quest.enemy?.attack||5} onChange={e=>updEnemy("attack",parseInt(e.target.value)||1)}/>
                 </div>
               </div>
-              <Label>スペシャル効果①</Label>
-              <input style={{...iBase,marginBottom:6}} value={quest.enemy?.specials?.[0]||""} onChange={e=>updEnemy("specials",[e.target.value,quest.enemy?.specials?.[1]||""])} placeholder="スペシャル発生時の効果"/>
-              <Label>スペシャル効果②</Label>
-              <input style={iBase} value={quest.enemy?.specials?.[1]||""} onChange={e=>updEnemy("specials",[quest.enemy?.specials?.[0]||"",e.target.value])} placeholder="スペシャル発生時の効果（任意）"/>
+              <Label>スペルカード①</Label>
+              <input style={{...iBase,marginBottom:6}} value={quest.enemy?.specials?.[0]||""} onChange={e=>updEnemy("specials",[e.target.value,quest.enemy?.specials?.[1]||""])} placeholder="スペルカードの効果"/>
+              <Label>スペルカード②</Label>
+              <input style={iBase} value={quest.enemy?.specials?.[1]||""} onChange={e=>updEnemy("specials",[quest.enemy?.specials?.[0]||"",e.target.value])} placeholder="スペルカードの効果（任意）"/>
               <div style={{ marginTop:8 }}>
                 <Label>解決場所（スポットID）</Label>
                 <input style={{...iBase,width:80}} value={quest.location} onChange={e=>upd("location",e.target.value)} placeholder="例: 11"/>
@@ -336,7 +340,7 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
     return()=>unsub();
   },[user]);
 
-  const diffColor = { "易しい":C.green, "標準":C.blue, "難しい":C.gold, "激難":C.red };
+  const diffColor = { "Easy":C.green, "Normal":C.blue, "Hard":C.gold, "Lunatic":C.purple };
 
   if(loading) return <div style={{fontSize:10,color:C.textFaint}}>読み込み中…</div>;
 
