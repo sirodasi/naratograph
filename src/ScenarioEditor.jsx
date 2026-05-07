@@ -91,7 +91,7 @@ const EMPTY_SCENARIO = () => ({
   updatedAt: Date.now(),
 });
 
-const DIFFICULTIES = ["易しい","標準","難しい","激難"];
+const DIFFICULTIES = ["Easy","Normal","Hard","Lunatic"];
 const SOLUTION_TYPES = ["行為判定","弾幕ごっこ","自動解決"];
 const SOLUTION_COLORS = { "行為判定":C.blue, "弾幕ごっこ":C.red, "自動解決":C.green };
 
@@ -448,7 +448,7 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
     return()=>unsub();
   },[user]);
 
-  const diffColor = { "易しい":C.green, "標準":C.blue, "難しい":C.gold, "激難":C.red };
+  const diffColor = { "Easy":C.green, "Normal":C.blue, "Hard":C.gold, "Lunatic":C.purple };
 
   if(loading) return <div style={{fontSize:10,color:C.textFaint}}>読み込み中…</div>;
 
