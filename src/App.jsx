@@ -58,7 +58,6 @@ const NEWSPAPER = {
 
 const CYCLES = ["朝","昼","夕","夜"];
 const CYCLE_COLORS = ["#f9a825","#29b6f6","#ef6c00","#3949ab"];
-
 const AREA_COLORS = {
   "人間の里":         { bg:"rgba(192,57,43,0.85)",  border:"#e57373" },
   "妖怪の山":         { bg:"rgba(48,63,159,0.88)",   border:"#7986cb" },
@@ -69,74 +68,6 @@ const AREA_COLORS = {
 };
 function areaColor(area){ return AREA_COLORS[area] || { bg:"rgba(30,30,30,0.85)", border:"#555" }; }
 
-const DEFAULT_GS = {
-  day:1, cycleIdx:0,
-  clues:[], newspaper:null, newspaperDone:false, cluePlaced:false, reiryokuDone:false,
-  resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,30], 攻撃力:[1,1] },
-  items:{ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残魔かけら:0, スペカかけら:0 },
-  quests:[], limit:"3日目の夜", log:[],
-  pcs:[],
-  sceneMode:false, sceneText:"", banner:null,
-};
-
-const DEFAULT_SCENE = { bg:null, portraits:[] };
-
-function rollD6(){ return Math.floor(Math.random()*6)+1; }
-function rollD66(){ const a=rollD6(),b=rollD6(); return Math.min(a,b)*10+Math.max(a,b); }
-function getSpot(id){ return SPOTS.find(s=>s.id===id); }
-
-// 画像をリサイズしてbase64に変換（Firebaseの容量節約）
-function resizeImage(file, maxW=800, quality=0.75) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, maxW / img.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.src = url;
-  });
-}
-
-// ─── 共通スタイル ───
-const iStyle = {
-  padding:"4px 6px", fontSize:11,
-  background:"rgba(255,255,255,0.03)",
-  border:"1px solid #1a2030", color:"#c8b89a", borderRadius:3,
-};
-const confirmBtn = {
-  width:"100%", padding:"7px 0",
-  background:"rgba(192,57,43,0.15)", border:"1px solid #5a1a1a",
-  color:"#e07060", cursor:"pointer", borderRadius:3, fontSize:12,
-};
-
-function SectionTitle({ children, style }) {
-  return (
-    <div style={{ fontSize:9, color:"#2a3545", letterSpacing:2,
-      borderBottom:"1px solid #111828", paddingBottom:3, marginBottom:5, ...style }}>
-      {children}
-    </div>
-  );
-}
-function Btn({ onClick, children, style }) {
-  return (
-    <button onClick={onClick} style={{
-      width:18, height:18, border:"1px solid #1a2030",
-      background:"rgba(255,255,255,0.03)", color:"#3a4a5a",
-      cursor:"pointer", borderRadius:2, fontSize:11, padding:0,
-      display:"inline-flex", alignItems:"center", justifyContent:"center", ...style,
-    }}>{children}</button>
-  );
-}
-
-// ─── PL 共有画面 ───────────────────────────────────────
-// 実際の画像レンダリング領域を計算するフック
-// マップ画像の自然サイズ: 1122x794 (ratio 1.413)
 const MAP_NATURAL_W = 1200;
 const MAP_NATURAL_H = 849;
 
@@ -147,12 +78,9 @@ function useMapBounds(containerRef) {
     if (!el) return;
     const calc = () => {
       const cw = el.clientWidth, ch = el.clientHeight;
-      // objectFit:contain + objectPosition:left top
-      // → 短辺に合わせてスケール、左上原点で配置
       const scale = Math.min(cw / MAP_NATURAL_W, ch / MAP_NATURAL_H);
       const rw = MAP_NATURAL_W * scale;
       const rh = MAP_NATURAL_H * scale;
-      // 横は left 基準（余白は右側）、縦は top 基準
       setBounds({ left: 0, top: 0, width: rw, height: rh });
     };
     calc();
@@ -163,13 +91,60 @@ function useMapBounds(containerRef) {
   return bounds;
 }
 
-function PLView({ gs, sceneData }) {
-  const isNight = gs.cycleIdx === 3;
-  const [hov, setHov] = useState(null);
-  const mapRef = useRef(null);
-  const mapBounds = useMapBounds(mapRef);
+const DEFAULT_GS = {
+  day:1, cycleIdx:0,
+  clues:[], newspaper:null, newspaperDone:false, cluePlaced:false, reiryokuDone:false,
+  resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,30], 攻撃力:[1,1] },
+  items:{ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残魔かけら:0, スペカかけら:0 },
+  quests:[], limit:"3日目の夜", log:[],
+  pcs:[],
+  sceneMode:false, sceneText:"", banner:null,
+};
+const DEFAULT_SCENE = { bg:null, portraits:[] };
 
-  if (gs.sceneMode) {
+function rollD6(){ return Math.floor(Math.random()*6)+1; }
+function rollD66(){ const a=rollD6(),b=rollD6(); return Math.min(a,b)*10+Math.max(a,b); }
+function getSpot(id){ return SPOTS.find(s=>s.id===id); }
+
+// ─── UI共通 ───────────────────────────────────────────
+const C = {
+  bg:"#06080f", border:"#1a2535", card:"rgba(255,255,255,0.025)",
+  gold:"#c8a040", goldDim:"#8b6914", goldBg:"rgba(200,160,64,0.12)",
+  red:"#e07060", redBg:"rgba(192,57,43,0.18)", redBorder:"#8b1a1a",
+  blue:"#64b5f6", blueBg:"rgba(25,118,210,0.15)",
+  green:"#4caf50",
+  text:"#c8b89a", textDim:"#8a9aaa", textFaint:"#5a6575",
+};
+
+function resizeImage(file, maxW=800, quality=0.75) {
+  return new Promise((res) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      res(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.src = url;
+  });
+}
+
+// ─── マップレイヤー（GM・PL共通） ─────────────────────
+function MapLayer({ gs, sceneData, mapRef, isGm, onRemoveClue }) {
+  const mapBounds = useMapBounds(mapRef);
+  const [hov, setHov] = useState(null);
+  const isNight = gs.cycleIdx === 3;
+
+  // スポットサイズをマップ幅から計算
+  const spotBase = Math.max(16, Math.min(30, mapBounds.width * 0.024));
+  const spotActive = spotBase * 1.25;
+
+  // 描写モード
+  if (gs.sceneMode && sceneData) {
     return (
       <div style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#040608" }}>
         {sceneData.bg && (
@@ -178,12 +153,12 @@ function PLView({ gs, sceneData }) {
         <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)" }} />
         <div style={{ position:"absolute", bottom:110, left:0, right:0, display:"flex", justifyContent:"center", gap:16, alignItems:"flex-end" }}>
           {(sceneData.portraits||[]).map((p,i) => (
-            p.img && <img key={i} src={p.img} alt={p.name||""} style={{ height:320, objectFit:"contain", filter:"drop-shadow(0 4px 24px rgba(0,0,0,0.8))" }} />
+            p.img && <img key={i} src={p.img} alt={p.name||""} style={{ height:Math.min(320, mapBounds.height*0.55), objectFit:"contain", filter:"drop-shadow(0 4px 24px rgba(0,0,0,0.8))" }} />
           ))}
         </div>
         {gs.sceneText && (
           <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"rgba(6,8,16,0.93)", borderTop:"1px solid #1e2535", padding:"16px 28px" }}>
-            <div style={{ fontSize:14, color:"#c8b89a", lineHeight:2.1, fontFamily:"serif", whiteSpace:"pre-wrap" }}>{gs.sceneText}</div>
+            <div style={{ fontSize:14, color:C.text, lineHeight:2.1, fontFamily:"serif", whiteSpace:"pre-wrap" }}>{gs.sceneText}</div>
           </div>
         )}
         <div style={{ position:"absolute", top:12, right:12, padding:"3px 12px", background:"rgba(10,12,20,0.9)", border:"1px solid #1e2535", borderRadius:12, fontSize:10, color:CYCLE_COLORS[gs.cycleIdx] }}>
@@ -194,112 +169,125 @@ function PLView({ gs, sceneData }) {
   }
 
   return (
-    <div ref={mapRef} style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
-      <img src={MAP_SRC} alt="幻想郷マップ" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
-        filter:isNight?"brightness(0.45) saturate(0.5)":"none", transition:"filter 1.2s ease" }} />
+    <div style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
+      <img src={MAP_SRC} alt="幻想郷マップ"
+        style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
+          filter:isNight?"brightness(0.45) saturate(0.5)":"none", transition:"filter 1.2s ease" }} />
 
       {mapBounds.width > 0 && SPOTS.map(spot => {
         const hasClue = gs.clues.includes(spot.id);
         const pcsHere = (gs.pcs||[]).filter(pc => pc.spot === spot.id);
+        const isActive = pcsHere.length > 0;
+        const sz = isActive ? spotActive : spotBase;
+        const ac = areaColor(spot.area);
         const sx = mapBounds.left + (spot.x/100) * mapBounds.width;
         const sy = mapBounds.top  + (spot.y/100) * mapBounds.height;
+        const fontSize = Math.max(8, sz * 0.48);
+
         return (
-          <div key={spot.id}
-            style={{ position:"absolute", left:sx, top:sy, transform:"translate(-50%,-50%)", zIndex:hasClue?4:pcsHere.length?3:2 }}
-            onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}>
+          <div key={spot.id ?? "yume"}
+            style={{ position:"absolute", left:sx, top:sy, transform:"translate(-50%,-50%)",
+              cursor: isGm && hasClue ? "pointer" : "default",
+              zIndex: hasClue ? 4 : isActive ? 3 : 2 }}
+            onMouseEnter={() => setHov(spot.id)}
+            onMouseLeave={() => setHov(null)}
+            onClick={() => { if (isGm && hasClue) onRemoveClue(spot.id); }}
+          >
             <div style={{
-              width:pcsHere.length?34:26, height:pcsHere.length?34:26, borderRadius:"50%",
-              background: pcsHere.length ? "rgba(240,240,240,0.95)" : areaColor(spot.area).bg,
-              border:`2px solid ${hasClue?"#f9a825":pcsHere.length?"#fff":areaColor(spot.area).border}`,
+              width:sz, height:sz, borderRadius:"50%",
+              background: isActive ? "rgba(240,240,240,0.95)" : ac.bg,
+              border:`${Math.max(1.5, sz*0.07)}px solid ${hasClue?"#f9a825": isActive?"#fff": ac.border}`,
               display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize:pcsHere.length?11:10, fontWeight:"bold",
-              color: pcsHere.length ? areaColor(spot.area).bg : "#fff",
-              boxShadow:hasClue?"0 0 10px rgba(249,168,37,0.6)":pcsHere.length?`0 0 10px ${areaColor(spot.area).border}`:  `0 0 6px ${areaColor(spot.area).border}60`,
-            }}>{spot.id !== null ? spot.id : "◇"}</div>
-            {hasClue && <div style={{ position:"absolute", top:-9, right:-9, fontSize:13 }}>💡</div>}
-            {hov===spot.id && (
-              <div style={{ position:"absolute", background:"rgba(6,8,14,0.97)", border:"1px solid #1e2535",
-                borderRadius:4, padding:"4px 8px", fontSize:10, color:"#c8b89a", whiteSpace:"nowrap",
+              fontSize, fontWeight:"bold",
+              color: isActive ? ac.bg : "#fff",
+              boxShadow: hasClue ? "0 0 10px rgba(249,168,37,0.6)" :
+                         isActive ? `0 0 ${sz*0.4}px ${ac.border}` :
+                                    `0 0 ${sz*0.25}px ${ac.border}60`,
+              transition:"all 0.2s",
+            }}>
+              {spot.id !== null ? spot.id : "◇"}
+            </div>
+            {hasClue && (
+              <div style={{ position:"absolute", top:-sz*0.35, right:-sz*0.35,
+                fontSize:sz*0.55, lineHeight:1 }}>💡</div>
+            )}
+            {hov === spot.id && (
+              <div style={{ position:"absolute", background:"rgba(6,8,14,0.97)",
+                border:`1px solid ${ac.border}50`, borderRadius:4,
+                padding:"4px 8px", fontSize:10, color:C.text, whiteSpace:"nowrap",
                 pointerEvents:"none", zIndex:20,
-                left:spot.x>60?"auto":"calc(100% + 6px)", right:spot.x>60?"calc(100% + 6px)":"auto",
+                left:spot.x>60?"auto":"calc(100% + 6px)",
+                right:spot.x>60?"calc(100% + 6px)":"auto",
                 top:"50%", transform:"translateY(-50%)" }}>
                 {spot.id !== null ? `[${spot.id}] ` : ""}{spot.name}
                 {pcsHere.length>0 && <span style={{color:"#ef9a9a"}}><br/>{pcsHere.map(p=>p.name).join("・")}</span>}
                 {hasClue && <span style={{color:"#f9a825"}}><br/>💡 手がかりあり</span>}
+                {hasClue && isGm && <span style={{color:"#c0392b"}}><br/>クリックで除去</span>}
               </div>
             )}
           </div>
         );
       })}
 
-      {/* HUD */}
-      <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", display:"flex", gap:8 }}>
-        <div style={{ padding:"4px 14px", background:"rgba(10,12,20,0.92)", border:`1px solid ${CYCLE_COLORS[gs.cycleIdx]}40`, borderRadius:14, fontSize:12, color:CYCLE_COLORS[gs.cycleIdx] }}>
+      {/* Day/cycle HUD */}
+      <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)",
+        display:"flex", gap:8, pointerEvents:"none" }}>
+        <div style={{ padding:"4px 14px", background:"rgba(10,12,20,0.92)",
+          border:`1px solid ${CYCLE_COLORS[gs.cycleIdx]}40`, borderRadius:14,
+          fontSize:12, color:CYCLE_COLORS[gs.cycleIdx] }}>
           {gs.day}日目・{CYCLES[gs.cycleIdx]}
         </div>
-        {gs.limit && <div style={{ padding:"4px 10px", background:"rgba(10,12,20,0.92)", border:"1px solid #3a1a1a", borderRadius:14, fontSize:10, color:"#c0392b" }}>
-          リミット: {gs.limit}
-        </div>}
-      </div>
-
-      <div style={{ position:"absolute", top:8, right:8, background:"rgba(6,8,14,0.92)", border:"1px solid #1e2535", borderRadius:6, padding:"8px 10px" }}>
-        {Object.entries(gs.resources||{}).map(([k,v]) => {
-          const [cur,max] = Array.isArray(v)?v:[v,v];
-          return (
-            <div key={k} style={{ display:"flex", justifyContent:"space-between", gap:14, fontSize:10, marginBottom:2 }}>
-              <span style={{color:"#4a5565"}}>【{k}】</span>
-              <span style={{color:"#c8a040"}}>{cur}<span style={{color:"#2a3545"}}>/{max}</span></span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* エリア凡例 */}
-      <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(6,8,14,0.88)", border:"1px solid #1e2535", borderRadius:6, padding:"6px 8px" }}>
-        {Object.entries(AREA_COLORS).map(([area,c])=>(
-          <div key={area} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:2 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:c.bg, border:`1px solid ${c.border}`, flexShrink:0 }} />
-            <span style={{ fontSize:9, color:"#5a6575" }}>{area}</span>
+        {gs.limit && (
+          <div style={{ padding:"4px 10px", background:"rgba(10,12,20,0.92)",
+            border:"1px solid #3a1a1a", borderRadius:14, fontSize:10, color:"#c0392b" }}>
+            リミット: {gs.limit}
           </div>
-        ))}
+        )}
       </div>
 
-      {(gs.quests||[]).length>0 && (
-        <div style={{ position:"absolute", bottom:8, left:8, background:"rgba(6,8,14,0.92)", border:"1px solid #1e2535", borderRadius:6, padding:"8px 10px", maxWidth:220 }}>
-          <div style={{ fontSize:9, color:"#2a3545", letterSpacing:2, marginBottom:4 }}>クエスト</div>
-          {gs.quests.map(q => (
-            <div key={q.id} style={{ fontSize:10, color:q.solved?"#4caf50":"#c8a040", marginBottom:2, textDecoration:q.solved?"line-through":"none" }}>
-              【Lv.{q.level||1}】{q.name}
-            </div>
-          ))}
-        </div>
-      )}
-
+      {/* Banner */}
       {gs.banner && (
         <div style={{ position:"absolute", top:50, left:"50%", transform:"translateX(-50%)",
           background:"rgba(10,16,28,0.96)", border:"1px solid #1e3a5a",
-          borderRadius:16, padding:"7px 20px", fontSize:12, color:"#60c0f0", whiteSpace:"nowrap" }}>
+          borderRadius:16, padding:"7px 20px", fontSize:12, color:"#60c0f0", whiteSpace:"nowrap",
+          animation:"slideDown 0.3s ease" }}>
           {gs.banner}
         </div>
+      )}
+
+      {/* Area legend */}
+      <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(6,8,14,0.88)",
+        border:"1px solid #1e2535", borderRadius:6, padding:"6px 8px" }}>
+        {Object.entries(AREA_COLORS).map(([area,ac])=>(
+          <div key={area} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:2 }}>
+            <div style={{ width:9, height:9, borderRadius:"50%", background:ac.bg, border:`1px solid ${ac.border}`, flexShrink:0 }} />
+            <span style={{ fontSize:9, color:C.textFaint }}>{area}</span>
+          </div>
+        ))}
+        <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:4, borderTop:"1px solid #1e2535", paddingTop:4 }}>
+          <div style={{ fontSize:10 }}>💡</div>
+          <span style={{ fontSize:9, color:C.textFaint }}>手がかり{isGm?" (クリックで除去)":""}</span>
+        </div>
+      </div>
+
+      {/* Night label */}
+      {isNight && (
+        <div style={{ position:"absolute", bottom:8, left:8, fontSize:10, color:"#3949ab", opacity:0.7 }}>🌙 夜</div>
       )}
     </div>
   );
 }
 
-// ─── GM コンソール ────────────────────────────────────
-function GMView({ gs, upd, sceneData, setSceneData }) {
-  const [tab, setTab] = useState("main");
+// ─── 右パネル（GM・PL共通） ───────────────────────────
+function SessionPanel({ gs, upd, isGm, sceneData, setSceneData }) {
+  const [tab, setTab] = useState("status");
   const [modal, setModal] = useState(null);
-  const [dice, setDice] = useState(null);
-  const [hov, setHov] = useState(null);
+  const [dice, setDice] = useState(null); // { faces, rolling, label }
   const [questForm, setQuestForm] = useState(null);
-  const [pcForm, setPcForm] = useState(null);
   const timerRef = useRef(null);
-  const isNight = gs.cycleIdx === 3;
-  const gmMapRef = useRef(null);
-  const gmMapBounds = useMapBounds(gmMapRef);
 
-  const animDice = (count, label, cb) => {
+  // ── ダイスアニメーション ──
+  const animDice = useCallback((count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
     let frame = 0;
     setDice({ faces:Array(count).fill(0).map(rollD6), rolling:true, label });
@@ -314,8 +302,9 @@ function GMView({ gs, upd, sceneData, setSceneData }) {
         setDice(d => d ? { ...d, faces:d.faces.map(rollD6) } : d);
       }
     }, 80);
-  };
+  }, []);
 
+  // ── GM処理 ──
   const doNewspaper = () => {
     if (gs.newspaper) return;
     animDice(2, "文々。新聞表", (res) => {
@@ -354,10 +343,9 @@ function GMView({ gs, upd, sceneData, setSceneData }) {
         pcs.forEach(pc => {
           const s = getSpot(pc.spot);
           const amt = s ? (s.reiD6 ? rollD6() : s.rei) : 1;
-          const label = s?.reiD6 ? `1D6(${amt})` : `+${amt}`;
           const [c,m] = newRes.霊力;
           newRes.霊力 = [Math.min(c+amt,m), m];
-          msgs.push(`${pc.name}:${label}`);
+          msgs.push(`${pc.name}:+${amt}`);
         });
       }
       return { ...p, resources:newRes, reiryokuDone:true,
@@ -377,35 +365,18 @@ function GMView({ gs, upd, sceneData, setSceneData }) {
         reiryokuDone:false, banner:label,
         log:[label, ...p.log.slice(0,49)] };
     });
-    setTimeout(() => upd(p => ({ ...p, banner:null })), 3000);
+    setTimeout(() => upd(p => ({...p, banner:null})), 3000);
   };
 
-  const updRes = (k,d) => upd(p => { const [c,m]=p.resources[k]; return { ...p, resources:{ ...p.resources, [k]:[Math.max(0,Math.min(c+d,m)),m] } }; });
-  const updMax = (k,d) => upd(p => { const [c,m]=p.resources[k]; return { ...p, resources:{ ...p.resources, [k]:[c,Math.max(1,m+d)] } }; });
-  const updItem = (k,d) => upd(p => ({ ...p, items:{ ...p.items, [k]:Math.max(0,(p.items[k]||0)+d) } }));
-  const removeClue = (id) => upd(p => ({ ...p, clues:p.clues.filter(c=>c!==id) }));
-  const solveQuest = (id) => upd(p => ({ ...p, quests:p.quests.map(q=>q.id===id?{...q,solved:!q.solved}:q) }));
-  const deleteQuest = (id) => upd(p => ({ ...p, quests:p.quests.filter(q=>q.id!==id) }));
-  const addQuest = (q) => upd(p => ({ ...p, quests:[...p.quests, { id:Date.now(), ...q, solved:false }],
-    log:[`クエスト追加:「${q.name}」`, ...p.log.slice(0,49)] }));
-  const addPc = (pc) => upd(p => ({ ...p, pcs:[...p.pcs, { id:Date.now(), ...pc, spot:11, baseSpot:11 }] }));
-  const removePc = (id) => upd(p => ({ ...p, pcs:p.pcs.filter(pc=>pc.id!==id) }));
-  const movePc = (id,spot) => upd(p => ({ ...p, pcs:p.pcs.map(pc=>pc.id===id?{...pc,spot:parseInt(spot)}:pc) }));
+  const updRes = (k,d) => upd(p => { const[c,m]=p.resources[k]; return {...p,resources:{...p.resources,[k]:[Math.max(0,Math.min(c+d,m)),m]}}; });
+  const updMax = (k,d) => upd(p => { const[c,m]=p.resources[k]; return {...p,resources:{...p.resources,[k]:[c,Math.max(1,m+d)]}}; });
+  const updItem = (k,d) => upd(p => ({...p,items:{...p.items,[k]:Math.max(0,(p.items[k]||0)+d)}}));
+  const removeClue = (id) => upd(p => ({...p,clues:p.clues.filter(c=>c!==id)}));
+  const solveQuest = (id) => upd(p => ({...p,quests:p.quests.map(q=>q.id===id?{...q,solved:!q.solved}:q)}));
+  const addQuest = (q) => upd(p => ({...p,quests:[...p.quests,{id:Date.now(),...q,solved:false}],
+    log:[`クエスト追加:「${q.name}」`,...p.log.slice(0,49)]}));
 
-  const toggleScene = () => upd(p => ({ ...p, sceneMode:!p.sceneMode }));
-
-  const uploadBg = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const resized = await resizeImage(file, 1280, 0.8);
-    setSceneData(d => ({ ...d, bg:resized }));
-  };
-  const addPortrait = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const resized = await resizeImage(file, 600, 0.85);
-    setSceneData(d => ({ ...d, portraits:[...(d.portraits||[]), { img:resized, name:"" }] }));
-  };
-  const removePortrait = (i) => setSceneData(d => ({ ...d, portraits:d.portraits.filter((_,j)=>j!==i) }));
-
+  // メインアクションボタンの内容
   const getMainAction = () => {
     const c = gs.cycleIdx;
     if (c===0) {
@@ -422,391 +393,338 @@ function GMView({ gs, upd, sceneData, setSceneData }) {
   };
   const ma = getMainAction();
 
+  // タブ定義
+  const tabs = [
+    ["status","状態"],
+    ["quest","クエスト"],
+    ...(isGm ? [["action","行動"],["scene","描写"]] : []),
+    ["log","ログ"],
+  ];
+
+  const iStyle = { padding:"4px 6px", fontSize:11, background:"rgba(255,255,255,0.03)",
+    border:`1px solid ${C.border}`, color:C.text, borderRadius:3 };
+
   return (
-    <div style={{ display:"flex", height:"100%", background:"#060810", color:"#c8b89a", fontFamily:"serif", overflow:"hidden" }}>
-      <style>{`
-        @keyframes rollSpin{50%{transform:scale(1.15)}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a}
-        button{transition:opacity 0.15s}button:hover{opacity:0.82}
-        input,textarea,select{outline:none}
-      `}</style>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#0b0d14",
+      borderLeft:`1px solid ${C.border}`, overflow:"hidden" }}>
 
-      {/* マップ */}
-      <div ref={gmMapRef} style={{ flex:"0 0 65%", position:"relative", overflow:"hidden" }}>
-        <img src={MAP_SRC} alt="" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
-          filter:isNight?"brightness(0.45) saturate(0.5)":"none", transition:"filter 1.2s ease" }} />
-
-        {gmMapBounds.width > 0 && SPOTS.map(spot => {
-          const hasClue = gs.clues.includes(spot.id);
-          const pcsHere = (gs.pcs||[]).filter(p=>p.spot===spot.id);
-          const sx = gmMapBounds.left + (spot.x/100) * gmMapBounds.width;
-          const sy = gmMapBounds.top  + (spot.y/100) * gmMapBounds.height;
-          return (
-            <div key={spot.id}
-              style={{ position:"absolute", left:sx, top:sy, transform:"translate(-50%,-50%)", cursor:"pointer", zIndex:hasClue?4:pcsHere.length?3:2 }}
-              onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}
-              onClick={()=>{ if(hasClue) removeClue(spot.id); }}>
-              <div style={{
-                width:pcsHere.length?34:26, height:pcsHere.length?34:26, borderRadius:"50%",
-                background: pcsHere.length ? "rgba(240,240,240,0.95)" : areaColor(spot.area).bg,
-                border:`2px solid ${hasClue?"#f9a825":pcsHere.length?"#fff":areaColor(spot.area).border}`,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:pcsHere.length?11:10, fontWeight:"bold",
-                color: pcsHere.length ? areaColor(spot.area).bg : "#fff",
-                boxShadow:hasClue?"0 0 10px rgba(249,168,37,0.6)":pcsHere.length?`0 0 10px ${areaColor(spot.area).border}`:`0 0 6px ${areaColor(spot.area).border}60`,
-              }}>{spot.id}</div>
-              {hasClue && <div style={{ position:"absolute", top:-9, right:-9, fontSize:13 }}>💡</div>}
-              {hov===spot.id && (
-                <div style={{ position:"absolute", background:"rgba(6,8,14,0.97)", border:"1px solid #1e2535", borderRadius:4,
-                  padding:"4px 8px", fontSize:10, color:"#c8b89a", whiteSpace:"nowrap", pointerEvents:"none", zIndex:20,
-                  left:spot.x>60?"auto":"calc(100% + 6px)", right:spot.x>60?"calc(100% + 6px)":"auto",
-                  top:"50%", transform:"translateY(-50%)" }}>
-                  [{spot.id}] {spot.name} (霊力+{spot.rei})
-                  {pcsHere.length>0 && <span style={{color:"#ef9a9a"}}><br/>📍 {pcsHere.map(p=>p.name).join("・")}</span>}
-                  {hasClue && <span style={{color:"#c0392b"}}><br/>クリックで除去</span>}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {dice && (
-          <div style={{ position:"absolute", bottom:12, left:"50%", transform:"translateX(-50%)",
-            background:"rgba(8,10,16,0.95)", border:"1px solid #1e2535", borderRadius:8,
-            padding:"10px 16px", textAlign:"center", zIndex:10 }}>
-            <div style={{ fontSize:9, color:"#4a5565", marginBottom:5, letterSpacing:2 }}>{dice.label}</div>
-            <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
-              {dice.faces.map((f,i) => (
-                <div key={i} style={{ width:44, height:44, border:"2px solid #2a3a5a", borderRadius:6,
-                  background:"rgba(14,20,36,0.95)", display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:22, color:"#60c0f0", fontWeight:"bold",
-                  animation:dice.rolling?"rollSpin 0.25s ease infinite":"none",
-                  boxShadow:dice.rolling?"0 0 12px rgba(96,192,240,0.4)":"none" }}>{f}</div>
-              ))}
-            </div>
-            {!dice.rolling && <div style={{ fontSize:18, color:"#c8a040", marginTop:4 }}>{dice.faces.join("")}</div>}
+      {/* ヘッダー: 日数・サイクル */}
+      <div style={{ padding:"8px 10px", borderBottom:`1px solid ${C.border}`, background:"#08090f", flexShrink:0 }}>
+        {/* 日数ドット */}
+        <div style={{ display:"flex", gap:4, alignItems:"center", marginBottom:5 }}>
+          {[1,2,3,4,5].map(d => (
+            <div key={d} style={{ width:22, height:22, borderRadius:"50%", display:"flex",
+              alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:"bold",
+              background:d===gs.day?"rgba(25,118,210,0.35)":"rgba(255,255,255,0.02)",
+              border:d===gs.day?"2px solid #1976d2":`1px solid ${C.border}`,
+              color:d===gs.day?"#64b5f6":"#1e2535" }}>{d}</div>
+          ))}
+          <div style={{ flex:1, display:"flex", gap:3, marginLeft:4 }}>
+            {CYCLES.map((c,i) => (
+              <div key={i} style={{ flex:1, textAlign:"center", padding:"3px 0", fontSize:9, borderRadius:2,
+                background:i===gs.cycleIdx?`${CYCLE_COLORS[i]}20`:"rgba(255,255,255,0.02)",
+                border:i===gs.cycleIdx?`1px solid ${CYCLE_COLORS[i]}60`:`1px solid ${C.border}`,
+                color:i===gs.cycleIdx?CYCLE_COLORS[i]:"#1e2535" }}>{c}</div>
+            ))}
           </div>
-        )}
-
-        {gs.banner && (
-          <div style={{ position:"absolute", top:10, left:"50%", transform:"translateX(-50%)",
-            background:"rgba(10,16,28,0.95)", border:"1px solid #1e3a5a",
-            borderRadius:16, padding:"6px 18px", fontSize:12, color:"#60c0f0",
-            animation:"slideDown 0.3s ease", whiteSpace:"nowrap", zIndex:10 }}>
-            {gs.banner}
-          </div>
-        )}
-
-        {gs.sceneMode && (
-          <div style={{ position:"absolute", inset:0, background:"rgba(4,6,10,0.75)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <div style={{ fontSize:14, color:"#7986cb", letterSpacing:3 }}>🎭 描写モード中（PL画面は演出表示）</div>
-          </div>
+        </div>
+        {/* リミット */}
+        {gs.limit && (
+          <div style={{ fontSize:9, color:"#c0392b", textAlign:"right" }}>リミット: {gs.limit}</div>
         )}
       </div>
 
-      {/* 右パネル */}
-      <div style={{ flex:"0 0 35%", display:"flex", flexDirection:"column", borderLeft:"1px solid #111828", overflow:"hidden" }}>
-        <div style={{ padding:"8px 12px", borderBottom:"1px solid #111828", background:"#08090f", flexShrink:0 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-            <span style={{ fontSize:12, color:"#c8a040", letterSpacing:2 }}>✦ GM コンソール</span>
-            <div style={{ padding:"2px 10px", background:`${CYCLE_COLORS[gs.cycleIdx]}18`,
-              border:`1px solid ${CYCLE_COLORS[gs.cycleIdx]}40`, borderRadius:10,
-              fontSize:10, color:CYCLE_COLORS[gs.cycleIdx] }}>{gs.day}日目・{CYCLES[gs.cycleIdx]}</div>
-          </div>
-          <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-            {[1,2,3,4,5].map(d => (
-              <div key={d} style={{ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:10, fontWeight:"bold",
-                background:d===gs.day?"rgba(25,118,210,0.35)":"rgba(255,255,255,0.02)",
-                border:d===gs.day?"2px solid #1976d2":"1px solid #111828",
-                color:d===gs.day?"#64b5f6":"#1e2535" }}>{d}</div>
-            ))}
-            <div style={{ flex:1, display:"flex", gap:3, marginLeft:4 }}>
-              {CYCLES.map((c,i) => (
-                <div key={i} style={{ flex:1, textAlign:"center", padding:"2px 0", fontSize:9, borderRadius:2,
-                  background:i===gs.cycleIdx?`${CYCLE_COLORS[i]}20`:"rgba(255,255,255,0.02)",
-                  border:i===gs.cycleIdx?`1px solid ${CYCLE_COLORS[i]}60`:"1px solid #111828",
-                  color:i===gs.cycleIdx?CYCLE_COLORS[i]:"#1e2535" }}>{c}</div>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* タブ */}
+      <div style={{ display:"flex", borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+        {tabs.map(([id,label]) => (
+          <div key={id} style={{ flex:1, padding:"6px 2px", textAlign:"center", fontSize:10, cursor:"pointer",
+            color:tab===id?C.gold:"#1e2535",
+            borderBottom:tab===id?`2px solid ${C.gold}`:"2px solid transparent",
+            background:tab===id?`${C.goldBg}`:"transparent" }}
+            onClick={() => setTab(id)}>{label}</div>
+        ))}
+      </div>
 
-        <div style={{ padding:"6px 8px", borderBottom:"1px solid #111828", flexShrink:0 }}>
-          <button onClick={ma.fn} style={{ width:"100%", padding:"9px", borderRadius:4, cursor:"pointer",
-            background:`${ma.color}20`, border:`1px solid ${ma.color}50`, color:ma.color, fontSize:12, letterSpacing:1 }}>
-            {ma.label}
-          </button>
-        </div>
+      {/* タブ内容 */}
+      <div style={{ flex:1, overflowY:"auto", padding:"8px" }}>
 
-        <div style={{ display:"flex", borderBottom:"1px solid #111828", flexShrink:0 }}>
-          {[["main","探索"],["pcs","PC"],["quest","クエスト"],["scene","描写"],["log","ログ"]].map(([id,label]) => (
-            <div key={id} style={{ flex:1, padding:"6px 2px", textAlign:"center", fontSize:10, cursor:"pointer",
-              color:tab===id?"#c8a040":"#1e2535", borderBottom:tab===id?"2px solid #c8a040":"2px solid transparent",
-              background:tab===id?"rgba(200,160,64,0.05)":"transparent" }}
-              onClick={()=>setTab(id)}>{label}</div>
-          ))}
-        </div>
-
-        <div style={{ flex:1, overflowY:"auto", padding:"8px" }}>
-
-          {/* 探索タブ */}
-          {tab==="main" && (
-            <div>
-              <SectionTitle>リミット</SectionTitle>
-              <input style={{ ...iStyle, width:"100%", boxSizing:"border-box", marginBottom:8 }}
-                value={gs.limit} onChange={e=>upd(p=>({...p,limit:e.target.value}))} />
-
-              <SectionTitle>リソース</SectionTitle>
-              {Object.entries(gs.resources||{}).map(([k,v]) => {
-                const [cur,max] = Array.isArray(v)?v:[v,v];
-                return (
-                  <div key={k} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                    padding:"3px 4px", marginBottom:2, background:"rgba(255,255,255,0.015)", borderRadius:3 }}>
-                    <span style={{ fontSize:10, color:"#4a5565", minWidth:70 }}>【{k}】</span>
-                    <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                      <Btn onClick={()=>updRes(k,-1)}>−</Btn>
-                      <span style={{ fontSize:13, color:"#c8a040", minWidth:18, textAlign:"center" }}>{cur}</span>
-                      <span style={{ fontSize:9, color:"#2a3545" }}>/{max}</span>
-                      <Btn onClick={()=>updRes(k,1)}>＋</Btn>
-                      <span style={{ fontSize:9, color:"#2a3040", margin:"0 2px" }}>上限</span>
+        {/* ── 状態タブ ── */}
+        {tab==="status" && (
+          <div>
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6 }}>リソース</div>
+            {Object.entries(gs.resources||{}).map(([k,v]) => {
+              const [cur,max] = Array.isArray(v)?v:[v,v];
+              return (
+                <div key={k} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                  padding:"3px 4px", marginBottom:2, background:"rgba(255,255,255,0.015)", borderRadius:3 }}>
+                  <span style={{ fontSize:10, color:C.textFaint, minWidth:60 }}>【{k}】</span>
+                  <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                    {isGm && <Btn onClick={()=>updRes(k,-1)}>−</Btn>}
+                    <span style={{ fontSize:13, color:C.gold, minWidth:16, textAlign:"center" }}>{cur}</span>
+                    <span style={{ fontSize:9, color:"#2a3545" }}>/{max}</span>
+                    {isGm && <Btn onClick={()=>updRes(k,1)}>＋</Btn>}
+                    {isGm && <>
+                      <span style={{ fontSize:9, color:"#2a3040", margin:"0 2px" }}>|</span>
                       <Btn onClick={()=>updMax(k,-1)}>−</Btn>
                       <Btn onClick={()=>updMax(k,1)}>＋</Btn>
-                    </div>
-                  </div>
-                );
-              })}
-
-              <SectionTitle style={{marginTop:8}}>アイテム</SectionTitle>
-              {Object.entries(gs.items||{}).map(([k,v]) => (
-                <div key={k} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"2px 4px", marginBottom:1 }}>
-                  <span style={{ fontSize:10, color:"#4a5565" }}>{k}</span>
-                  <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                    <Btn onClick={()=>updItem(k,-1)}>−</Btn>
-                    <span style={{ fontSize:12, color:"#7090c0", minWidth:18, textAlign:"center" }}>{v}</span>
-                    <Btn onClick={()=>updItem(k,1)}>＋</Btn>
+                    </>}
                   </div>
                 </div>
-              ))}
+              );
+            })}
 
-              <SectionTitle style={{marginTop:8}}>手がかり</SectionTitle>
-              {gs.clues.length===0 && <span style={{fontSize:10,color:"#1e2535"}}>なし</span>}
-              {gs.clues.map(id => {
-                const s = getSpot(id);
-                return (
-                  <div key={id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:10, padding:"2px 0" }}>
-                    <span style={{color:"#f9a825"}}>💡 [{id}] {s?.name}</span>
-                    <Btn onClick={()=>removeClue(id)} style={{color:"#c0392b"}}>✕</Btn>
-                  </div>
-                );
-              })}
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6, marginTop:10 }}>アイテム</div>
+            {Object.entries(gs.items||{}).map(([k,v]) => (
+              <div key={k} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"2px 4px", marginBottom:1 }}>
+                <span style={{ fontSize:10, color:C.textFaint }}>{k}</span>
+                <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                  {isGm && <Btn onClick={()=>updItem(k,-1)}>−</Btn>}
+                  <span style={{ fontSize:12, color:"#7090c0", minWidth:16, textAlign:"center" }}>{v}</span>
+                  {isGm && <Btn onClick={()=>updItem(k,1)}>＋</Btn>}
+                </div>
+              </div>
+            ))}
 
-              {gs.newspaper && (
-                <>
-                  <SectionTitle style={{marginTop:8}}>本日の新聞</SectionTitle>
-                  <div style={{ padding:"6px 8px", background:"rgba(25,50,90,0.15)", border:"1px solid #1e3a5a",
-                    borderRadius:4, cursor:"pointer" }} onClick={()=>setModal({type:"newspaper",data:gs.newspaper})}>
-                    <div style={{fontSize:9,color:"#3a5070"}}>[{gs.newspaper.roll}]</div>
-                    <div style={{fontSize:11,color:"#60c0f0"}}>{gs.newspaper.title}</div>
-                  </div>
-                </>
+            {/* 手がかり一覧 */}
+            {gs.clues.length > 0 && (
+              <>
+                <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6, marginTop:10 }}>手がかり配置済み</div>
+                {gs.clues.map(id => {
+                  const s = getSpot(id);
+                  return (
+                    <div key={id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:10, padding:"2px 0" }}>
+                      <span style={{ color:"#f9a825" }}>💡 [{id}] {s?.name}</span>
+                      {isGm && <Btn onClick={()=>removeClue(id)} style={{color:"#c0392b"}}>✕</Btn>}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* 本日の新聞（表示のみ） */}
+            {gs.newspaper && (
+              <>
+                <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6, marginTop:10 }}>本日の新聞</div>
+                <div style={{ padding:"6px 8px", background:"rgba(25,50,90,0.15)", border:"1px solid #1e3a5a",
+                  borderRadius:4, cursor:"pointer", fontSize:11, color:"#60c0f0" }}
+                  onClick={() => setModal({ type:"newspaper", data:gs.newspaper })}>
+                  [{gs.newspaper.roll}] {gs.newspaper.title}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── クエストタブ ── */}
+        {tab==="quest" && (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+              <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2 }}>クエスト</div>
+              {isGm && (
+                <button onClick={() => setQuestForm({ name:"", summary:"", level:1, truth:"", method:"", location:"" })}
+                  style={{ padding:"2px 8px", background:C.goldBg, border:`1px solid ${C.goldDim}`, color:C.gold,
+                    borderRadius:3, cursor:"pointer", fontSize:10 }}>＋追加</button>
               )}
             </div>
-          )}
-
-          {/* PC タブ */}
-          {tab==="pcs" && (
-            <div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                <SectionTitle>PC一覧</SectionTitle>
-                <Btn onClick={()=>setPcForm({name:"",trait:""})} style={{ color:"#c8a040", border:"1px solid #3a2a10", padding:"2px 8px", fontSize:10 }}>＋追加</Btn>
-              </div>
-              {(gs.pcs||[]).length===0 && <span style={{fontSize:10,color:"#1e2535"}}>PCなし</span>}
-              {(gs.pcs||[]).map(pc => (
-                <div key={pc.id} style={{ padding:"7px 8px", marginBottom:5, background:"rgba(255,255,255,0.02)", border:"1px solid #111828", borderRadius:4 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{fontSize:12,color:"#c8a040"}}>{pc.name}</span>
-                    <Btn onClick={()=>removePc(pc.id)} style={{color:"#c0392b",fontSize:9}}>✕</Btn>
-                  </div>
-                  <div style={{fontSize:9,color:"#4a5060",marginBottom:5}}>「{pc.trait}」</div>
-                  <div style={{ display:"flex", gap:4, alignItems:"center", marginBottom:3 }}>
-                    <span style={{fontSize:9,color:"#3a4050",whiteSpace:"nowrap"}}>現在地:</span>
-                    <select value={pc.spot} onChange={e=>movePc(pc.id,e.target.value)}
-                      style={{ ...iStyle, fontSize:10, padding:"2px 4px", flex:1 }}>
-                      {SPOTS.filter(s=>s.id!==null).map(s=><option key={s.id} value={s.id}>[{s.id}]{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                    <span style={{fontSize:9,color:"#3a4050",whiteSpace:"nowrap"}}>拠点:</span>
-                    <select value={pc.baseSpot||11}
-                      onChange={e=>upd(p=>({...p,pcs:p.pcs.map(x=>x.id===pc.id?{...x,baseSpot:parseInt(e.target.value)}:x)}))}
-                      style={{ ...iStyle, fontSize:10, padding:"2px 4px", flex:1 }}>
-                      {SPOTS.filter(s=>s.id!==null).map(s=><option key={s.id} value={s.id}>[{s.id}]{s.name}</option>)}
-                    </select>
-                  </div>
+            {(gs.quests||[]).length === 0 && <div style={{ fontSize:10, color:"#1e2535" }}>クエストなし</div>}
+            {(gs.quests||[]).map(q => (
+              <div key={q.id} style={{ padding:"7px 8px", marginBottom:5,
+                background:q.solved?"rgba(27,94,32,0.08)":"rgba(255,255,255,0.02)",
+                border:`1px solid ${q.solved?"#1b5e20":C.border}`, borderRadius:4 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:11, color:q.solved?C.green:C.gold,
+                    textDecoration:q.solved?"line-through":"none" }}>
+                    【Lv.{q.level}】{q.name}
+                  </span>
+                  {isGm && <Btn onClick={()=>solveQuest(q.id)} style={{fontSize:9}}>{q.solved?"↩":"✓"}</Btn>}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* クエストタブ */}
-          {tab==="quest" && (
-            <div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                <SectionTitle>クエスト</SectionTitle>
-                <Btn onClick={()=>setQuestForm({name:"",summary:"",level:1,truth:"",method:"",location:""})}
-                  style={{ color:"#c8a040", border:"1px solid #3a2a10", padding:"2px 8px", fontSize:10 }}>＋追加</Btn>
+                <div style={{ fontSize:10, color:C.textFaint, marginTop:2 }}>{q.summary}</div>
+                {isGm && (
+                  <div style={{ marginTop:5, paddingTop:5, borderTop:`1px solid #111828` }}>
+                    {q.truth  && <div style={{ fontSize:9, color:"#3a6040" }}>🔒 真相: {q.truth}</div>}
+                    {q.method && <div style={{ fontSize:9, color:"#3a4070" }}>🔒 解決: {q.method}</div>}
+                    {q.location && <div style={{ fontSize:9, color:"#5a4020" }}>📍 [{q.location}] {getSpot(parseInt(q.location))?.name}</div>}
+                  </div>
+                )}
               </div>
-              {gs.quests.length===0 && <span style={{fontSize:10,color:"#1e2535"}}>なし</span>}
-              {gs.quests.map(q => (
-                <div key={q.id} style={{ padding:"7px 8px", marginBottom:5,
-                  background:q.solved?"rgba(27,94,32,0.08)":"rgba(255,255,255,0.02)",
-                  border:`1px solid ${q.solved?"#1b5e20":"#111828"}`, borderRadius:4 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{ fontSize:11, color:q.solved?"#4caf50":"#c8a040", textDecoration:q.solved?"line-through":"none" }}>
-                      【Lv.{q.level}】{q.name}
-                    </span>
-                    <div style={{display:"flex",gap:3}}>
-                      <Btn onClick={()=>solveQuest(q.id)} style={{fontSize:9}}>{q.solved?"↩":"✓"}</Btn>
-                      <Btn onClick={()=>deleteQuest(q.id)} style={{color:"#c0392b",fontSize:9}}>✕</Btn>
-                    </div>
-                  </div>
-                  <div style={{fontSize:10,color:"#4a5565",marginTop:2}}>{q.summary}</div>
-                  <div style={{ marginTop:5, paddingTop:5, borderTop:"1px solid #111828" }}>
-                    {q.truth && <div style={{fontSize:9,color:"#3a6040"}}>🔒 真相: {q.truth}</div>}
-                    {q.method && <div style={{fontSize:9,color:"#3a4070"}}>🔒 解決: {q.method}</div>}
-                    {q.location && <div style={{fontSize:9,color:"#5a4020"}}>📍 [{q.location}] {getSpot(parseInt(q.location))?.name}</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
+        )}
 
-          {/* 描写タブ */}
-          {tab==="scene" && (
-            <div>
-              <SectionTitle>描写モード</SectionTitle>
-              <button onClick={toggleScene} style={{ width:"100%", padding:"9px", borderRadius:4, cursor:"pointer", marginBottom:8,
+        {/* ── 行動タブ（GMのみ） ── */}
+        {tab==="action" && isGm && (
+          <div>
+            {/* メインアクションボタン */}
+            <button onClick={ma.fn} style={{ width:"100%", padding:"10px", marginBottom:10,
+              borderRadius:4, cursor:"pointer", fontSize:12, letterSpacing:1,
+              background:`${ma.color}20`, border:`1px solid ${ma.color}60`, color:ma.color }}>
+              {ma.label}
+            </button>
+
+            {/* ダイス表示 */}
+            {dice && (
+              <div style={{ textAlign:"center", padding:"8px 0", marginBottom:8 }}>
+                <div style={{ fontSize:9, color:C.textFaint, marginBottom:5 }}>{dice.label}</div>
+                <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+                  {dice.faces.map((f,i) => (
+                    <div key={i} style={{ width:44, height:44, border:"2px solid #2a3a5a", borderRadius:6,
+                      background:"rgba(14,20,36,0.95)", display:"flex", alignItems:"center",
+                      justifyContent:"center", fontSize:22, color:"#60c0f0", fontWeight:"bold",
+                      animation:dice.rolling?"spin 0.25s ease infinite":"none",
+                      boxShadow:dice.rolling?"0 0 12px rgba(96,192,240,0.4)":"none" }}>{f}</div>
+                  ))}
+                </div>
+                {!dice.rolling && (
+                  <div style={{ fontSize:18, color:C.gold, marginTop:4 }}>{dice.faces.join("")}</div>
+                )}
+              </div>
+            )}
+
+            {/* リミット設定 */}
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6, marginTop:4 }}>リミット設定</div>
+            <input style={{ padding:"4px 6px", fontSize:11, background:"rgba(255,255,255,0.03)",
+              border:`1px solid ${C.border}`, color:C.text, borderRadius:3, width:"100%", boxSizing:"border-box" }}
+              value={gs.limit} onChange={e => upd(p => ({...p, limit:e.target.value}))} />
+          </div>
+        )}
+
+        {/* ── 描写タブ（GMのみ） ── */}
+        {tab==="scene" && isGm && (
+          <div>
+            <button onClick={() => upd(p => ({...p,sceneMode:!p.sceneMode}))}
+              style={{ width:"100%", padding:"9px", borderRadius:4, cursor:"pointer", marginBottom:8,
                 background:gs.sceneMode?"rgba(121,134,203,0.2)":"rgba(255,255,255,0.03)",
-                border:gs.sceneMode?"1px solid #7986cb60":"1px solid #1e2535",
-                color:gs.sceneMode?"#9fa8da":"#3a4555", fontSize:12 }}>
-                {gs.sceneMode?"🎭 描写モード ON（クリックで解除）":"🎭 描写モードを開始"}
-              </button>
+                border:gs.sceneMode?"1px solid #7986cb60":`1px solid ${C.border}`,
+                color:gs.sceneMode?"#9fa8da":C.textFaint, fontSize:12 }}>
+              {gs.sceneMode?"🎭 描写モード ON（クリックで解除）":"🎭 描写モードを開始"}
+            </button>
 
-              <SectionTitle>テキスト（PLに表示）</SectionTitle>
-              <textarea value={gs.sceneText} onChange={e=>upd(p=>({...p,sceneText:e.target.value}))}
-                placeholder="PLに見せたいテキストを入力…"
-                style={{ ...iStyle, width:"100%", boxSizing:"border-box", height:80, resize:"vertical", fontSize:11, lineHeight:1.7 }} />
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6 }}>テキスト（PLに表示）</div>
+            <textarea value={gs.sceneText} onChange={e => upd(p => ({...p,sceneText:e.target.value}))}
+              placeholder="PLに見せたいテキストを入力…"
+              style={{ padding:"4px 6px", fontSize:11, background:"rgba(255,255,255,0.03)",
+                border:`1px solid ${C.border}`, color:C.text, borderRadius:3, width:"100%",
+                boxSizing:"border-box", height:80, resize:"vertical" }} />
 
-              <SectionTitle style={{marginTop:8}}>背景画像</SectionTitle>
-              {sceneData.bg ? (
-                <div style={{ position:"relative", marginBottom:6 }}>
-                  <img src={sceneData.bg} alt="" style={{ width:"100%", height:80, objectFit:"cover", borderRadius:3, border:"1px solid #1e2535" }} />
-                  <Btn onClick={()=>setSceneData(d=>({...d,bg:null}))} style={{ position:"absolute", top:4, right:4, color:"#c0392b", background:"rgba(8,8,12,0.9)", border:"1px solid #3a1a1a" }}>✕</Btn>
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6, marginTop:8 }}>背景画像</div>
+            {sceneData?.bg
+              ? <div style={{ position:"relative", marginBottom:6 }}>
+                  <img src={sceneData.bg} alt="" style={{ width:"100%", height:80, objectFit:"cover",
+                    borderRadius:3, border:`1px solid ${C.border}` }} />
+                  <Btn onClick={() => setSceneData(d=>({...d,bg:null}))}
+                    style={{ position:"absolute", top:4, right:4, color:"#c0392b",
+                      background:"rgba(8,8,12,0.9)", border:"1px solid #3a1a1a" }}>✕</Btn>
                 </div>
-              ) : (
-                <label style={{ display:"block", padding:"10px", textAlign:"center", border:"1px dashed #1e2535", borderRadius:3, cursor:"pointer", fontSize:10, color:"#3a4050", marginBottom:6 }}>
-                  ＋ 背景画像をアップロード（自動圧縮）
-                  <input type="file" accept="image/*" style={{display:"none"}} onChange={uploadBg} />
+              : <label style={{ display:"block", padding:"10px", textAlign:"center",
+                  border:`1px dashed ${C.border}`, borderRadius:3, cursor:"pointer",
+                  fontSize:10, color:C.textFaint, marginBottom:6 }}>
+                  ＋ 背景画像をアップロード
+                  <input type="file" accept="image/*" style={{display:"none"}}
+                    onChange={async e => {
+                      const f=e.target.files[0]; if(!f)return;
+                      const r=await resizeImage(f,1280,0.8);
+                      setSceneData(d=>({...d,bg:r}));
+                    }} />
                 </label>
-              )}
+            }
 
-              <SectionTitle>立ち絵（最大4体）</SectionTitle>
-              {(sceneData.portraits||[]).map((p,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                  <img src={p.img} alt="" style={{ width:32, height:56, objectFit:"contain", border:"1px solid #1e2535", borderRadius:2 }} />
-                  <input placeholder="キャラ名" value={p.name||""} onChange={e=>setSceneData(d=>({...d,portraits:d.portraits.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))}
-                    style={{ ...iStyle, flex:1, fontSize:10 }} />
-                  <Btn onClick={()=>removePortrait(i)} style={{color:"#c0392b"}}>✕</Btn>
-                </div>
-              ))}
-              {(sceneData.portraits||[]).length<4 && (
-                <label style={{ display:"block", padding:"7px", textAlign:"center", border:"1px dashed #1e2535", borderRadius:3, cursor:"pointer", fontSize:10, color:"#3a4050" }}>
-                  ＋ 立ち絵を追加（自動圧縮）
-                  <input type="file" accept="image/*" style={{display:"none"}} onChange={addPortrait} />
-                </label>
-              )}
-            </div>
-          )}
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6 }}>立ち絵（最大4体）</div>
+            {(sceneData?.portraits||[]).map((p,i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                <img src={p.img} alt="" style={{ width:32, height:56, objectFit:"contain",
+                  border:`1px solid ${C.border}`, borderRadius:2 }} />
+                <input placeholder="キャラ名" value={p.name||""}
+                  onChange={e => setSceneData(d=>({...d,portraits:d.portraits.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))}
+                  style={{ padding:"3px 6px", fontSize:10, background:"rgba(255,255,255,0.03)",
+                    border:`1px solid ${C.border}`, color:C.text, borderRadius:3, flex:1 }} />
+                <Btn onClick={() => setSceneData(d=>({...d,portraits:d.portraits.filter((_,j)=>j!==i)}))}
+                  style={{color:"#c0392b"}}>✕</Btn>
+              </div>
+            ))}
+            {(sceneData?.portraits||[]).length < 4 && (
+              <label style={{ display:"block", padding:"7px", textAlign:"center",
+                border:`1px dashed ${C.border}`, borderRadius:3, cursor:"pointer",
+                fontSize:10, color:C.textFaint }}>
+                ＋ 立ち絵を追加
+                <input type="file" accept="image/*" style={{display:"none"}}
+                  onChange={async e => {
+                    const f=e.target.files[0]; if(!f)return;
+                    const r=await resizeImage(f,600,0.85);
+                    setSceneData(d=>({...d,portraits:[...(d.portraits||[]),{img:r,name:""}]}));
+                  }} />
+              </label>
+            )}
+          </div>
+        )}
 
-          {/* ログタブ */}
-          {tab==="log" && (
-            <div>
-              <SectionTitle>セッションログ</SectionTitle>
-              {gs.log.length===0 && <span style={{fontSize:10,color:"#1e2535"}}>なし</span>}
-              {gs.log.map((e,i) => (
-                <div key={i} style={{ fontSize:10, color:"#2a3a4a", padding:"2px 0", borderBottom:"1px solid #0c0f18" }}>{e}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* ── ログタブ ── */}
+        {tab==="log" && (
+          <div>
+            <div style={{ fontSize:9, color:C.textFaint, letterSpacing:2, borderBottom:`1px solid #111828`, paddingBottom:3, marginBottom:6 }}>セッションログ</div>
+            {(gs.log||[]).length===0 && <div style={{ fontSize:10, color:"#1e2535" }}>なし</div>}
+            {(gs.log||[]).map((e,i) => (
+              <div key={i} style={{ fontSize:10, color:"#2a3a4a", padding:"2px 0", borderBottom:"1px solid #0c0f18" }}>{e}</div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 新聞モーダル */}
       {modal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center" }}
-          onClick={()=>setModal(null)}>
-          <div style={{ background:"#0c1020", border:"1px solid #1e2d45", borderRadius:6, padding:20, maxWidth:380, width:"90%", animation:"fadeUp 0.2s ease" }}
-            onClick={e=>e.stopPropagation()}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:50,
+          display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={() => setModal(null)}>
+          <div style={{ background:"#0c1020", border:"1px solid #1e2d45", borderRadius:6,
+            padding:20, maxWidth:380, width:"90%", animation:"fadeUp 0.2s ease" }}
+            onClick={e => e.stopPropagation()}>
             {modal.type==="newspaper" && <>
               <div style={{ fontSize:9, letterSpacing:3, color:"#2a3a50", textAlign:"center", marginBottom:4 }}>— 文々。新聞 —</div>
               {modal.data.dice && (
                 <div style={{ display:"flex", gap:10, justifyContent:"center", marginBottom:8 }}>
                   {modal.data.dice.map((d,i) => (
                     <div key={i} style={{ width:44, height:44, border:"2px solid #1e3a5a", borderRadius:6,
-                      background:"rgba(14,20,36,0.95)", display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:22, color:"#60c0f0", fontWeight:"bold" }}>{d}</div>
+                      background:"rgba(14,20,36,0.95)", display:"flex", alignItems:"center",
+                      justifyContent:"center", fontSize:22, color:"#60c0f0", fontWeight:"bold" }}>{d}</div>
                   ))}
                 </div>
               )}
               <div style={{ fontSize:18, color:"#1976d2", textAlign:"center", marginBottom:6 }}>[{modal.data.roll}]</div>
               <div style={{ fontSize:13, color:"#60c0f0", marginBottom:8, textAlign:"center" }}>{modal.data.title}</div>
               <div style={{ fontSize:11, color:"#4a6070", lineHeight:1.8 }}>{modal.data.effect}</div>
-              <button onClick={()=>setModal(null)} style={{ ...confirmBtn, marginTop:12 }}>確認した</button>
+              <button onClick={() => setModal(null)} style={{ marginTop:12, width:"100%", padding:"7px 0",
+                background:"rgba(192,57,43,0.15)", border:"1px solid #5a1a1a", color:C.red,
+                cursor:"pointer", borderRadius:3, fontSize:12 }}>確認した</button>
             </>}
           </div>
         </div>
       )}
 
-      {/* PC追加モーダル */}
-      {pcForm && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#0c1020", border:"1px solid #1e2d45", borderRadius:6, padding:20, maxWidth:300, width:"90%", animation:"fadeUp 0.2s ease" }}>
-            <div style={{ fontSize:13, color:"#c8a040", marginBottom:12 }}>PC追加</div>
-            {[["name","PC名 *"],["trait","個性タイトル"]].map(([k,label]) => (
-              <div key={k} style={{marginBottom:8}}>
-                <div style={{fontSize:9,color:"#3a4555",marginBottom:2}}>{label}</div>
-                <input style={{ ...iStyle, width:"100%", boxSizing:"border-box" }}
-                  value={pcForm[k]} onChange={e=>setPcForm(p=>({...p,[k]:e.target.value}))} />
-              </div>
-            ))}
-            <div style={{display:"flex",gap:8,marginTop:8}}>
-              <button style={{ ...confirmBtn, background:"rgba(27,94,32,0.2)", borderColor:"#1b5e20", color:"#4caf50" }}
-                onClick={()=>{ if(pcForm.name){ addPc(pcForm); setPcForm(null); } }}>追加</button>
-              <button style={confirmBtn} onClick={()=>setPcForm(null)}>キャンセル</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* クエスト追加モーダル */}
-      {questForm && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#0c1020", border:"1px solid #1e2d45", borderRadius:6, padding:20, maxWidth:340, width:"90%", animation:"fadeUp 0.2s ease" }}>
-            <div style={{ fontSize:13, color:"#c8a040", marginBottom:12 }}>クエスト追加</div>
-            {[["name","クエスト名 *"],["summary","概要（PL公開）"],["level","レベル"],["truth","🔒 真相（GM専用）"],["method","🔒 解決方法（GM専用）"],["location","解決場所スポットID"]].map(([k,label]) => (
+      {questForm && isGm && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:50,
+          display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#0c1020", border:"1px solid #1e2d45", borderRadius:6,
+            padding:20, maxWidth:340, width:"90%", animation:"fadeUp 0.2s ease" }}>
+            <div style={{ fontSize:13, color:C.gold, marginBottom:12 }}>クエスト追加</div>
+            {[["name","クエスト名 *"],["summary","概要（PL公開）"],["level","レベル"],
+              ["truth","🔒 真相（GM専用）"],["method","🔒 解決方法"],["location","解決場所スポットID"]
+            ].map(([k,label]) => (
               <div key={k} style={{marginBottom:7}}>
-                <div style={{fontSize:9,color:"#3a4555",marginBottom:2}}>{label}</div>
-                <input style={{ ...iStyle, width:"100%", boxSizing:"border-box" }}
-                  value={questForm[k]} onChange={e=>setQuestForm(p=>({...p,[k]:e.target.value}))} />
+                <div style={{fontSize:9,color:C.textFaint,marginBottom:2}}>{label}</div>
+                <input style={{ padding:"4px 6px", fontSize:11, background:"rgba(255,255,255,0.03)",
+                  border:`1px solid ${C.border}`, color:C.text, borderRadius:3,
+                  width:"100%", boxSizing:"border-box" }}
+                  value={questForm[k]||""}
+                  onChange={e=>setQuestForm(p=>({...p,[k]:e.target.value}))} />
               </div>
             ))}
             <div style={{display:"flex",gap:8,marginTop:8}}>
-              <button style={{ ...confirmBtn, background:"rgba(27,94,32,0.2)", borderColor:"#1b5e20", color:"#4caf50" }}
-                onClick={()=>{ if(questForm.name){ addQuest(questForm); setQuestForm(null); } }}>追加</button>
-              <button style={confirmBtn} onClick={()=>setQuestForm(null)}>キャンセル</button>
+              <button style={{ flex:1, padding:"7px 0", background:"rgba(27,94,32,0.2)",
+                border:"1px solid #1b5e20", color:C.green, cursor:"pointer", borderRadius:3, fontSize:12 }}
+                onClick={() => { if(questForm.name){ addQuest(questForm); setQuestForm(null); } }}>追加</button>
+              <button style={{ flex:1, padding:"7px 0", background:"rgba(192,57,43,0.15)",
+                border:"1px solid #5a1a1a", color:C.red, cursor:"pointer", borderRadius:3, fontSize:12 }}
+                onClick={() => setQuestForm(null)}>キャンセル</button>
             </div>
           </div>
         </div>
@@ -815,29 +733,37 @@ function GMView({ gs, upd, sceneData, setSceneData }) {
   );
 }
 
-// ─── SESSION WRAPPER (部屋コードベース) ─────────────
+function Btn({ onClick, children, style }) {
+  return (
+    <button onClick={onClick} style={{ width:18, height:18, border:`1px solid ${C.border}`,
+      background:"rgba(255,255,255,0.03)", color:"#3a4a5a", cursor:"pointer",
+      borderRadius:2, fontSize:11, padding:0,
+      display:"inline-flex", alignItems:"center", justifyContent:"center", ...style }}>
+      {children}
+    </button>
+  );
+}
+
+// ─── SESSION WRAPPER ─────────────────────────────────
 function SessionApp({ roomCode, user }) {
-  const [mode, setMode] = useState(null); // null | "gm" | "pl"
+  const [mode, setMode] = useState(null);
   const [gs, setGs] = useState(DEFAULT_GS);
   const [sceneData, setSceneData] = useState(DEFAULT_SCENE);
   const [synced, setSynced] = useState(false);
   const [room, setRoom] = useState(null);
+  const mapRef = useRef(null);
 
   const gsPath = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
 
   useEffect(() => {
-    // 部屋情報購読（自分のroleを確認）
     const roomRef = ref(db, `rooms/${roomCode}`);
     const unsubRoom = onValue(roomRef, snap => {
       if (snap.exists()) {
         const r = snap.val();
         setRoom(r);
-        // 自分のロールを自動判定
         const myPlayer = r.players?.[user.uid];
-        if (myPlayer && !mode) {
-          setMode(myPlayer.role === "gm" ? "gm" : "pl");
-        }
+        if (myPlayer && !mode) setMode(myPlayer.role === "gm" ? "gm" : "pl");
       }
     });
     return () => unsubRoom();
@@ -849,7 +775,7 @@ function SessionApp({ roomCode, user }) {
     const sceneRef = ref(db, scenePath);
     const timeout = setTimeout(() => setSynced(true), 8000);
 
-    const unsubGs = onValue(gsRef, (snap) => {
+    const unsubGs = onValue(gsRef, snap => {
       clearTimeout(timeout);
       if (snap.exists()) {
         const val = snap.val();
@@ -857,26 +783,25 @@ function SessionApp({ roomCode, user }) {
           ...DEFAULT_GS, ...val,
           resources: { ...DEFAULT_GS.resources, ...(val.resources||{}) },
           items: { ...DEFAULT_GS.items, ...(val.items||{}) },
-          pcs: val.pcs || [], quests: val.quests || [],
-          clues: val.clues || [], log: val.log || [],
+          pcs: val.pcs||[], quests: val.quests||[],
+          clues: val.clues||[], log: val.log||[],
         }));
       } else if (mode === "gm") {
-        set(gsRef, DEFAULT_GS).catch(console.error);
+        set(ref(db, gsPath), DEFAULT_GS).catch(console.error);
       }
       setSynced(true);
     }, () => { clearTimeout(timeout); setSynced(true); });
 
-    const unsubScene = onValue(sceneRef, (snap) => {
+    const unsubScene = onValue(sceneRef, snap => {
       if (snap.exists()) {
         const val = snap.val();
-        setSceneData({ bg: val.bg||null, portraits: val.portraits||[] });
+        setSceneData({ bg:val.bg||null, portraits:val.portraits||[] });
       }
     });
-
     return () => { clearTimeout(timeout); unsubGs(); unsubScene(); };
   }, [mode, gsPath, scenePath]);
 
-  const upd = useCallback((fn) => {
+  const upd = useCallback(fn => {
     setGs(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
       set(ref(db, gsPath), next).catch(console.error);
@@ -884,7 +809,7 @@ function SessionApp({ roomCode, user }) {
     });
   }, [gsPath]);
 
-  const setSceneDataAndSync = useCallback((fn) => {
+  const setSceneDataAndSync = useCallback(fn => {
     setSceneData(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
       set(ref(db, scenePath), next).catch(console.error);
@@ -892,38 +817,72 @@ function SessionApp({ roomCode, user }) {
     });
   }, [scenePath]);
 
-  // ロール選択画面（自動判定できなかった場合のフォールバック）
+  const isGm = mode === "gm";
+
   if (!mode) return (
-    <div style={{ background:"#040608", color:"#c8b89a", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"serif" }}>
+    <div style={{ background:"#040608", color:C.text, height:"100vh", display:"flex",
+      alignItems:"center", justifyContent:"center", fontFamily:"serif" }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}} button:hover{opacity:0.82}`}</style>
       <div style={{ textAlign:"center", animation:"fadeUp 0.6s ease" }}>
-        <div style={{ fontSize:22, color:"#c8a040", letterSpacing:4, marginBottom:4 }}>幻想ナラトグラフ</div>
-        <div style={{ fontSize:10, color:"#3a4050", marginBottom:8 }}>部屋: {roomCode}</div>
-        <div style={{ fontSize:9, color:"#1a2535", marginBottom:28 }}>画面の種類を選択してください</div>
-        <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
-          <button onClick={()=>setMode("gm")} style={{ padding:"12px 24px", cursor:"pointer", borderRadius:4, fontSize:12, background:"rgba(192,57,43,0.18)", border:"1px solid #8b1a1a", color:"#e07060", letterSpacing:1 }}>🎲 GM画面</button>
-          <button onClick={()=>setMode("pl")} style={{ padding:"12px 24px", cursor:"pointer", borderRadius:4, fontSize:12, background:"rgba(25,118,210,0.15)", border:"1px solid #0d47a1", color:"#64b5f6", letterSpacing:1 }}>✦ PL共有画面</button>
+        <div style={{ fontSize:22, color:C.gold, letterSpacing:4, marginBottom:4 }}>幻想ナラトグラフ</div>
+        <div style={{ fontSize:10, color:C.textFaint, marginBottom:28 }}>部屋: {roomCode}</div>
+        <div style={{ display:"flex", gap:12 }}>
+          <button onClick={()=>setMode("gm")} style={{ padding:"12px 24px", cursor:"pointer", borderRadius:4,
+            fontSize:12, background:"rgba(192,57,43,0.18)", border:"1px solid #8b1a1a", color:C.red, letterSpacing:1 }}>🎲 GM画面</button>
+          <button onClick={()=>setMode("pl")} style={{ padding:"12px 24px", cursor:"pointer", borderRadius:4,
+            fontSize:12, background:"rgba(25,118,210,0.15)", border:"1px solid #0d47a1", color:C.blue, letterSpacing:1 }}>✦ PL共有画面</button>
         </div>
-        <button onClick={()=>signOut(auth)} style={{ marginTop:20, padding:"4px 12px", cursor:"pointer", borderRadius:3, fontSize:10, background:"none", border:"1px solid #1e2535", color:"#2a3545" }}>ログアウト</button>
+        <button onClick={()=>signOut(auth)} style={{ marginTop:16, padding:"4px 12px", cursor:"pointer",
+          borderRadius:3, fontSize:10, background:"none", border:`1px solid ${C.border}`, color:C.textFaint }}>ログアウト</button>
       </div>
     </div>
   );
 
   if (!synced) return (
-    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12, letterSpacing:2 }}>
+    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center",
+      justifyContent:"center", color:C.textFaint, fontFamily:"serif", fontSize:12, letterSpacing:2 }}>
       Firebase に接続中…
     </div>
   );
 
-  if (mode === "gm") return (
-    <div style={{ height:"100vh", overflow:"hidden" }}>
-      <GMView gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync} room={room} user={user} />
-    </div>
-  );
+  // パネル幅: 画面幅に応じてレスポンシブ
+  const panelW = typeof window !== "undefined"
+    ? Math.max(280, Math.min(340, window.innerWidth * 0.28))
+    : 300;
 
   return (
-    <div style={{ height:"100vh", overflow:"hidden" }}>
-      <PLView gs={gs} sceneData={sceneData} />
+    <div style={{ display:"flex", height:"100vh", background:"#060810",
+      fontFamily:"serif", overflow:"hidden" }}>
+      <style>{`
+        @keyframes spin{50%{transform:scale(1.15)}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a}
+        button{transition:opacity 0.15s}button:hover{opacity:0.82}
+        input,textarea,select{outline:none}
+      `}</style>
+
+      {/* マップ */}
+      <div ref={mapRef} style={{ flex:1, position:"relative", overflow:"hidden" }}>
+        <MapLayer
+          gs={gs}
+          sceneData={sceneData}
+          mapRef={mapRef}
+          isGm={isGm}
+          onRemoveClue={id => upd(p => ({...p, clues:p.clues.filter(c=>c!==id)}))}
+        />
+      </div>
+
+      {/* 右パネル */}
+      <div style={{ width:panelW, flexShrink:0 }}>
+        <SessionPanel
+          gs={gs}
+          upd={isGm ? upd : ()=>{}}
+          isGm={isGm}
+          sceneData={sceneData}
+          setSceneData={isGm ? setSceneDataAndSync : ()=>{}}
+        />
+      </div>
     </div>
   );
 }
@@ -942,34 +901,27 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 部屋コードがあれば phase を監視
   useEffect(() => {
     if (!roomCode || !user) return;
     const r = ref(db, `rooms/${roomCode}/phase`);
-    const unsub = onValue(r, snap => {
-      if (snap.exists()) setRoomPhase(snap.val());
-    });
+    const unsub = onValue(r, snap => { if (snap.exists()) setRoomPhase(snap.val()); });
     return () => unsub();
   }, [roomCode, user]);
 
   if (user === undefined) return (
-    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>接続中…</div>
+    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center",
+      justifyContent:"center", color:C.textFaint, fontFamily:"serif", fontSize:12 }}>接続中…</div>
   );
 
-  // 未ログイン → LobbyRoot (ログイン画面)
   if (!user) return <LobbyRoot />;
-
-  // 部屋コードなし → ロビー
   if (!roomCode) return <LobbyRoot />;
 
-  // phase 取得待ち
   if (roomPhase === null) return (
-    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>部屋情報を取得中…</div>
+    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center",
+      justifyContent:"center", color:C.textFaint, fontFamily:"serif", fontSize:12 }}>部屋情報を取得中…</div>
   );
 
-  // prep フェイズ → LobbyRoot が PrepRoom を表示
   if (roomPhase === "prep") return <LobbyRoot />;
 
-  // explore 以降 → SessionApp
   return <SessionApp roomCode={roomCode} user={user} />;
 }
