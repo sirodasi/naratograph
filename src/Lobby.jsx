@@ -1965,7 +1965,7 @@ function LoginScreen(){
       <div style={{textAlign:"center",animation:"fadeUp 0.5s ease"}}>
         <div style={{fontSize:9,letterSpacing:7,color:C.textFaint,marginBottom:6}}>TRPG SESSION SUPPORT</div>
         <div style={{fontSize:24,color:C.gold,letterSpacing:5,marginBottom:3}}>幻想ナラトグラフ</div>
-        <div style={{fontSize:11,color:C.textDim,marginBottom:36}}>GM / PL 分離型 セッション支援システム</div>
+        <div style={{fontSize:11,color:C.textDim,marginBottom:36}}>セッション支援システム</div>
         <button onClick={login} disabled={loading} style={{...btn("rgba(66,133,244,0.2)","#4285f4","#8ab4f8",{padding:"12px 28px",fontSize:13})}}>
           {loading?"接続中…":"🔑 Googleアカウントでログイン"}
         </button>
