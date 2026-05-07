@@ -429,13 +429,39 @@ function ScenarioForm({ initial, onSave, onCancel }) {
 
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14, marginBottom:12 }}>
             <SecTitle>選択不可キャラクター</SecTitle>
-            <div style={{ fontSize:9, color:C.textFaint, marginBottom:6 }}>キャラ名をカンマ区切りで入力</div>
-            <textarea style={{...taBase,height:60}} value={(sc.bannedChars||[]).join(",")}
-              onChange={e=>upd("bannedChars",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))}
-              placeholder="例: 博麗霊夢,霧雨魔理沙"/>
+            <div style={{ fontSize:9, color:C.textFaint, marginBottom:8 }}>クリックで選択・解除</div>
+            {/* 選択済みチップ */}
             {(sc.bannedChars||[]).length>0 && (
-              <div style={{marginTop:6}}>{sc.bannedChars.map(c=><Chip key={c} label={c} color={C.red}/>)}</div>
+              <div style={{marginBottom:8,display:"flex",flexWrap:"wrap",gap:4}}>
+                {sc.bannedChars.map(c=>(
+                  <span key={c} onClick={()=>upd("bannedChars",(sc.bannedChars||[]).filter(x=>x!==c))}
+                    style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",
+                      background:"rgba(192,57,43,0.2)",border:`1px solid ${C.redBorder}`,
+                      borderRadius:10,fontSize:9,color:C.red,cursor:"pointer"}}>
+                    {c} <span style={{fontSize:10}}>✕</span>
+                  </span>
+                ))}
+              </div>
             )}
+            {/* キャラ一覧グリッド */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(72px,1fr))",gap:4,maxHeight:200,overflowY:"auto"}}>
+              {CHARACTERS.map(c=>{
+                const banned=(sc.bannedChars||[]).includes(c.name);
+                return(
+                  <div key={c.id} onClick={()=>{
+                    const cur=sc.bannedChars||[];
+                    upd("bannedChars",banned?cur.filter(x=>x!==c.name):[...cur,c.name]);
+                  }} style={{
+                    padding:"3px 4px",borderRadius:4,cursor:"pointer",textAlign:"center",
+                    background:banned?"rgba(192,57,43,0.18)":"rgba(255,255,255,0.02)",
+                    border:`1px solid ${banned?C.redBorder:C.border}`,
+                    opacity:banned?1:0.7,
+                  }}>
+                    <div style={{fontSize:8,color:banned?C.red:C.textDim,lineHeight:1.3}}>{c.name}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14 }}>
