@@ -604,8 +604,7 @@ function SessionApp({ roomCode, user }) {
 スキルや処理の確認をお忘れなく。`
                : pendingAction==="placeClue"
                ? "ランダムなスポットに手がかりを1つ配置します。"
-               : "バックストーリーを経て探索フェイズへ移行します。
-開始時クエストが公開されます。"}
+               : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
           okLabel="進む"
           onOk={pendingAction==="advance" ? doAdvanceCycle
               : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);}
