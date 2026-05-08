@@ -509,6 +509,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               onChange={e=>upd("notes",e.target.value)}
               placeholder="GMだけが見るメモ（セッション中には非表示）"/>
           </div>
+        </div>
 
         {/* 右列: クエスト */}
         <div>
