@@ -92,6 +92,8 @@ const EMPTY_SCENARIO = () => ({
   limit: "3日目の夜",
   quests: [],
   notes: "",
+  startSpotType: "base",  // "base" (各PCの拠点) | "fixed" (全員同じスポット)
+  startSpotId: "",        // startSpotType==="fixed" のときのスポットID
   createdAt: Date.now(),
   updatedAt: Date.now(),
 });
@@ -468,6 +470,36 @@ function ScenarioForm({ initial, onSave, onCancel }) {
           </div>
 
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14 }}>
+            <SecTitle>探索フェイズ開始スポット</SecTitle>
+            <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+              {[["base","各PCの拠点"],["fixed","指定スポット"]].map(([v,label])=>(
+                <button key={v} onClick={()=>upd("startSpotType",v)}
+                  style={{ ...btn(
+                    (sc.startSpotType||"base")===v ? C.goldBg : "rgba(255,255,255,0.02)",
+                    (sc.startSpotType||"base")===v ? C.goldDim : C.border,
+                    (sc.startSpotType||"base")===v ? C.gold : C.textFaint,
+                    {padding:"4px 10px",fontSize:10}
+                  )}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {(sc.startSpotType||"base")==="base" && (
+              <div style={{ fontSize:9,color:C.textDim,padding:"4px 6px",background:"rgba(255,255,255,0.02)",borderRadius:3 }}>
+                各PCはキャラクターの拠点スポットからスタートします
+              </div>
+            )}
+            {(sc.startSpotType||"base")==="fixed" && (
+              <div>
+                <Label>スポットID（例: 11）</Label>
+                <input style={{...iBase,width:80}} value={sc.startSpotId||""}
+                  onChange={e=>upd("startSpotId",e.target.value)}
+                  placeholder="11"/>
+                <div style={{ fontSize:9,color:C.textFaint,marginTop:3 }}>
+                  全PCが同じスポットからスタートします
+                </div>
+              </div>
+            )}
             <SecTitle>バックストーリー</SecTitle>
             <textarea style={{...taBase,height:160}} value={sc.backstory}
               onChange={e=>upd("backstory",e.target.value)}
@@ -477,7 +509,6 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               onChange={e=>upd("notes",e.target.value)}
               placeholder="GMだけが見るメモ（セッション中には非表示）"/>
           </div>
-        </div>
 
         {/* 右列: クエスト */}
         <div>
