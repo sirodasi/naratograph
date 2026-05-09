@@ -426,7 +426,7 @@ function SessionApp({ roomCode, user }) {
         items: { お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 },
         currentSpot: p.startSpot || null,
         log: [],
-      }));
+        }});
   }
 
   const upd = useCallback((fn) => {
