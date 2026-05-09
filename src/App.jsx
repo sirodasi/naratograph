@@ -573,7 +573,39 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const r = params.get("room");
     if (r) setRoomCode(r.toUpperCase());
+    
     const unsub = onAuthStateChanged(auth, u => setUser(u || null));
     return () => unsub();
   },[]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const roomRef = ref(db, `rooms/${roomCode}`);
+    const unsub = onValue(roomRef, snap => {
+      if (snap.exists()) {
+        setRoomPhase(snap.val().phase || "prep");
+      } else {
+        setRoomPhase("error");
+      }
+    });
+    return () => unsub();
+  }, [roomCode]);
+
+  if (user === undefined) {
+    return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>接続中…</div>;
+  }
+  if (!user || !roomCode) {
+    return <LobbyRoot />;
+  }
+  if (roomPhase === null) {
+    return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>部屋情報を取得中…</div>;
+  }
+  if (roomPhase === "error") {
+    return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#e07060", fontFamily:"serif", fontSize:12 }}>部屋が見つかりません。URLを確認してください。</div>;
+  }
+  if (roomPhase === "prep") {
+    return <LobbyRoot />;
+  }
+
+  return <SessionApp roomCode={roomCode} user={user} />;
 }
