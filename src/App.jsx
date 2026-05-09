@@ -408,12 +408,17 @@ function SessionApp({ roomCode, user }) {
     if (!r?.players) return [];
     return Object.values(r.players)
       .filter(p => p.role === "pl" && p.charId)
-      .map(p => ({
+      .map(p => {
+        // キャラクターデータからスキルを取得
+        const charData = CHARACTERS.find(c => c.id === p.charId) || null;
+        return {
         uid: p.uid, name: p.name,
         charId: p.charId, charName: p.charName,
         spriteRow: p.spriteRow ?? -1, spriteCol: p.spriteCol ?? -1,
         customPortrait: p.customPortrait || null,
         skillId: p.skillId || null, skillName: p.skillName || "",
+        abilitySkill: charData?.abilitySkill || (p.charId?.startsWith("custom_") ? p.abilitySkill || null : null),
+        danmakuSkill: charData?.danmakuSkill || null,
         resources: { ...DEFAULT_GS.resources,
           やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5},
           グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:30}, 攻撃力:{cur:1,max:1}
