@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import LobbyRoot, { CharSprite } from "./Lobby";
+import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
 import { BackstoryScreen, RightPanel, ConfirmModal } from "./SessionView";
 import mapImg from "./assets/map.png";
 
