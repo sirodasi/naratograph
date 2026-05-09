@@ -115,7 +115,7 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const [itemModal, setItemModal] = useState(null);
   const[skillModal, setSkillModal] = useState(null);
-  const [expanded, setExpanded] = useState(false);
+  const[expanded, setExpanded] = useState(false);
   const [gmEdit, setGmEdit] = useState(false);
 
   const resources = pc.resources || INIT_RESOURCES();
