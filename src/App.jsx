@@ -223,15 +223,6 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
         const sy = mapBounds.top  + (spot.y/100) * mapBounds.height;
         const isHov = hov === (spot.id ?? "dream");
 
-        // 夢の世界はホバー時のみ表示
-        if (isDream && !isHov) {
-          return (
-            <div key="dream" style={{ position:"absolute", left:sx, top:sy, transform:"translate(-50%,-50%)", zIndex:1,
-              width:baseSize+8, height:baseSize+8 }}
-              onMouseEnter={()=>setHov("dream")} onMouseLeave={()=>setHov(null)}/>
-          );
-        }
-
         const iSize  = pcsHere.length ? bigSize : baseSize;
         // 手がかりはシアン（異世界オレンジと被らないよう変更）
         const clueColor = "#00e5ff";
