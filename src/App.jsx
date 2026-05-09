@@ -611,12 +611,10 @@ function SessionApp({ roomCode, user }) {
                : pendingAction==="placeClue" ? "手がかりを配置しますか？"
                : "探索フェイズへ移行しますか？"}
           body={pendingAction==="advance"
-               ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。
-スキルや処理の確認をお忘れなく。`
+               ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。\nスキルや処理の確認をお忘れなく。`
                : pendingAction==="placeClue"
                ? "ランダムなスポットに手がかりを1つ配置します。"
-               : "バックストーリーを経て探索フェイズへ移行します。
-開始時クエストが公開されます。"}
+               : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
           okLabel="進む"
           onOk={pendingAction==="advance" ? doAdvanceCycle
               : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);}
