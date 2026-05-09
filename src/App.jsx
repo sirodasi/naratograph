@@ -205,14 +205,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
     <div ref={mapRef} style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
       {/* マップ画像 */}
       <img src={MAP_SRC} alt="幻想郷マップ" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
-        filter:isNight?"brightness(0.45) saturate(0.5)":"none", transition:"filter 1.2s ease" }} />
-
-      {/* 夕サイクル：オレンジオーバーレイ */}
-      {isEvening && (
-        <div style={{ position:"absolute", inset:0, pointerEvents:"none",
-          background:"linear-gradient(180deg,rgba(180,80,0,0.12)0%,rgba(220,110,0,0.28)60%,rgba(160,50,0,0.18)100%)",
-          mixBlendMode:"multiply", transition:"opacity 1.2s ease" }}/>
-      )}
+        filter: isNight ? "brightness(0.45) saturate(0.5)" 
+              : isEvening ? "brightness(0.8) sepia(0.4) saturate(1.4) hue-rotate(-10deg)" 
+              : "none", 
+        transition:"filter 1.2s ease" }} />
 
       {/* スポット */}
       {mapBounds.width > 0 && SPOTS.map(spot => {
@@ -236,12 +232,12 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
             onClick={()=>isGm&&!isDream&&onSpotClick&&onSpotClick(spot.id)}>
             <div style={{
               width:iSize, height:iSize, borderRadius:"50%",
-              background: isDream ? "rgba(200,150,255,0.2)" : pcsHere.length ? "rgba(240,240,240,0.95)" : areaColor(spot.area).bg,
-              border:`2px solid ${isDream?"#9c27b0":borderCol}`,
+              background: pcsHere.length ? "rgba(240,240,240,0.95)" : areaColor(spot.area).bg,
+              border:`2px solid ${borderCol}`,
               display:"flex", alignItems:"center", justifyContent:"center",
               fontWeight:"bold",
               fontSize: isDream ? fontSize-1 : fontSize,
-              color: isDream ? "#ce93d8" : pcsHere.length ? areaColor(spot.area).bg : "#fff",
+              color: pcsHere.length ? areaColor(spot.area).bg : "#fff",
               boxShadow: hasClue ? `0 0 ${Math.round(10*scale*1.5)}px rgba(0,229,255,0.7)`
                        : pcsHere.length ? `0 0 ${Math.round(10*scale*1.5)}px ${areaColor(spot.area).border}`
                        : `0 0 ${Math.round(6*scale*1.5)}px ${areaColor(spot.area).border}60`,
