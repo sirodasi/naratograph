@@ -737,4 +737,3 @@ export function RightPanel({
 }
 
 export default RightPanel;
-export default RightPanel;
