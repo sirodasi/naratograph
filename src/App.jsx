@@ -261,7 +261,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
                 pointerEvents:"none", zIndex:20,
                 left:spot.x>60?"auto":"calc(100% + 6px)", right:spot.x>60?"calc(100% + 6px)":"auto",
                 top:"50%", transform:"translateY(-50%)" }}>
-                {isDream ? "◇ 夢の世界（ホバーで表示）" : `[${spot.id}] ${spot.name}`}
+                {isDream ? "◇ 夢の世界" : `[${spot.id}] ${spot.name}`}
                 {pcsHere.length>0 && <span style={{color:"#ef9a9a"}}><br/>{pcsHere.map(p=>p.name).join("・")}</span>}
                 {hasClue && <span style={{color:clueColor}}><br/>💡 手がかりあり</span>}
               </div>
