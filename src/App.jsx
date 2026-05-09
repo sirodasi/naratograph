@@ -349,25 +349,33 @@ function SessionApp({ roomCode, user }) {
       .map(p => {
         const charData = CHARACTERS.find(c => c.id === p.charId) || null;
         let startSpotId = r?.scenarioData?.startSpotId || null;
-        if (r?.scenarioData?.startSpotType === "base" && charData?.base) {
-          const s = SPOTS.find(spot => spot.name === charData.base || charData.base.includes(spot.name));
-          if (s) startSpotId = s.id;
+        
+        let baseSpotId = null;
+        const charBase = charData?.base || p.base || "人間の里"; 
+        const s = SPOTS.find(spot => spot.name === charBase || charBase.includes(spot.name));
+        if (s) {
+          baseSpotId = s.id;
         }
+
+        if (r?.scenarioData?.startSpotType === "base") {
+          startSpotId = baseSpotId || "11";
+        }
+        
         return {
           uid: p.uid, name: p.name,
           charId: p.charId, charName: p.charName,
           spriteRow: p.spriteRow ?? -1, spriteCol: p.spriteCol ?? -1,
           customPortrait: p.customPortrait || null,
           skillId: p.skillId || null, skillName: p.skillName || "",
-          abilitySkill: charData?.abilitySkill || (p.charId?.startsWith("custom_") ? p.abilitySkill || null : null),
+          abilitySkill: charData?.abilitySkill || (p.charId?.startsWith("custom_") ? (p.abilitySkill || null) : null),
           danmakuSkill: charData?.danmakuSkill || null,
           resources: { ...DEFAULT_GS.resources, やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:20}, 攻撃力:{cur:1,max:5} },
           items: { お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 },
-          baseSpotId: baseSpotId,
+          baseSpotId: baseSpotId || "11",
           currentSpot: startSpotId || "11",
-          log:[],
+          log:[]
         };
-      });
+    });
   }
 
   const upd = useCallback((fn) => {
