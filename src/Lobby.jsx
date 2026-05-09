@@ -2138,6 +2138,9 @@ function PrepRoom({roomCode,user,displayName,isGm}){
     await update(ref(db,`rooms/${roomCode}/players/${user.uid}`),{
       charId:selectedChar.id,charName:selectedChar.name,
       spriteRow:selectedChar.spriteRow??-1,spriteCol:selectedChar.spriteCol??-1,
+      customPortrait:selectedChar.customPortrait||null,
+      abilitySkill:selectedChar.abilitySkill||null,
+      danmakuSkill:selectedChar.danmakuSkill||null,
     });
     setStep("skillSelect");
   };
