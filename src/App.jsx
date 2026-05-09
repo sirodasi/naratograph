@@ -4,7 +4,7 @@ import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
 import { BackstoryScreen, RightPanel, ConfirmModal } from "./SessionView";
-import mapImg from ".assets/map.png";
+import mapImg from "./assets/map.png";
 
 const MAP_SRC = mapImg;
 
