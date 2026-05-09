@@ -166,12 +166,12 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
         const sx = mapBounds.left + (spot.x/100) * mapBounds.width;
         const sy = mapBounds.top  + (spot.y/100) * mapBounds.height;
         const isHov = hov === spot.id;
-        const iSize  = pcsHere.length ? bigSize : baseSize;
-        const borderCol = hasClue ? "#00e5ff" : pcsHere.length ? "#fff" : areaColor(spot.area).border;
+        const iSize  = baseSize;
+        const borderCol = hasClue ? "#00e5ff" : areaColor(spot.area).border;
 
         return (
           <div key={spot.id} style={{ position:"absolute", left:sx, top:sy,
-            transform:"translate(-50%,-50%)", zIndex:hasClue?4:pcsHere.length?3:2,
+            transform:"translate(-50%,-50%)", zIndex:hasClue?4:pcsHere.length?4:3,
             cursor: isGm&&!isDream ? "pointer" : "default" }}
             onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}
             onClick={()=>isGm&&!isDream&&onSpotClick&&onSpotClick(spot.id)}>
@@ -198,17 +198,17 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
 
             <div style={{
               width:iSize, height:iSize, borderRadius:"50%",
-              background: pcsHere.length ? "rgba(240,240,240,0.95)" : areaColor(spot.area).bg,
+              background: areaColor(spot.area).bg,
               border:`2px solid ${borderCol}`, display:"flex", alignItems:"center", justifyContent:"center",
               fontWeight:"bold", fontSize: isDream ? fontSize-1 : fontSize,
-              color: pcsHere.length ? areaColor(spot.area).bg : "#fff",
+              color: "#fff",
               boxShadow: hasClue ? `0 0 ${Math.round(10*scale*1.5)}px rgba(0,229,255,0.7)`
-                       : pcsHere.length ? `0 0 ${Math.round(10*scale*1.5)}px ${areaColor(spot.area).border}`
                        : `0 0 ${Math.round(6*scale*1.5)}px ${areaColor(spot.area).border}60`,
               transition:"width 0.15s,height 0.15s",
             }}>
               {isDream ? "◇" : (spot.roll || "?")}
             </div>
+            
             {hasClue && (
               <div style={{ position:"absolute", top:-Math.round(9*scale*1.4), right:-Math.round(9*scale*1.4),
                 fontSize:Math.round(12*scale*1.4), filter:"drop-shadow(0 0 4px #00e5ff)" }}>💡</div>
@@ -220,7 +220,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
                 left:spot.x>60?"auto":"calc(100% + 6px)", right:spot.x>60?"calc(100% + 6px)":"auto",
                 top:"50%", transform:"translateY(-50%)" }}>
                 {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
-                {pcsHere.length>0 && <span style={{color:"#ef9a9a"}}><br/>{pcsHere.map(p=>p.name).join("・")}</span>}
+                {pcsHere.length>0 && <span style={{color:"#ef9a9a"}}><br/>{pcsHere.map(p=>p.charName || p.name).join("・")}</span>}
                 {hasClue && <span style={{color:"#00e5ff"}}><br/>💡 手がかりあり</span>}
               </div>
             )}
