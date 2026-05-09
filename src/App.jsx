@@ -35,7 +35,7 @@ const SPOTS =[
   { id:"55", roll:55, name:"永遠亭", x:85, y:44.3, area:"迷いの竹林", rei:5 },
   { id:"56A", roll:56, name:"輝針城", x:76, y:32.5, area:"迷いの竹林", rei:5 },
   { id:"56B", roll:56, name:"迷いの竹林", x:79, y:32.5, area:"迷いの竹林", rei:5 },
-  { id:"66", roll:66, name:"博麗神社", x:88.5, y:19.5, area:"（単独）", rei:6 },
+  { id:"66", roll:66, name:"博麗神社", x:88.5, y:19.5, area:"（単独）", rei:6, reiD6: true },
   { id:"dream", roll:null, name:"夢の世界", x:91, y:54.5, area:"異世界", rei:4 },
 ];
 
@@ -385,13 +385,57 @@ function SessionApp({ roomCode, user }) {
     }));
   };
 
-  const doReiryoku = () => { upd(p => ({ ...p, reiryokuDone: true, log:["霊力増加処理", ...p.log] })); };
+  const doReiryoku = () => {
+    upd(p => {
+      let logMsg =[];
+      const newPcs = p.pcs.map(pc => {
+        const spot = getSpot(pc.currentSpot);
+        if (!spot) return pc;
+        let gain = spot.rei || 0;
+        // 博麗神社は 1D6
+        if (spot.reiD6) {
+          gain = Math.floor(Math.random() * 6) + 1;
+        }
+        
+        const curRei = pc.resources.霊力?.cur || 0;
+        const maxRei = pc.resources.霊力?.max || 30;
+        if (gain > 0) {
+          const nextRei = Math.min(maxRei, curRei + gain);
+          logMsg.push(`${pc.charName || pc.name}+${gain}`);
+          return { ...pc, resources: { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextRei } } };
+        }
+        return pc;
+      });
+      return {
+        ...p, pcs: newPcs, reiryokuDone: true,
+        log:[`【霊力増加】 ${logMsg.length > 0 ? logMsg.join(" / ") : "なし"}`, ...p.log]
+      };
+    });
+  };
 
   const doAdvanceCycle = () => {
     upd(p => {
       let day = p.day || 1; let cycleIdx = p.cycleIdx || 0;
-      cycleIdx++; if (cycleIdx >= CYCLES.length) { cycleIdx = 0; day++; }
-      let newQuests = [...(p.quests||[])];
+      let logMsgs =[];
+      let nextPcs = p.pcs;
+
+      cycleIdx++; 
+      if (cycleIdx >= CYCLES.length) { 
+        cycleIdx = 0; day++; 
+        
+        nextPcs = p.pcs.map(pc => {
+          const curYaruki = pc.resources.やる気?.cur || 0;
+          const nextYaruki = Math.max(0, curYaruki - 1);
+          return {
+            ...pc,
+            currentSpot: pc.baseSpotId || "11",
+            resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: nextYaruki } }
+          };
+        });
+        logMsgs.push("夜が明け、各キャラクターは拠点に帰還し【やる気】が1減少した");
+      }
+
+      let newQuests =[...(p.quests||[])];
       if (cycleIdx === 0) {
         const allQ = p.scenarioData?.quests ||[];
         allQ.forEach(q => {
@@ -402,11 +446,15 @@ function SessionApp({ roomCode, user }) {
           }
         });
       }
+
+      logMsgs.push(`${day}日目・${CYCLES[cycleIdx]}サイクル開始`);
+      
       return {
         ...p, day, cycleIdx,
         newspaper: cycleIdx===0?null:p.newspaper, cluePlaced: cycleIdx===0?false:p.cluePlaced,
-        reiryokuDone: false, quests: newQuests, actedPcs: [], currentScene: null,
-        log:[`${day}日目・${CYCLES[cycleIdx]}サイクル開始`, ...p.log],
+        reiryokuDone: false, quests: newQuests, actedPcs:[], currentScene: null,
+        pcs: nextPcs,
+        log:[...logMsgs.reverse(), ...p.log],
       };
     });
     setPendingAction(null);
