@@ -339,20 +339,54 @@ function PCCard({ pc, isGm, onUpdatePc, getSpot, cycleIdx }) {
               )}
             </div>
           )}
-          {/* 能力スキル（キャラデータから取得は準備フェイズで保存が必要 → 現状は名前のみ表示）*/}
-          {pc.charData?.abilitySkill && (
-            <div>
+          {/* 能力スキル */}
+          {pc.abilitySkill && (
+            <div style={{ marginTop:6 }}>
               <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:4 }}>
-                <span style={{ padding:"1px 6px",background:`${SKILL_TYPE_COLOR[pc.charData.abilitySkill.type]||"#c8b89a"}18`,
-                  border:`1px solid ${SKILL_TYPE_COLOR[pc.charData.abilitySkill.type]||"#c8b89a"}50`,
-                  borderRadius:8,fontSize:8,color:SKILL_TYPE_COLOR[pc.charData.abilitySkill.type]||"#c8b89a" }}>
-                  {pc.charData.abilitySkill.type}
+                <span style={{ padding:"1px 6px",
+                  background:`${SKILL_TYPE_COLOR[pc.abilitySkill.type]||"#90caf9"}18`,
+                  border:`1px solid ${SKILL_TYPE_COLOR[pc.abilitySkill.type]||"#90caf9"}50`,
+                  borderRadius:8,fontSize:8,color:SKILL_TYPE_COLOR[pc.abilitySkill.type]||"#90caf9" }}>
+                  {pc.abilitySkill.type}
                 </span>
                 <span style={{ fontSize:11,color:"#90caf9" }}>
-                  【{pc.charData.abilitySkill.name}】
+                  【{pc.abilitySkill.name}】
                 </span>
               </div>
-              <div style={{ fontSize:9,color:C.textFaint,lineHeight:1.7 }}>{pc.charData.abilitySkill.desc}</div>
+              <div style={{ fontSize:9,color:C.textFaint,lineHeight:1.7,marginBottom:6 }}>
+                {pc.abilitySkill.desc}
+              </div>
+              {pc.abilitySkill.type !== "オート" && !isCustomChar && (
+                <button onClick={()=>setSkillModal({
+                  name: pc.abilitySkill.name,
+                  type: pc.abilitySkill.type,
+                  desc: pc.abilitySkill.desc,
+                  key: "ability",
+                })}
+                  style={{ padding:"4px 12px",cursor:"pointer",borderRadius:3,fontSize:10,
+                    background:"rgba(144,202,249,0.15)",border:"1px solid #1565c080",color:"#90caf9" }}>
+                  発動する
+                </button>
+              )}
+              {isCustomChar && pc.abilitySkill.type !== "オート" && (
+                <div style={{ fontSize:8,color:"#f9a825" }}>※カスタムキャラ：手動で処理してください</div>
+              )}
+            </div>
+          )}
+          {/* 弾幕スキル */}
+          {pc.danmakuSkill && (
+            <div style={{ marginTop:6 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:4 }}>
+                <span style={{ padding:"1px 6px",background:"rgba(239,154,154,0.15)",
+                  border:"1px solid rgba(239,154,154,0.4)",
+                  borderRadius:8,fontSize:8,color:"#ef9a9a" }}>弾幕スキル</span>
+                <span style={{ fontSize:11,color:"#ef9a9a" }}>
+                  【{pc.danmakuSkill.name}】
+                </span>
+              </div>
+              <div style={{ fontSize:9,color:C.textFaint,lineHeight:1.7 }}>
+                {pc.danmakuSkill.desc}
+              </div>
             </div>
           )}
         </div>
