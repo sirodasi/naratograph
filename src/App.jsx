@@ -546,7 +546,7 @@ function SessionApp({ roomCode, user }) {
       `}</style>
 
       <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
-        <MapView gs={gs} sceneData={sceneData} isGm={mode==="gm"} upd={upd} onSpotClick={handleSpotClick}/>
+        <MapView gs={gs} sceneData={sceneData} isGm={mode==="gm"} upd={upd} onSpotClick={handleSpotClick} user={user}/>
       </div>
 
       <RightPanel
