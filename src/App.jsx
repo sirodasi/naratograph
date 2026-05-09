@@ -4,34 +4,38 @@ import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
 import { BackstoryScreen, RightPanel, ConfirmModal } from "./SessionView";
-import mapImg from "./assets/map.png";
 
-const MAP_SRC = mapImg;
+const MAP_SRC = "/map.jpg"; // ← 方法Aの場合（必要に応じて修正してください）
 
-// ─── データ定義 ───────────────────────────────────────
-const SPOTS = [
-  { id:11,   name:"人間の里",            x:56.5, y:27.5, area:"人間の里",         rei:1,    reiD6:false },
-  { id:12,   name:"命蓮寺",              x:37.5, y:21.5, area:"人間の里",         rei:1,    reiD6:false },
-  { id:13,   name:"香霖堂",              x:40.5, y:34.5, area:"人間の里",         rei:1,    reiD6:false },
-  { id:14,   name:"神霊廟/マヨヒガ",     x:45,   y:47,   area:"人間の里",         rei:1,    reiD6:false },
-  { id:15,   name:"間欠泉地下センター",   x:65.5, y:63.5, area:"人間の里",         rei:1,    reiD6:false },
-  { id:16,   name:"太陽の畑",            x:64.3, y:38.5, area:"人間の里",         rei:1,    reiD6:false },
-  { id:22,   name:"守矢神社",            x:17.5, y:28.5, area:"妖怪の山",         rei:2,    reiD6:false },
-  { id:23,   name:"玄武の沢",            x: 7,   y:55,   area:"妖怪の山",         rei:2,    reiD6:false },
-  { id:24,   name:"大蝦蟇の池",          x:24.7, y:54.5, area:"妖怪の山",         rei:2,    reiD6:false },
-  { id:25,   name:"妖怪の樹海",          x:29,   y:18.8, area:"妖怪の山",         rei:2,    reiD6:false },
-  { id:26,   name:"九天の滝/虹龍洞",     x: 7,   y:13.5, area:"妖怪の山",         rei:2,    reiD6:false },
-  { id:33,   name:"紅魔館",              x: 5.5, y:84.5, area:"霧の湖・魔法の森", rei:3,    reiD6:false },
-  { id:34,   name:"霧の湖",              x:20.3, y:84.5, area:"霧の湖・魔法の森", rei:3,    reiD6:false },
-  { id:35,   name:"無縁塚/霧雨魔法店",   x:31.2, y:67,   area:"霧の湖・魔法の森", rei:3,    reiD6:false },
-  { id:36,   name:"魔法の森",            x:40.3, y:56.5, area:"霧の湖・魔法の森", rei:3,    reiD6:false },
-  { id:44,   name:"白玉楼",              x:48.2, y:83,   area:"異世界",           rei:4,    reiD6:false },
-  { id:45,   name:"旧地獄街道",          x:77,   y:78,   area:"異世界",           rei:4,    reiD6:false },
-  { id:46,   name:"畜生界/地霊殿",       x:87,   y:82,   area:"異世界",           rei:4,    reiD6:false },
-  { id:55,   name:"永遠亭",              x:85,   y:44.3, area:"迷いの竹林",       rei:5,    reiD6:false },
-  { id:56,   name:"輝針城/迷いの竹林",   x:77.5, y:32.5, area:"迷いの竹林",       rei:5,    reiD6:false },
-  { id:66,   name:"博麗神社",            x:88.5, y:19.5, area:"（単独）",         rei:6,    reiD6:true  },
-  { id:null, name:"夢の世界",            x:91,   y:54.5, area:"異世界",           rei:4,    reiD6:false },
+// ─── データ定義（複合スポットを分離して再定義） ─────────────
+const SPOTS =[
+  { id:"11", roll:11, name:"人間の里", x:56.5, y:27.5, area:"人間の里", rei:1 },
+  { id:"12", roll:12, name:"命蓮寺", x:37.5, y:21.5, area:"人間の里", rei:1 },
+  { id:"13", roll:13, name:"香霖堂", x:40.5, y:34.5, area:"人間の里", rei:1 },
+  { id:"14A", roll:14, name:"神霊廟", x:43.5, y:47, area:"人間の里", rei:1 },
+  { id:"14B", roll:14, name:"マヨヒガ", x:46.5, y:47, area:"人間の里", rei:1 },
+  { id:"15", roll:15, name:"間欠泉地下センター", x:65.5, y:63.5, area:"人間の里", rei:1 },
+  { id:"16", roll:16, name:"太陽の畑", x:64.3, y:38.5, area:"人間の里", rei:1 },
+  { id:"22", roll:22, name:"守矢神社", x:17.5, y:28.5, area:"妖怪の山", rei:2 },
+  { id:"23", roll:23, name:"玄武の沢", x: 7,   y:55,   area:"妖怪の山", rei:2 },
+  { id:"24", roll:24, name:"大蝦蟇の池", x:24.7, y:54.5, area:"妖怪の山", rei:2 },
+  { id:"25", roll:25, name:"妖怪の樹海", x:29,   y:18.8, area:"妖怪の山", rei:2 },
+  { id:"26A", roll:26, name:"九天の滝", x: 7,   y:11.5, area:"妖怪の山", rei:2 },
+  { id:"26B", roll:26, name:"虹龍洞",   x: 7,   y:15.5, area:"妖怪の山", rei:2 },
+  { id:"33", roll:33, name:"紅魔館", x: 5.5, y:84.5, area:"霧の湖・魔法の森", rei:3 },
+  { id:"34", roll:34, name:"霧の湖", x:20.3, y:84.5, area:"霧の湖・魔法の森", rei:3 },
+  { id:"35A", roll:35, name:"無縁塚", x:29.5, y:67, area:"霧の湖・魔法の森", rei:3 },
+  { id:"35B", roll:35, name:"霧雨魔法店", x:32.9, y:67, area:"霧の湖・魔法の森", rei:3 },
+  { id:"36", roll:36, name:"魔法の森", x:40.3, y:56.5, area:"霧の湖・魔法の森", rei:3 },
+  { id:"44", roll:44, name:"白玉楼", x:48.2, y:83, area:"異世界", rei:4 },
+  { id:"45", roll:45, name:"旧地獄街道", x:77, y:78, area:"異世界", rei:4 },
+  { id:"46A", roll:46, name:"畜生界", x:85.5, y:82, area:"異世界", rei:4 },
+  { id:"46B", roll:46, name:"地霊殿", x:88.5, y:82, area:"異世界", rei:4 },
+  { id:"55", roll:55, name:"永遠亭", x:85, y:44.3, area:"迷いの竹林", rei:5 },
+  { id:"56A", roll:56, name:"輝針城", x:76, y:32.5, area:"迷いの竹林", rei:5 },
+  { id:"56B", roll:56, name:"迷いの竹林", x:79, y:32.5, area:"迷いの竹林", rei:5 },
+  { id:"66", roll:66, name:"博麗神社", x:88.5, y:19.5, area:"（単独）", rei:6 },
+  { id:"dream", roll:null, name:"夢の世界", x:91, y:54.5, area:"異世界", rei:4 },
 ];
 
 const NEWSPAPER = {
@@ -58,8 +62,8 @@ const NEWSPAPER = {
   56:{title:"月の頭脳監修、効果覿面の健康ストレッチ",effect:"PC全員は取得している任意の【変調】1つを取り除くことができる。"},
 };
 
-const CYCLES = ["朝","昼","夕","夜"];
-const CYCLE_COLORS = ["#f9a825","#29b6f6","#ef6c00","#3949ab"];
+const CYCLES =["朝","昼","夕","夜"];
+const CYCLE_COLORS =["#f9a825","#29b6f6","#ef6c00","#3949ab"];
 
 const AREA_COLORS = {
   "人間の里":         { bg:"rgba(192,57,43,0.85)",  border:"#e57373" },
@@ -76,8 +80,7 @@ const DEFAULT_GS = {
   clues:[], newspaper:null, newspaperDone:false, cluePlaced:false, reiryokuDone:false,
   resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,30], 攻撃力:[1,1] },
   items:{ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残魔かけら:0, スペカかけら:0 },
-  quests:[], limit:"3日目の夜", log:[],
-  pcs:[],
+  quests:[], log:[], pcs:[],
   sceneMode:false, sceneText:"", banner:null,
   actedPcs:[],
   currentScene: null,
@@ -85,62 +88,12 @@ const DEFAULT_GS = {
 
 const DEFAULT_SCENE = { bg:null, portraits:[] };
 
-function rollD6(){ return Math.floor(Math.random()*6)+1; }
-function rollD66(){ const a=rollD6(),b=rollD6(); return Math.min(a,b)*10+Math.max(a,b); }
-function getSpot(id){ return SPOTS.find(s=>s.id===id); }
-
-// 画像をリサイズしてbase64に変換（Firebaseの容量節約）
-function resizeImage(file, maxW=800, quality=0.75) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, maxW / img.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.src = url;
-  });
+function getSpot(id){
+  let s = SPOTS.find(spot => spot.id === id);
+  if (!s) s = SPOTS.find(spot => spot.roll == id); // 古いセーブデータ対応
+  return s;
 }
 
-// ─── 共通スタイル ───
-const iStyle = {
-  padding:"4px 6px", fontSize:11,
-  background:"rgba(255,255,255,0.03)",
-  border:"1px solid #1a2030", color:"#c8b89a", borderRadius:3,
-};
-const confirmBtn = {
-  width:"100%", padding:"7px 0",
-  background:"rgba(192,57,43,0.15)", border:"1px solid #5a1a1a",
-  color:"#e07060", cursor:"pointer", borderRadius:3, fontSize:12,
-};
-
-function SectionTitle({ children, style }) {
-  return (
-    <div style={{ fontSize:9, color:"#2a3545", letterSpacing:2,
-      borderBottom:"1px solid #111828", paddingBottom:3, marginBottom:5, ...style }}>
-      {children}
-    </div>
-  );
-}
-function Btn({ onClick, children, style }) {
-  return (
-    <button onClick={onClick} style={{
-      width:18, height:18, border:"1px solid #1a2030",
-      background:"rgba(255,255,255,0.03)", color:"#3a4a5a",
-      cursor:"pointer", borderRadius:2, fontSize:11, padding:0,
-      display:"inline-flex", alignItems:"center", justifyContent:"center", ...style,
-    }}>{children}</button>
-  );
-}
-
-// ─── PL 共有画面 ───────────────────────────────────────
-// 実際の画像レンダリング領域を計算するフック
-// マップ画像の自然サイズ: 1122x794 (ratio 1.413)
 const MAP_NATURAL_W = 1200;
 const MAP_NATURAL_H = 849;
 
@@ -151,12 +104,9 @@ function useMapBounds(containerRef) {
     if (!el) return;
     const calc = () => {
       const cw = el.clientWidth, ch = el.clientHeight;
-      // objectFit:contain + objectPosition:left top
-      // → 短辺に合わせてスケール、左上原点で配置
       const scale = Math.min(cw / MAP_NATURAL_W, ch / MAP_NATURAL_H);
       const rw = MAP_NATURAL_W * scale;
       const rh = MAP_NATURAL_H * scale;
-      // 横は left 基準（余白は右側）、縦は top 基準
       setBounds({ left: 0, top: 0, width: rw, height: rh });
     };
     calc();
@@ -172,11 +122,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
   const cycleIdx = gs.cycleIdx || 0;
   const isNight   = cycleIdx === 3;
   const isEvening = cycleIdx === 2;
-  const [hov, setHov] = useState(null);
+  const[hov, setHov] = useState(null);
   const mapRef = useRef(null);
   const mapBounds = useMapBounds(mapRef);
 
-  // スポットアイコンサイズをマップ実サイズに連動
   const scale = mapBounds.width > 0 ? mapBounds.width / MAP_NATURAL_W : 0.5;
   const baseSize = Math.round(22 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
   const bigSize  = Math.round(32 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
@@ -185,9 +134,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
   if (gs.sceneMode) {
     return (
       <div style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#040608" }}>
-        {sceneData.bg && (
-          <img src={sceneData.bg} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.85 }} />
-        )}
+        {sceneData.bg && <img src={sceneData.bg} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.85 }} />}
         <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)" }} />
         <div style={{ position:"absolute", bottom:110, left:0, right:0, display:"flex", justifyContent:"center", gap:16, alignItems:"flex-end" }}>
           {(sceneData.portraits||[]).map((p,i) => (
@@ -205,128 +152,105 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
 
   return (
     <div ref={mapRef} style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
-      {/* マップ画像 */}
       <img src={MAP_SRC} alt="幻想郷マップ" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
         filter: isNight ? "brightness(0.45) saturate(0.5)" 
               : isEvening ? "brightness(0.8) sepia(0.4) saturate(1.4) hue-rotate(-10deg)" 
               : "none", 
         transition:"filter 1.2s ease" }} />
 
-      {/* スポット */}
       {mapBounds.width > 0 && SPOTS.map(spot => {
-        const isDream   = spot.id === null;
+        const isDream   = spot.id === "dream";
         const hasClue   = !isDream && gs.clues.includes(spot.id);
-        const pcsHere   = !isDream ? (gs.pcs||[]).filter(pc => pc.currentSpot === spot.id) : [];
+        const pcsHere   = !isDream ? (gs.pcs||[]).filter(pc => pc.currentSpot === spot.id) :[];
         const sx = mapBounds.left + (spot.x/100) * mapBounds.width;
         const sy = mapBounds.top  + (spot.y/100) * mapBounds.height;
-        const isHov = hov === (spot.id ?? "dream");
-
+        const isHov = hov === spot.id;
         const iSize  = pcsHere.length ? bigSize : baseSize;
-        // 手がかりはシアン（異世界オレンジと被らないよう変更）
-        const clueColor = "#00e5ff";
-        const borderCol = hasClue ? clueColor : pcsHere.length ? "#fff" : areaColor(spot.area).border;
+        const borderCol = hasClue ? "#00e5ff" : pcsHere.length ? "#fff" : areaColor(spot.area).border;
 
         return (
-          <div key={spot.id??""} style={{ position:"absolute", left:sx, top:sy,
+          <div key={spot.id} style={{ position:"absolute", left:sx, top:sy,
             transform:"translate(-50%,-50%)", zIndex:hasClue?4:pcsHere.length?3:2,
             cursor: isGm&&!isDream ? "pointer" : "default" }}
-            onMouseEnter={()=>setHov(spot.id??"dream")} onMouseLeave={()=>setHov(null)}
+            onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}
             onClick={()=>isGm&&!isDream&&onSpotClick&&onSpotClick(spot.id)}>
+            
+            {/* PCマーカー（スポットの上部に表示） */}
+            {pcsHere.length > 0 && (
+              <div style={{ position:"absolute", top: -iSize/2 - 4, left: "50%", transform:"translate(-50%, -100%)", display:"flex", gap:2, pointerEvents:"none", zIndex:10 }}>
+                {pcsHere.map(p => {
+                  const isAct = gs.currentScene?.pcUid === p.uid;
+                  return (
+                    <div key={p.uid} style={{ width:24, height:24, borderRadius:"50%", overflow:"hidden", border:`1.5px solid ${isAct ? "#64b5f6" : "#c8a040"}`, background:"#0b0d14", boxShadow:"0 2px 4px rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      {p.customPortrait ? (
+                        <img src={p.customPortrait} style={{width:"100%", height:"100%", objectFit:"cover"}} />
+                      ) : (
+                        <div style={{ transform:"scale(0.65)", transformOrigin:"center 6px" }}>
+                          <CharSprite spriteRow={p.spriteRow??-1} spriteCol={p.spriteCol??-1} size={48} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div style={{
               width:iSize, height:iSize, borderRadius:"50%",
               background: pcsHere.length ? "rgba(240,240,240,0.95)" : areaColor(spot.area).bg,
-              border:`2px solid ${borderCol}`,
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontWeight:"bold",
-              fontSize: isDream ? fontSize-1 : fontSize,
+              border:`2px solid ${borderCol}`, display:"flex", alignItems:"center", justifyContent:"center",
+              fontWeight:"bold", fontSize: isDream ? fontSize-1 : fontSize,
               color: pcsHere.length ? areaColor(spot.area).bg : "#fff",
               boxShadow: hasClue ? `0 0 ${Math.round(10*scale*1.5)}px rgba(0,229,255,0.7)`
                        : pcsHere.length ? `0 0 ${Math.round(10*scale*1.5)}px ${areaColor(spot.area).border}`
                        : `0 0 ${Math.round(6*scale*1.5)}px ${areaColor(spot.area).border}60`,
               transition:"width 0.15s,height 0.15s",
             }}>
-              {isDream ? "◇" : spot.id}
+              {isDream ? "◇" : (spot.roll || "?")}
             </div>
-            {/* 手がかりアイコン */}
             {hasClue && (
               <div style={{ position:"absolute", top:-Math.round(9*scale*1.4), right:-Math.round(9*scale*1.4),
                 fontSize:Math.round(12*scale*1.4), filter:"drop-shadow(0 0 4px #00e5ff)" }}>💡</div>
             )}
-            {/* ツールチップ */}
             {isHov && (
               <div style={{ position:"absolute", background:"rgba(6,8,14,0.97)", border:"1px solid #1e2535",
                 borderRadius:4, padding:"4px 8px", fontSize:10, color:"#c8b89a", whiteSpace:"nowrap",
                 pointerEvents:"none", zIndex:20,
                 left:spot.x>60?"auto":"calc(100% + 6px)", right:spot.x>60?"calc(100% + 6px)":"auto",
                 top:"50%", transform:"translateY(-50%)" }}>
-                {isDream ? "◇ 夢の世界" : `[${spot.id}] ${spot.name}`}
+                {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
                 {pcsHere.length>0 && <span style={{color:"#ef9a9a"}}><br/>{pcsHere.map(p=>p.name).join("・")}</span>}
-                {hasClue && <span style={{color:clueColor}}><br/>💡 手がかりあり</span>}
+                {hasClue && <span style={{color:"#00e5ff"}}><br/>💡 手がかりあり</span>}
               </div>
             )}
           </div>
         );
       })}
 
-      {/* HUD：サイクル表示 */}
       <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", display:"flex", gap:8 }}>
-        {gs.sessionPhase !== "intro" && (
+        {gs.sessionPhase !== "intro" ? (
           <div style={{ padding:"4px 14px", background:"rgba(10,12,20,0.92)", border:`1px solid ${CYCLE_COLORS[cycleIdx]}40`, borderRadius:14, fontSize:12, color:CYCLE_COLORS[cycleIdx] }}>
             {gs.day}日目・{CYCLES[cycleIdx]}
           </div>
-        )}
-        {gs.sessionPhase === "intro" && (
+        ) : (
           <div style={{ padding:"4px 14px", background:"rgba(10,12,20,0.92)", border:"1px solid #9c27b040", borderRadius:14, fontSize:12, color:"#ce93d8" }}>
             ✦ 導入フェイズ
           </div>
         )}
-        {gs.limit && <div style={{ padding:"4px 10px", background:"rgba(10,12,20,0.92)", border:"1px solid #3a1a1a", borderRadius:14, fontSize:10, color:"#c0392b" }}>
-          リミット: {gs.limit}
-        </div>}
       </div>
-
-      {/* クエスト一覧（左下） */}
-      {(gs.quests||[]).length>0 && (
-        <div style={{ position:"absolute", bottom:8, left:8, background:"rgba(6,8,14,0.92)", border:"1px solid #1e2535", borderRadius:6, padding:"8px 10px", maxWidth:200 }}>
-          <div style={{ fontSize:9, color:"#2a3545", letterSpacing:2, marginBottom:4 }}>クエスト</div>
-          {gs.quests.map(q => (
-            <div key={q.id||q.name} style={{ fontSize:10, color:q.solved?"#4caf50":"#c8a040", marginBottom:2, textDecoration:q.solved?"line-through":"none" }}>
-              【Lv.{q.level||1}】{q.name}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* エリア凡例（右下） */}
-      <div style={{ position:"absolute", bottom:8, right:8, background:"rgba(6,8,14,0.88)", border:"1px solid #1e2535", borderRadius:6, padding:"6px 8px" }}>
-        {Object.entries(AREA_COLORS).map(([area,c])=>(
-          <div key={area} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:2 }}>
-            <div style={{ width:9, height:9, borderRadius:"50%", background:c.bg, border:`1px solid ${c.border}`, flexShrink:0 }} />
-            <span style={{ fontSize:9, color:"#5a6575" }}>{area}</span>
-          </div>
-        ))}
-      </div>
-
-      {gs.banner && (
-        <div style={{ position:"absolute", top:50, left:"50%", transform:"translateX(-50%)",
-          background:"rgba(10,16,28,0.96)", border:"1px solid #1e3a5a",
-          borderRadius:16, padding:"7px 20px", fontSize:12, color:"#60c0f0", whiteSpace:"nowrap" }}>
-          {gs.banner}
-        </div>
-      )}
     </div>
   );
 }
 
-// ─── SESSION WRAPPER (部屋コードベース) ─────────────
+// ─── SESSION WRAPPER ─────────────
 function SessionApp({ roomCode, user }) {
   const [mode, setMode] = useState(null);
   const [gs, setGs] = useState(DEFAULT_GS);
-  const [sceneData, setSceneData] = useState(DEFAULT_SCENE);
+  const[sceneData, setSceneData] = useState(DEFAULT_SCENE);
   const [synced, setSynced] = useState(false);
   const [room, setRoom] = useState(null);
-  const [pendingAction, setPendingAction] = useState(null);
-  const [questBanner, setQuestBanner] = useState(null); // 新クエスト公開バナー
+  const[pendingAction, setPendingAction] = useState(null);
+  const [questBanner, setQuestBanner] = useState(null);
 
   const gsPath   = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
@@ -339,10 +263,6 @@ function SessionApp({ roomCode, user }) {
         setRoom(r);
         const myPlayer = r.players?.[user.uid];
         if (myPlayer && !mode) setMode(myPlayer.role === "gm" ? "gm" : "pl");
-        // PCデータを初期化（まだなければ）
-        if (myPlayer && myPlayer.role !== "gm" && r.phase === "explore") {
-          // PCはSessionAppで管理
-        }
       }
     });
     return () => unsubRoom();
@@ -362,21 +282,13 @@ function SessionApp({ roomCode, user }) {
           ...DEFAULT_GS, ...val,
           resources: { ...DEFAULT_GS.resources, ...(val.resources||{}) },
           items: { ...DEFAULT_GS.items, ...(val.items||{}) },
-          pcs: val.pcs || [], quests: val.quests || [],
-          clues: val.clues || [], log: val.log || [],
+          pcs: val.pcs || [], quests: val.quests ||[],
+          clues: val.clues || [], log: val.log ||[],
         }));
       } else if (mode === "gm") {
-        // 初期データを書き込む：room を Firebase から直接読んで確実に取得
         get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
           const r = roomSnap.exists() ? roomSnap.val() : null;
-          const scenarioData = r?.scenarioData || null;
-          const initGs = {
-            ...DEFAULT_GS,
-            sessionPhase: "intro",
-            limit: r?.limit || r?.scenarioData?.limit || "3日目の夜",
-            scenarioData,
-            pcs: buildPcList(r),
-          };
+          const initGs = { ...DEFAULT_GS, sessionPhase: "intro", limit: r?.limit || r?.scenarioData?.limit || "3日目の夜", scenarioData: r?.scenarioData || null, pcs: buildPcList(r) };
           set(gsRef, initGs).catch(console.error);
         });
       }
@@ -393,123 +305,94 @@ function SessionApp({ roomCode, user }) {
     return () => { clearTimeout(timeout); unsubGs(); unsubScene(); };
   }, [mode, gsPath, scenePath]);
 
-  // PCリストを準備フェイズのplayersデータから構築
   function buildPcList(r) {
-    if (!r?.players) return [];
+    if (!r?.players) return[];
     return Object.values(r.players)
       .filter(p => p.role === "pl" && p.charId)
       .map(p => {
-        // キャラクターデータからスキルを取得
         const charData = CHARACTERS.find(c => c.id === p.charId) || null;
+        let startSpotId = r?.scenarioData?.startSpotId || null;
+        if (r?.scenarioData?.startSpotType === "base" && charData?.base) {
+          const s = SPOTS.find(spot => spot.name === charData.base || charData.base.includes(spot.name));
+          if (s) startSpotId = s.id;
+        }
         return {
-        uid: p.uid, name: p.name,
-        charId: p.charId, charName: p.charName,
-        spriteRow: p.spriteRow ?? -1, spriteCol: p.spriteCol ?? -1,
-        customPortrait: p.customPortrait || null,
-        skillId: p.skillId || null, skillName: p.skillName || "",
-        abilitySkill: charData?.abilitySkill || (p.charId?.startsWith("custom_") ? p.abilitySkill || null : null),
-        danmakuSkill: charData?.danmakuSkill || null,
-        resources: { ...DEFAULT_GS.resources,
-          やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5},
-          グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:30}, 攻撃力:{cur:1,max:1}
-        },
-        items: { お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 },
-        currentSpot: p.startSpot || null,
-        log: [],
-        }});
+          uid: p.uid, name: p.name,
+          charId: p.charId, charName: p.charName,
+          spriteRow: p.spriteRow ?? -1, spriteCol: p.spriteCol ?? -1,
+          customPortrait: p.customPortrait || null,
+          skillId: p.skillId || null, skillName: p.skillName || "",
+          abilitySkill: charData?.abilitySkill || (p.charId?.startsWith("custom_") ? p.abilitySkill || null : null),
+          danmakuSkill: charData?.danmakuSkill || null,
+          resources: { ...DEFAULT_GS.resources, やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:30}, 攻撃力:{cur:1,max:1} },
+          items: { お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 },
+          currentSpot: startSpotId || "11",
+          log:[],
+        };
+      });
   }
 
   const upd = useCallback((fn) => {
-    setGs(prev => {
-      const next = typeof fn === "function" ? fn(prev) : fn;
-      set(ref(db, gsPath), next).catch(console.error);
-      return next;
-    });
+    setGs(prev => { const next = typeof fn === "function" ? fn(prev) : fn; set(ref(db, gsPath), next).catch(console.error); return next; });
   }, [gsPath]);
 
   const setSceneDataAndSync = useCallback((fn) => {
-    setSceneData(prev => {
-      const next = typeof fn === "function" ? fn(prev) : fn;
-      set(ref(db, scenePath), next).catch(console.error);
-      return next;
-    });
+    setSceneData(prev => { const next = typeof fn === "function" ? fn(prev) : fn; set(ref(db, scenePath), next).catch(console.error); return next; });
   }, [scenePath]);
 
-  // pcsが空のときにroomから再構築（タイミングずれのフォールバック）
   useEffect(() => {
     if (!synced || !room || mode !== "gm") return;
-    if ((gs.pcs || []).length === 0 && Object.values(room.players||{}).some(p=>p.role==="pl"&&p.charId)) {
+    if ((gs.pcs ||[]).length === 0 && Object.values(room.players||{}).some(p=>p.role==="pl"&&p.charId)) {
       upd(p => ({ ...p, pcs: buildPcList(room) }));
     }
   }, [synced, room, mode]);
 
-  // ── 探索フェイズへ移行 ────────────────────────────
   const doTransitionToExplore = () => {
     const scenario = gs.scenarioData;
-    // 「探索フェイズ開始時公開」クエストを公開
-    const startQuests = (scenario?.quests || []).filter(q => (q.unlockType||"start") === "start");
-    // 手がかり配置：PCの人数/2 切り上げ箇所
+    const startQuests = (scenario?.quests ||[]).filter(q => (q.unlockType||"start") === "start");
     const pcCount = (gs.pcs||[]).length || 1;
     const clueCount = Math.ceil(pcCount / 2);
-    const spots = SPOTS.filter(s => s.id !== null);
+    const spots = SPOTS.filter(s => s.roll !== null);
     const shuffled = [...spots].sort(() => Math.random()-0.5);
     const clueSpots = shuffled.slice(0, clueCount).map(s => s.id);
 
     upd(p => ({
-      ...p,
-      sessionPhase: "explore",
-      day: 1, cycleIdx: 0,
+      ...p, sessionPhase: "explore", day: 1, cycleIdx: 0,
       clues: clueSpots,
       quests: startQuests.map(q => ({ ...q, revealed: true, solved: false })),
-      log: [`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
+      log:[`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
     }));
 
-    // 公開クエストバナー
     if (startQuests.length > 0) {
       setQuestBanner(startQuests);
       setTimeout(() => setQuestBanner(null), 6000);
     }
   };
 
-  // ── 文々。新聞処理 ────────────────────────────────
-  const doNewspaper = (paper) => {
-    upd(p => ({ ...p, newspaper: paper, log: [`新聞[${paper.roll}]「${paper.title}」`, ...p.log] }));
-  };
+  const doNewspaper = (paper) => { upd(p => ({ ...p, newspaper: paper, log: [`新聞[${paper.roll}]「${paper.title}」`, ...p.log] })); };
 
-  // ── 手がかり配置 ─────────────────────────────────
   const doPlaceClue = () => {
     function rollD6(){return Math.floor(Math.random()*6)+1;}
-    const val = Math.min(rollD6(),rollD6())*10 + Math.max(rollD6(),rollD6());
-    const idx = val % SPOTS.filter(s=>s.id!==null).length;
-    const spot = SPOTS.filter(s=>s.id!==null)[idx];
-    if (!spot) return;
+    const a = rollD6(), b = rollD6();
+    const val = Math.min(a,b)*10 + Math.max(a,b);
+    const candidates = SPOTS.filter(s => s.roll === val);
+    if (candidates.length === 0) return;
+    const spot = candidates[Math.floor(Math.random() * candidates.length)];
     upd(p => ({
-      ...p, cluePlaced: true,
-      clues: [...new Set([...p.clues, spot.id])],
-      log: [`手がかりを[${spot.id}]${spot.name}に配置`, ...p.log],
+      ...p, cluePlaced: true, clues: [...new Set([...p.clues, spot.id])],
+      log: [`手がかりを[${val}]${spot.name}に配置`, ...p.log],
     }));
   };
 
-  // ── 霊力増加 ─────────────────────────────────────
-  const doReiryoku = () => {
-    const spot = SPOTS.find(s => s.id !== null);
-    upd(p => ({
-      ...p, reiryokuDone: true,
-      log: ["霊力増加処理", ...p.log],
-    }));
-  };
+  const doReiryoku = () => { upd(p => ({ ...p, reiryokuDone: true, log:["霊力増加処理", ...p.log] })); };
 
-  // ── サイクル進行 ──────────────────────────────────
   const doAdvanceCycle = () => {
     upd(p => {
-      let day = p.day || 1;
-      let cycleIdx = p.cycleIdx || 0;
-      cycleIdx++;
-      if (cycleIdx >= CYCLES.length) { cycleIdx = 0; day++; }
-      // 朝になったらクエスト公開チェック（条件付き）
+      let day = p.day || 1; let cycleIdx = p.cycleIdx || 0;
+      cycleIdx++; if (cycleIdx >= CYCLES.length) { cycleIdx = 0; day++; }
       let newQuests = [...(p.quests||[])];
       if (cycleIdx === 0) {
-        const allQ = p.scenarioData?.quests || [];
+        const allQ = p.scenarioData?.quests ||[];
         allQ.forEach(q => {
           if (newQuests.find(nq=>nq.id===q.id)) return;
           if (q.unlockType==="quest") {
@@ -520,94 +403,58 @@ function SessionApp({ roomCode, user }) {
       }
       return {
         ...p, day, cycleIdx,
-        newspaper: cycleIdx===0?null:p.newspaper,
-        cluePlaced: cycleIdx===0?false:p.cluePlaced,
-        reiryokuDone: false,
-        quests: newQuests,
-        actedPcs:[],
-        currentScene: null,
-        log: [`${day}日目・${CYCLES[cycleIdx]}サイクル開始`, ...p.log],
+        newspaper: cycleIdx===0?null:p.newspaper, cluePlaced: cycleIdx===0?false:p.cluePlaced,
+        reiryokuDone: false, quests: newQuests, actedPcs: [], currentScene: null,
+        log:[`${day}日目・${CYCLES[cycleIdx]}サイクル開始`, ...p.log],
       };
     });
     setPendingAction(null);
   };
 
   const handleSpotClick = (spotId) => {
-    // シーン中の移動先選択フェイズなら
     if (gs.currentScene?.phase === "move_dest") {
-      if (mode !== "gm" && gs.currentScene.pcUid !== user.uid) return; // 本人かGMのみ操作可能
-      upd(p => {
-        const pcs = p.pcs.map(pc => pc.uid === p.currentScene.pcUid ? { ...pc, currentSpot: spotId } : pc);
-        return {
-          ...p, pcs,
-          currentScene: { ...p.currentScene, phase: "action" },
-          log:[`${p.pcs.find(pc=>pc.uid===p.currentScene.pcUid)?.name} は [${spotId}] に移動した`, ...p.log]
-        };
-      });
+      if (mode !== "gm" && gs.currentScene.pcUid !== user.uid) return;
+      upd(p => ({ ...p, currentScene: { ...p.currentScene, selectedDestSpot: spotId } }));
     }
   };
 
-  // ── ロール選択フォールバック ───────────────────────
-  if (!mode) return (
-    <div style={{ background:"#040608", color:"#c8b89a", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"serif" }}>
-      <style>{`button:hover{opacity:0.82}`}</style>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ fontSize:22, color:"#c8a040", letterSpacing:4, marginBottom:20 }}>幻想ナラトグラフ</div>
-        <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
-          <button onClick={()=>setMode("gm")} style={{ padding:"12px 24px",cursor:"pointer",borderRadius:4,fontSize:12,background:"rgba(192,57,43,0.18)",border:"1px solid #8b1a1a",color:"#e07060" }}>🎲 GM画面</button>
-          <button onClick={()=>setMode("pl")} style={{ padding:"12px 24px",cursor:"pointer",borderRadius:4,fontSize:12,background:"rgba(25,118,210,0.15)",border:"1px solid #0d47a1",color:"#64b5f6" }}>✦ PL共有画面</button>
-        </div>
+  if (!mode) return <div style={{ background:"#040608", color:"#c8b89a", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"serif" }}>
+    <div style={{ textAlign:"center" }}>
+      <div style={{ fontSize:22, color:"#c8a040", letterSpacing:4, marginBottom:20 }}>幻想ナラトグラフ</div>
+      <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
+        <button onClick={()=>setMode("gm")} style={{ padding:"12px 24px",cursor:"pointer",borderRadius:4,fontSize:12,background:"rgba(192,57,43,0.18)",border:"1px solid #8b1a1a",color:"#e07060" }}>🎲 GM画面</button>
+        <button onClick={()=>setMode("pl")} style={{ padding:"12px 24px",cursor:"pointer",borderRadius:4,fontSize:12,background:"rgba(25,118,210,0.15)",border:"1px solid #0d47a1",color:"#64b5f6" }}>✦ PL共有画面</button>
       </div>
     </div>
-  );
+  </div>;
 
-  if (!synced) return (
-    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>
-      Firebase に接続中…
-    </div>
-  );
+  if (!synced) return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>Firebase に接続中…</div>;
 
-  // バックストーリー（導入フェイズ）
-  if (gs.sessionPhase === "intro") {
-    return <BackstoryScreen gs={gs} isGm={mode==="gm"} onProceed={doTransitionToExplore}/>;
-  }
+  if (gs.sessionPhase === "intro") return <BackstoryScreen gs={gs} isGm={mode==="gm"} onProceed={doTransitionToExplore}/>;
 
-  // 探索フェイズ
   return (
     <div style={{ display:"flex", height:"100vh", overflow:"hidden", fontFamily:"serif" }}>
       <style>{`::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a} button:hover{opacity:0.83}`}</style>
 
-      {/* 左：マップ */}
       <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
-        <MapView gs={gs} sceneData={sceneData} isGm={mode==="gm"} upd={upd}
-          onSpotClick={handleSpotClick}/>
+        <MapView gs={gs} sceneData={sceneData} isGm={mode==="gm"} upd={upd} onSpotClick={handleSpotClick}/>
       </div>
 
-      {/* 右：パネル */}
       <RightPanel
-        gs={gs} upd={upd}
-        sceneData={sceneData} setSceneData={setSceneDataAndSync}
+        gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync}
         isGm={mode==="gm"} user={user} room={room}
-        CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER}
-        getSpot={getSpot}
-        doNewspaper={doNewspaper}
-        doPlaceClue={doPlaceClue}
-        doAdvanceCycle={doAdvanceCycle}
-        doReiryoku={doReiryoku}
-        doTransitionToExplore={doTransitionToExplore}
-        pendingAction={pendingAction}
-        setPendingAction={setPendingAction}
+        CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER} getSpot={getSpot}
+        doNewspaper={doNewspaper} doPlaceClue={doPlaceClue} doAdvanceCycle={doAdvanceCycle}
+        doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
+        pendingAction={pendingAction} setPendingAction={setPendingAction}
       />
 
-      {/* 新クエスト公開バナー */}
       {questBanner && (
-        <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:200, background:"rgba(6,8,16,0.97)",
-          borderBottom:"1px solid #1e3a5a", padding:"16px 24px", animation:"fadeUp 0.3s ease" }}>
+        <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:200, background:"rgba(6,8,16,0.97)", borderBottom:"1px solid #1e3a5a", padding:"16px 24px", animation:"fadeUp 0.3s ease" }}>
           <div style={{ fontSize:11, color:"#4a6080", letterSpacing:3, marginBottom:8 }}>✦ クエスト公開</div>
           <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
             {questBanner.map(q=>(
-              <div key={q.id||q.name} style={{ padding:"8px 14px", background:"rgba(200,160,64,0.12)",
-                border:"1px solid #8b6914", borderRadius:5 }}>
+              <div key={q.id||q.name} style={{ padding:"8px 14px", background:"rgba(200,160,64,0.12)", border:"1px solid #8b6914", borderRadius:5 }}>
                 <div style={{ fontSize:12, color:"#c8a040" }}>【Lv.{q.level}】{q.name}</div>
                 <div style={{ fontSize:10, color:"#6a7a90", marginTop:2 }}>{q.summary}</div>
               </div>
@@ -616,21 +463,12 @@ function SessionApp({ roomCode, user }) {
         </div>
       )}
 
-      {/* 確認モーダル */}
       {pendingAction && (
         <ConfirmModal
-          title={pendingAction==="advance" ? "サイクルを進めますか？"
-               : pendingAction==="placeClue" ? "手がかりを配置しますか？"
-               : "探索フェイズへ移行しますか？"}
-          body={pendingAction==="advance"
-               ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。\nスキルや処理の確認をお忘れなく。`
-               : pendingAction==="placeClue"
-               ? "ランダムなスポットに手がかりを1つ配置します。"
-               : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
+          title={pendingAction==="advance" ? "サイクルを進めますか？" : pendingAction==="placeClue" ? "手がかりを配置しますか？" : "探索フェイズへ移行しますか？"}
+          body={pendingAction==="advance" ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。\nスキルや処理の確認をお忘れなく。` : pendingAction==="placeClue" ? "ランダムなスポットに手がかりを1つ配置します。" : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
           okLabel="進む"
-          onOk={pendingAction==="advance" ? doAdvanceCycle
-              : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);}
-              : ()=>{doTransitionToExplore();setPendingAction(null);}}
+          onOk={pendingAction==="advance" ? doAdvanceCycle : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);} : ()=>{doTransitionToExplore();setPendingAction(null);}}
           onCancel={()=>setPendingAction(null)}
         />
       )}
@@ -638,11 +476,10 @@ function SessionApp({ roomCode, user }) {
   );
 }
 
-// ─── ROOT ────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [roomCode, setRoomCode] = useState(null);
-  const [roomPhase, setRoomPhase] = useState(null);
+  const[roomPhase, setRoomPhase] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -650,7 +487,7 @@ export default function App() {
     if (r) setRoomCode(r.toUpperCase());
     const unsub = onAuthStateChanged(auth, u => setUser(u || null));
     return () => unsub();
-  }, []);
+  },[]);
 
   useEffect(() => {
     if (!roomCode || !user) return;
@@ -659,17 +496,9 @@ export default function App() {
     return () => unsub();
   }, [roomCode, user]);
 
-  if (user === undefined) return (
-    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>接続中…</div>
-  );
-
-  if (!user) return <LobbyRoot />;
-  if (!roomCode) return <LobbyRoot />;
-
-  if (roomPhase === null) return (
-    <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>部屋情報を取得中…</div>
-  );
-
+  if (user === undefined) return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>接続中…</div>;
+  if (!user || !roomCode) return <LobbyRoot />;
+  if (roomPhase === null) return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>部屋情報を取得中…</div>;
   if (roomPhase === "prep") return <LobbyRoot />;
 
   return <SessionApp roomCode={roomCode} user={user} />;
