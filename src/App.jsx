@@ -79,7 +79,7 @@ function areaColor(area){ return AREA_COLORS[area] || { bg:"rgba(30,30,30,0.85)"
 const DEFAULT_GS = {
   day:1, cycleIdx:0,
   clues:[], newspaper:null, newspaperDone:false, cluePlaced:false, reiryokuDone:false,
-  resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,30], 攻撃力:[1,1] },
+  resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,20], 攻撃力:[1,1] },
   items:{ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残魔かけら:0, スペカかけら:0 },
   quests:[], log:[], pcs:[],
   sceneMode:false, sceneText:"", banner:null,
