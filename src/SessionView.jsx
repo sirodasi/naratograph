@@ -352,21 +352,37 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
           {sc.phase === "move_dest" && (
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:11, color:C.gold, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:Math.max(0, sc.selectedMoveDie-1)}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>−</button>
+                {/* GMの場合のみ距離調整ボタンを表示 */}
+                {isGm && (
+                  <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:Math.max(0, sc.selectedMoveDie-1)}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>−</button>
+                )}
+                
                 <span>【最大 {sc.selectedMoveDie} マス移動可能】</span>
-                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>
+                
+                {isGm && (
+                  <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>
+                )}
               </div>
-              <div style={{ fontSize:10, color:C.textDim, marginBottom:8 }}>マップ上で光っている移動先のスポットをクリックしてください。<br/>例外的な移動の際は上のボタンで距離を調整できます。</div>
+              
+              <div style={{ fontSize:10, color:C.textDim, marginBottom:8 }}>
+                {isMyTurn ? "マップ上の光っているスポットをクリックして選択してください。" : "手番プレイヤーが移動先を選択中です。"}
+              </div>
+          
               {sc.selectedDestSpot ? (
                 <div style={{ padding:8, background:"rgba(200,160,64,0.1)", border:`1px solid ${C.goldDim}`, borderRadius:4, marginBottom:8 }}>
                   <div style={{ fontSize:11, color:C.text, marginBottom:6 }}>選択中: <span style={{color:C.gold, fontWeight:"bold"}}>[{getSpot(sc.selectedDestSpot)?.roll||"?"}] {getSpot(sc.selectedDestSpot)?.name}</span></div>
-                  <button onClick={confirmMove} style={btn(C.blueBg,C.blueBorder,C.blue)}>このスポットへ移動する</button>
+                  {/* 移動の確定は本人、またはGMができる */}
+                  {isMyTurn && (
+                    <button onClick={confirmMove} style={btn(C.blueBg,C.blueBorder,C.blue)}>このスポットへ移動する</button>
+                  )}
                 </div>
-              ) : <div style={{ padding:8, border:`1px dashed ${C.border}`, color:C.textFaint, fontSize:10, marginBottom:8 }}>未選択</div>}
-              <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, phase:"action"}}))} style={btn("rgba(255,255,255,0.05)",C.border,C.textFaint,{padding:"6px"})}>移動せずにアクションへ進む</button>
+              ) : <div style={{ padding:8, border:`1px dashed ${C.border}`, color:C.textFaint, fontSize:10, marginBottom:8 }}>移動先をマップから選んでください</div>}
+              
+              {isMyTurn && (
+                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, phase:"action"}}))} style={btn("rgba(255,255,255,0.05)",C.border,C.textFaint,{padding:"6px"})}>移動せずにアクションへ進む</button>
+              )}
             </div>
           )}
-
           {(sc.phase === "action" || sc.phase === "action_done") && (
             <div>
               {sc.phase === "action" && (
