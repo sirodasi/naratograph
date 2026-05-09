@@ -217,7 +217,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const iSize  = baseSize;
         const borderCol = isReachable ? "#64b5f6" : (hasClue ? "#00e5ff" : areaColor(spot.area).border);
 
-        const canClick = isGm || (isMovePhase && isMyTurn);
+        const canClick = isGm || (isMovePhase && isMyTurn && isReachable);
 
         return (
           <div key={spot.id} style={{ 
@@ -228,7 +228,11 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
             animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none"
           }}
             onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}
-            onClick={()=> canClick && !isDream && onSpotClick && onSpotClick(spot.id)}>
+            onClick={()=> {
+              if (canClick && spot.id !== "dream") {
+                onSpotClick(spot.id);
+              }
+            }}>
             
             {/* PCマーカー（スポットの上部に表示） */}
             {pcsHere.length > 0 && (
@@ -511,9 +515,27 @@ function SessionApp({ roomCode, user }) {
   };
 
   const handleSpotClick = (spotId) => {
-    if (gs.currentScene?.phase === "move_dest") {
-      if (mode !== "gm" && gs.currentScene.pcUid !== user.uid) return;
-      upd(p => ({ ...p, currentScene: { ...p.currentScene, selectedDestSpot: spotId } }));
+    const sc = gs.currentScene;
+    if (sc?.phase === "move_dest") {
+      const isGm = mode === "gm";
+      const isMyTurn = sc.pcUid === user.uid;
+      if (!isGm && !isMyTurn) return;
+
+      const actingPc = (gs.pcs || []).find(p => p.uid === sc.pcUid);
+      if (!actingPc) return;
+
+      const dists = getDistances(actingPc.currentSpot);
+      const distance = dists[spotId] ?? 999;
+      const maxDist = sc.selectedMoveDie || 0;
+
+      if ((distance > 0 && distance <= maxDist) || isGm) {
+        upd(p => ({ 
+          ...p, 
+          currentScene: { ...p.currentScene, selectedDestSpot: spotId } 
+        }));
+      } else {
+        console.log("距離が足りません:", distance, "/", maxDist);
+      }
     }
   };
 
