@@ -107,6 +107,7 @@ const AREA_COLORS = {
 function areaColor(area){ return AREA_COLORS[area] || { bg:"rgba(30,30,30,0.85)", border:"#555" }; }
 
 const DEFAULT_GS = {
+  sessionPhase: "intro",
   day:1, cycleIdx:0,
   clues:[], newspaper:null, newspaperDone:false, cluePlaced:false, reiryokuDone:false,
   resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,20], 攻撃力:[1,5] },
@@ -576,12 +577,45 @@ export default function App() {
     return () => unsub();
   },[]);
 
-  useEffect(() => {
-    if (!roomCode || !user) return;
-    const r = ref(db, `rooms/${roomCode}/phase`);
-    const unsub = onValue(r, snap => { if (snap.exists()) setRoomPhase(snap.val()); });
-    return () => unsub();
-  },[roomCode, user]);
+　useEffect(() => {
+    if (!mode) return;
+    const gsRef   = ref(db, gsPath);
+    const sceneRef = ref(db, scenePath);
+    const timeout = setTimeout(() => setSynced(true), 8000);
+
+    const unsubGs = onValue(gsRef, snap => {
+      clearTimeout(timeout);
+      if (snap.exists()) {
+        const val = snap.val();
+        setGs(prev => ({
+          ...DEFAULT_GS, ...val,
+          resources: { ...DEFAULT_GS.resources, ...(val.resources||{}) },
+          items: { ...DEFAULT_GS.items, ...(val.items||{}) },
+          pcs: val.pcs || [], quests: val.quests ||[],
+          clues: val.clues || [], log: val.log ||[],
+        }));
+        setSynced(true);
+      } else if (mode === "gm") {
+        get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
+          const r = roomSnap.exists() ? roomSnap.val() : null;
+          const initGs = { ...DEFAULT_GS, limit: r?.limit || r?.scenarioData?.limit || "3日目の夜", scenarioData: r?.scenarioData || null, pcs: buildPcList(r) };
+          set(gsRef, initGs).then(() => {
+            setGs(initGs);
+            setSynced(true);
+          }).catch(console.error);
+        });
+      }
+    }, () => { clearTimeout(timeout); setSynced(true); });
+
+    const unsubScene = onValue(sceneRef, snap => {
+      if (snap.exists()) {
+        const val = snap.val();
+        setSceneData({ bg: val.bg||null, portraits: val.portraits||[] });
+      }
+    });
+
+    return () => { clearTimeout(timeout); unsubGs(); unsubScene(); };
+  }, [mode, gsPath, scenePath]);
 
   if (user === undefined) return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>接続中…</div>;
   if (!user || !roomCode) return <LobbyRoot />;
