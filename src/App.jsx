@@ -576,3 +576,4 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, u => setUser(u || null));
     return () => unsub();
   },[]);
+}
