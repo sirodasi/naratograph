@@ -373,22 +373,6 @@ function PCCard({ pc, isGm, onUpdatePc, getSpot, cycleIdx }) {
               )}
             </div>
           )}
-          {/* 弾幕スキル */}
-          {pc.danmakuSkill && (
-            <div style={{ marginTop:6 }}>
-              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:4 }}>
-                <span style={{ padding:"1px 6px",background:"rgba(239,154,154,0.15)",
-                  border:"1px solid rgba(239,154,154,0.4)",
-                  borderRadius:8,fontSize:8,color:"#ef9a9a" }}>弾幕スキル</span>
-                <span style={{ fontSize:11,color:"#ef9a9a" }}>
-                  【{pc.danmakuSkill.name}】
-                </span>
-              </div>
-              <div style={{ fontSize:9,color:C.textFaint,lineHeight:1.7 }}>
-                {pc.danmakuSkill.desc}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
