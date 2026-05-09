@@ -2134,13 +2134,16 @@ function PrepRoom({roomCode,user,displayName,isGm}){
   };
 
   const confirmChar=async()=>{
-    if(!selectedChar)return;
+    if(!selectedChar) return;
     await update(ref(db,`rooms/${roomCode}/players/${user.uid}`),{
-      charId:selectedChar.id,charName:selectedChar.name,
-      spriteRow:selectedChar.spriteRow??-1,spriteCol:selectedChar.spriteCol??-1,
-      customPortrait:selectedChar.customPortrait||null,
-      abilitySkill:selectedChar.abilitySkill||null,
-      danmakuSkill:selectedChar.danmakuSkill||null,
+      charId: selectedChar.id,
+      charName: selectedChar.name,
+      spriteRow: selectedChar.spriteRow ?? -1,
+      spriteCol: selectedChar.spriteCol ?? -1,
+      base: selectedChar.base || "人間の里",
+      customPortrait: selectedChar.customPortrait || null,
+      abilitySkill: selectedChar.abilitySkill || null,
+      danmakuSkill: selectedChar.danmakuSkill || null,
     });
     setStep("skillSelect");
   };
