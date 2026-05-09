@@ -39,6 +39,36 @@ const SPOTS =[
   { id:"dream", roll:null, name:"夢の世界", x:91, y:54.5, area:"異世界", rei:4 },
 ];
 
+const EDGES = [
+  ["11", "12"], ["11", "13"], ["11", "14A"], ["11", "14B"], ["11", "15"], ["11", "16"], ["11", "66"],
+  ["12", "25"], ["13", "35A"], ["13", "35B"], ["13", "36"], ["14A", "14B"], ["14A", "44"], ["14B", "44"],
+  ["15", "45"], ["16", "56A"], ["16", "56B"], ["16", "66"], ["22", "23"], ["22", "26A"], ["22", "26B"],
+  ["23", "24"], ["24", "25"], ["25", "26A"], ["25", "26B"], ["26A", "26B"], ["33", "34"], ["34", "35A"],
+  ["34", "35B"], ["35A", "35B"], ["35A", "36"], ["35B", "36"], ["36", "44"], ["45", "46A"], ["45", "46B"],
+  ["45", "56A"], ["45", "56B"], ["46A", "46B"], ["55", "56A"], ["55", "56B"], ["56A", "56B"], ["56A", "66"],
+  ["56B", "66"],
+];
+
+function getDistances(startSpotId) {
+  if (!startSpotId) return {};
+  const dists = { [startSpotId]: 0 };
+  const queue = [startSpotId];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    const curDist = dists[cur];
+    EDGES.forEach(([a, b]) => {
+      let next = null;
+      if (a === cur) next = b;
+      if (b === cur) next = a;
+      if (next && dists[next] === undefined) {
+        dists[next] = curDist + 1;
+        queue.push(next);
+      }
+    });
+  }
+  return dists;
+}
+
 const NEWSPAPER = {
   11:{title:"博麗神社の宴会は今夜",effect:"PCは「帰還」の際、「博麗神社」を自身の【拠点】として扱える。そこに移動したキャラクターは【やる気】+1点。"},
   22:{title:"博麗神社の宴会は今夜",effect:"PCは「帰還」の際、「博麗神社」を自身の【拠点】として扱える。そこに移動したキャラクターは【やる気】+1点。"},
@@ -79,7 +109,7 @@ function areaColor(area){ return AREA_COLORS[area] || { bg:"rgba(30,30,30,0.85)"
 const DEFAULT_GS = {
   day:1, cycleIdx:0,
   clues:[], newspaper:null, newspaperDone:false, cluePlaced:false, reiryokuDone:false,
-  resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,20], 攻撃力:[1,1] },
+  resources:{ やる気:[1,3], 残り人数:[2,5], スペカ:[1,5], グレイズ:[0,5], 霊力:[0,20], 攻撃力:[1,5] },
   items:{ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残魔かけら:0, スペカかけら:0 },
   quests:[], log:[], pcs:[],
   sceneMode:false, sceneText:"", banner:null,
@@ -132,6 +162,11 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
   const bigSize  = Math.round(32 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
   const fontSize  = Math.max(8, Math.round(10 * scale * 1.4));
 
+  const isMovePhase = gs.currentScene?.phase === "move_dest";
+  const actingPc = isMovePhase ? (gs.pcs||[]).find(p => p.uid === gs.currentScene.pcUid) : null;
+  const dists = actingPc ? getDistances(actingPc.currentSpot) : {};
+  const maxDist = gs.currentScene?.selectedMoveDie || 0;
+
   if (gs.sceneMode) {
     return (
       <div style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#040608" }}>
@@ -150,7 +185,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
       </div>
     );
   }
-
+  
   return (
     <div ref={mapRef} style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
       <img src={MAP_SRC} alt="幻想郷マップ" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
@@ -325,8 +360,9 @@ function SessionApp({ roomCode, user }) {
           skillId: p.skillId || null, skillName: p.skillName || "",
           abilitySkill: charData?.abilitySkill || (p.charId?.startsWith("custom_") ? p.abilitySkill || null : null),
           danmakuSkill: charData?.danmakuSkill || null,
-          resources: { ...DEFAULT_GS.resources, やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:30}, 攻撃力:{cur:1,max:1} },
+          resources: { ...DEFAULT_GS.resources, やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:20}, 攻撃力:{cur:1,max:5} },
           items: { お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 },
+          baseSpotId: baseSpotId,
           currentSpot: startSpotId || "11",
           log:[],
         };
@@ -339,14 +375,14 @@ function SessionApp({ roomCode, user }) {
 
   const setSceneDataAndSync = useCallback((fn) => {
     setSceneData(prev => { const next = typeof fn === "function" ? fn(prev) : fn; set(ref(db, scenePath), next).catch(console.error); return next; });
-  }, [scenePath]);
+  },[scenePath]);
 
   useEffect(() => {
     if (!synced || !room || mode !== "gm") return;
     if ((gs.pcs ||[]).length === 0 && Object.values(room.players||{}).some(p=>p.role==="pl"&&p.charId)) {
       upd(p => ({ ...p, pcs: buildPcList(room) }));
     }
-  }, [synced, room, mode]);
+  },[synced, room, mode]);
 
   const doTransitionToExplore = () => {
     const scenario = gs.scenarioData;
@@ -392,27 +428,22 @@ function SessionApp({ roomCode, user }) {
         const spot = getSpot(pc.currentSpot);
         if (!spot) return pc;
         let gain = spot.rei || 0;
-        // 博麗神社は 1D6
-        if (spot.reiD6) {
-          gain = Math.floor(Math.random() * 6) + 1;
-        }
+        if (spot.reiD6) gain = Math.floor(Math.random() * 6) + 1;
         
         const curRei = pc.resources.霊力?.cur || 0;
-        const maxRei = pc.resources.霊力?.max || 30;
+        const maxRei = pc.resources.霊力?.max || 20;
         if (gain > 0) {
           const nextRei = Math.min(maxRei, curRei + gain);
+          const nextAtk = 1 + Math.floor(nextRei / 5);
           logMsg.push(`${pc.charName || pc.name}+${gain}`);
-          return { ...pc, resources: { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextRei } } };
+          return { ...pc, resources: { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextRei }, 攻撃力: { ...pc.resources.攻撃力, cur: nextAtk } } };
         }
         return pc;
       });
-      return {
-        ...p, pcs: newPcs, reiryokuDone: true,
-        log:[`【霊力増加】 ${logMsg.length > 0 ? logMsg.join(" / ") : "なし"}`, ...p.log]
-      };
+      return { ...p, pcs: newPcs, reiryokuDone: true, log:[`【霊力増加】 ${logMsg.length > 0 ? logMsg.join(" / ") : "なし"}`, ...p.log] };
     });
   };
-
+  
   const doAdvanceCycle = () => {
     upd(p => {
       let day = p.day || 1; let cycleIdx = p.cycleIdx || 0;
@@ -422,15 +453,10 @@ function SessionApp({ roomCode, user }) {
       cycleIdx++; 
       if (cycleIdx >= CYCLES.length) { 
         cycleIdx = 0; day++; 
-        
         nextPcs = p.pcs.map(pc => {
           const curYaruki = pc.resources.やる気?.cur || 0;
           const nextYaruki = Math.max(0, curYaruki - 1);
-          return {
-            ...pc,
-            currentSpot: pc.baseSpotId || "11",
-            resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: nextYaruki } }
-          };
+          return { ...pc, currentSpot: pc.baseSpotId || "11", resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: nextYaruki } } };
         });
         logMsgs.push("夜が明け、各キャラクターは拠点に帰還し【やる気】が1減少した");
       }
@@ -448,12 +474,11 @@ function SessionApp({ roomCode, user }) {
       }
 
       logMsgs.push(`${day}日目・${CYCLES[cycleIdx]}サイクル開始`);
-      
+
       return {
         ...p, day, cycleIdx,
         newspaper: cycleIdx===0?null:p.newspaper, cluePlaced: cycleIdx===0?false:p.cluePlaced,
-        reiryokuDone: false, quests: newQuests, actedPcs:[], currentScene: null,
-        pcs: nextPcs,
+        reiryokuDone: false, quests: newQuests, actedPcs:[], currentScene: null, pcs: nextPcs,
         log:[...logMsgs.reverse(), ...p.log],
       };
     });
@@ -483,7 +508,17 @@ function SessionApp({ roomCode, user }) {
 
   return (
     <div style={{ display:"flex", height:"100vh", overflow:"hidden", fontFamily:"serif" }}>
-      <style>{`::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a} button:hover{opacity:0.83}`}</style>
+      <style>{`
+        ::-webkit-scrollbar{width:3px}
+        ::-webkit-scrollbar-thumb{background:#1a1e2a}
+        button:hover{opacity:0.83}
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulseSpot {
+          0% { transform: scale(1) translateZ(0); filter: brightness(1); }
+          50% { transform: scale(1.15) translateZ(0); filter: brightness(1.2); }
+          100% { transform: scale(1) translateZ(0); filter: brightness(1); }
+        }
+      `}</style>
 
       <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
         <MapView gs={gs} sceneData={sceneData} isGm={mode==="gm"} upd={upd} onSpotClick={handleSpotClick}/>
@@ -515,7 +550,10 @@ function SessionApp({ roomCode, user }) {
       {pendingAction && (
         <ConfirmModal
           title={pendingAction==="advance" ? "サイクルを進めますか？" : pendingAction==="placeClue" ? "手がかりを配置しますか？" : "探索フェイズへ移行しますか？"}
-          body={pendingAction==="advance" ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。\nスキルや処理の確認をお忘れなく。` : pendingAction==="placeClue" ? "ランダムなスポットに手がかりを1つ配置します。" : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
+          body={pendingAction==="advance" 
+             ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。` + (gs.cycleIdx === 3 ? "\n※夜が明けるため、全員が拠点に帰還し【やる気】が1減少します。" : "\nスキルや処理の確認をお忘れなく。") 
+             : pendingAction==="placeClue" ? "ランダムなスポットに手がかりを1つ配置します。" 
+             : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
           okLabel="進む"
           onOk={pendingAction==="advance" ? doAdvanceCycle : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);} : ()=>{doTransitionToExplore();setPendingAction(null);}}
           onCancel={()=>setPendingAction(null)}
@@ -527,7 +565,7 @@ function SessionApp({ roomCode, user }) {
 
 export default function App() {
   const [user, setUser] = useState(undefined);
-  const [roomCode, setRoomCode] = useState(null);
+  const[roomCode, setRoomCode] = useState(null);
   const[roomPhase, setRoomPhase] = useState(null);
 
   useEffect(() => {
@@ -543,7 +581,7 @@ export default function App() {
     const r = ref(db, `rooms/${roomCode}/phase`);
     const unsub = onValue(r, snap => { if (snap.exists()) setRoomPhase(snap.val()); });
     return () => unsub();
-  }, [roomCode, user]);
+  },[roomCode, user]);
 
   if (user === undefined) return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>接続中…</div>;
   if (!user || !roomCode) return <LobbyRoot />;
