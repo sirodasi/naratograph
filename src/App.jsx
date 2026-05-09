@@ -79,6 +79,8 @@ const DEFAULT_GS = {
   quests:[], limit:"3日目の夜", log:[],
   pcs:[],
   sceneMode:false, sceneText:"", banner:null,
+  actedPcs:[],
+  currentScene: null,
 };
 
 const DEFAULT_SCENE = { bg:null, portraits:[] };
@@ -522,10 +524,27 @@ function SessionApp({ roomCode, user }) {
         cluePlaced: cycleIdx===0?false:p.cluePlaced,
         reiryokuDone: false,
         quests: newQuests,
+        actedPcs:[],
+        currentScene: null,
         log: [`${day}日目・${CYCLES[cycleIdx]}サイクル開始`, ...p.log],
       };
     });
     setPendingAction(null);
+  };
+
+  const handleSpotClick = (spotId) => {
+    // シーン中の移動先選択フェイズなら
+    if (gs.currentScene?.phase === "move_dest") {
+      if (mode !== "gm" && gs.currentScene.pcUid !== user.uid) return; // 本人かGMのみ操作可能
+      upd(p => {
+        const pcs = p.pcs.map(pc => pc.uid === p.currentScene.pcUid ? { ...pc, currentSpot: spotId } : pc);
+        return {
+          ...p, pcs,
+          currentScene: { ...p.currentScene, phase: "action" },
+          log:[`${p.pcs.find(pc=>pc.uid===p.currentScene.pcUid)?.name} は [${spotId}] に移動した`, ...p.log]
+        };
+      });
+    }
   };
 
   // ── ロール選択フォールバック ───────────────────────
@@ -561,7 +580,7 @@ function SessionApp({ roomCode, user }) {
       {/* 左：マップ */}
       <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
         <MapView gs={gs} sceneData={sceneData} isGm={mode==="gm"} upd={upd}
-          onSpotClick={null}/>
+          onSpotClick={handleSpotClick}/>
       </div>
 
       {/* 右：パネル */}
