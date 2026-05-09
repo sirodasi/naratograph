@@ -376,16 +376,19 @@ function SessionApp({ roomCode, user }) {
           clues: val.clues || [], log: val.log || [],
         }));
       } else if (mode === "gm") {
-        // 初期データを書き込む（バックストーリー + シナリオデータを反映）
-        const scenarioData = room?.scenarioData || null;
-        const initGs = {
-          ...DEFAULT_GS,
-          sessionPhase: "intro",
-          limit: room?.limit || room?.scenarioData?.limit || "3日目の夜",
-          scenarioData,
-          pcs: buildPcList(room),
-        };
-        set(gsRef, initGs).catch(console.error);
+        // 初期データを書き込む：room を Firebase から直接読んで確実に取得
+        get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
+          const r = roomSnap.exists() ? roomSnap.val() : null;
+          const scenarioData = r?.scenarioData || null;
+          const initGs = {
+            ...DEFAULT_GS,
+            sessionPhase: "intro",
+            limit: r?.limit || r?.scenarioData?.limit || "3日目の夜",
+            scenarioData,
+            pcs: buildPcList(r),
+          };
+          set(gsRef, initGs).catch(console.error);
+        });
       }
       setSynced(true);
     }, () => { clearTimeout(timeout); setSynced(true); });
@@ -436,6 +439,14 @@ function SessionApp({ roomCode, user }) {
       return next;
     });
   }, [scenePath]);
+
+  // pcsが空のときにroomから再構築（タイミングずれのフォールバック）
+  useEffect(() => {
+    if (!synced || !room || mode !== "gm") return;
+    if ((gs.pcs || []).length === 0 && Object.values(room.players||{}).some(p=>p.role==="pl"&&p.charId)) {
+      upd(p => ({ ...p, pcs: buildPcList(room) }));
+    }
+  }, [synced, room, mode]);
 
   // ── 探索フェイズへ移行 ────────────────────────────
   const doTransitionToExplore = () => {
@@ -604,7 +615,8 @@ function SessionApp({ roomCode, user }) {
 スキルや処理の確認をお忘れなく。`
                : pendingAction==="placeClue"
                ? "ランダムなスポットに手がかりを1つ配置します。"
-               : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
+               : "バックストーリーを経て探索フェイズへ移行します。
+開始時クエストが公開されます。"}
           okLabel="進む"
           onOk={pendingAction==="advance" ? doAdvanceCycle
               : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);}
