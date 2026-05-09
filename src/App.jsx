@@ -520,7 +520,7 @@ function SessionApp({ roomCode, user }) {
         ...p, day, cycleIdx,
         newspaper: cycleIdx===0?null:p.newspaper,
         cluePlaced: cycleIdx===0?false:p.cluePlaced,
-        reiryokuDone: cycleIdx===0?false:p.reiryokuDone,
+        reiryokuDone: false,
         quests: newQuests,
         log: [`${day}日目・${CYCLES[cycleIdx]}サイクル開始`, ...p.log],
       };
