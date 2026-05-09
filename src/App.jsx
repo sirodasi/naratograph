@@ -4,8 +4,9 @@ import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
 import { BackstoryScreen, RightPanel, ConfirmModal } from "./SessionView";
+import mapImg from ".assets/map.png";
 
-const MAP_SRC = "/map.jpg"; // ← 方法Aの場合（必要に応じて修正してください）
+const MAP_SRC = mapImg;
 
 // ─── データ定義（複合スポットを分離して再定義） ─────────────
 const SPOTS =[
