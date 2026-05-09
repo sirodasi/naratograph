@@ -150,7 +150,7 @@ function useMapBounds(containerRef) {
 }
 
 // ─── MapView（GM/PL共通）────────────────────────────────
-function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
+function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const cycleIdx = gs.cycleIdx || 0;
   const isNight   = cycleIdx === 3;
   const isEvening = cycleIdx === 2;
@@ -160,11 +160,11 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
 
   const scale = mapBounds.width > 0 ? mapBounds.width / MAP_NATURAL_W : 0.5;
   const baseSize = Math.round(22 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
-  const bigSize  = Math.round(32 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
   const fontSize  = Math.max(8, Math.round(10 * scale * 1.4));
 
   const isMovePhase = gs.currentScene?.phase === "move_dest";
   const actingPc = isMovePhase ? (gs.pcs||[]).find(p => p.uid === gs.currentScene.pcUid) : null;
+  const isMyTurn = actingPc?.uid === user?.uid;
   const dists = actingPc ? getDistances(actingPc.currentSpot) : {};
   const maxDist = gs.currentScene?.selectedMoveDie || 0;
 
@@ -189,6 +189,14 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
   
   return (
     <div ref={mapRef} style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
+      <style>{`
+        @keyframes pulseReachable {
+          0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0px #64b5f6; }
+          50% { transform: translate(-50%, -50%) scale(1.3); box-shadow: 0 0 15px #64b5f6; }
+          100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0px #64b5f6; }
+        }
+      `}</style>
+
       <img src={MAP_SRC} alt="幻想郷マップ" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
         filter: isNight ? "brightness(0.45) saturate(0.5)" 
               : isEvening ? "brightness(0.8) sepia(0.4) saturate(1.4) hue-rotate(-10deg)" 
@@ -199,18 +207,28 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
         const isDream   = spot.id === "dream";
         const hasClue   = !isDream && gs.clues.includes(spot.id);
         const pcsHere   = !isDream ? (gs.pcs||[]).filter(pc => pc.currentSpot === spot.id) :[];
+        
+        const distance = dists[spot.id] ?? 999;
+        const isReachable = isMovePhase && distance > 0 && distance <= maxDist;
+        
         const sx = mapBounds.left + (spot.x/100) * mapBounds.width;
         const sy = mapBounds.top  + (spot.y/100) * mapBounds.height;
         const isHov = hov === spot.id;
         const iSize  = baseSize;
-        const borderCol = hasClue ? "#00e5ff" : areaColor(spot.area).border;
+        const borderCol = isReachable ? "#64b5f6" : (hasClue ? "#00e5ff" : areaColor(spot.area).border);
+
+        const canClick = isGm || (isMovePhase && isMyTurn);
 
         return (
-          <div key={spot.id} style={{ position:"absolute", left:sx, top:sy,
-            transform:"translate(-50%,-50%)", zIndex:hasClue?4:pcsHere.length?4:3,
-            cursor: isGm&&!isDream ? "pointer" : "default" }}
+          <div key={spot.id} style={{ 
+            position:"absolute", left:sx, top:sy,
+            transform:"translate(-50%,-50%)", 
+            zIndex: isReachable ? 15 : (hasClue?4:pcsHere.length?4:3),
+            cursor: (canClick && !isDream) ? "pointer" : "default",
+            animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none"
+          }}
             onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}
-            onClick={()=>isGm&&!isDream&&onSpotClick&&onSpotClick(spot.id)}>
+            onClick={()=> canClick && !isDream && onSpotClick && onSpotClick(spot.id)}>
             
             {/* PCマーカー（スポットの上部に表示） */}
             {pcsHere.length > 0 && (
@@ -234,13 +252,11 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick }) {
 
             <div style={{
               width:iSize, height:iSize, borderRadius:"50%",
-              background: areaColor(spot.area).bg,
+              background: isReachable ? "rgba(25, 118, 210, 0.9)" : areaColor(spot.area).bg,
               border:`2px solid ${borderCol}`, display:"flex", alignItems:"center", justifyContent:"center",
               fontWeight:"bold", fontSize: isDream ? fontSize-1 : fontSize,
               color: "#fff",
-              boxShadow: hasClue ? `0 0 ${Math.round(10*scale*1.5)}px rgba(0,229,255,0.7)`
-                       : `0 0 ${Math.round(6*scale*1.5)}px ${areaColor(spot.area).border}60`,
-              transition:"width 0.15s,height 0.15s",
+              boxShadow: isReachable ? "0 0 10px #64b5f6" : (hasClue ? `0 0 ${Math.round(10*scale*1.5)}px rgba(0,229,255,0.7)` : "none"),
             }}>
               {isDream ? "◇" : (spot.roll || "?")}
             </div>
