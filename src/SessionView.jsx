@@ -26,7 +26,7 @@ export const ITEM_DATA = {
                     desc:"1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）", timing:"弾幕ごっこ前" },
 };
 
-export const INIT_RESOURCES = () => ({ やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:30}, 攻撃力:{cur:1,max:1} });
+export const INIT_RESOURCES = () => ({ やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:20}, 攻撃力:{cur:1,max:5} });
 export const INIT_ITEMS = () => ({ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 });
 
 const SKILL_TYPE_COLOR = { "オート":"#81c784","アクション":"#64b5f6","サポート":"#ffb74d" };
@@ -175,8 +175,18 @@ function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
                   <div style={{ fontSize:12,color:C.gold }}>{r.cur}{r.max>1&&<span style={{ fontSize:8,color:C.textFaint }}>/{r.max}</span>}</div>
                   {isGm && gmEdit && (
                     <div style={{ display:"flex",gap:2,justifyContent:"center",marginTop:2 }}>
-                      <button onClick={()=>onUpdatePc({...pc,resources:{...resources,[k]:{...r,cur:Math.max(0,r.cur-1)}}})} style={{ width:14,height:14,fontSize:9,background:"rgba(255,255,255,0.03)", border:`1px solid ${C.border}`,color:C.textFaint,cursor:"pointer",borderRadius:2,padding:0 }}>−</button>
-                      <button onClick={()=>onUpdatePc({...pc,resources:{...resources,[k]:{...r,cur:Math.min(r.cur+1,r.max)}}})} style={{ width:14,height:14,fontSize:9,background:"rgba(255,255,255,0.03)", border:`1px solid ${C.border}`,color:C.textFaint,cursor:"pointer",borderRadius:2,padding:0 }}>＋</button>
+                      <button onClick={()=>{
+                        const newCur = Math.max(0,r.cur-1);
+                        let nr = {...resources,[k]:{...r,cur:newCur}};
+                        if (k === "霊力") nr.攻撃力 = { ...nr.攻撃力, cur: 1 + Math.floor(newCur / 5) };
+                        onUpdatePc({...pc,resources:nr});
+                      }} style={{ width:14,height:14,fontSize:9,background:"rgba(255,255,255,0.03)", border:`1px solid ${C.border}`,color:C.textFaint,cursor:"pointer",borderRadius:2,padding:0 }}>−</button>
+                      <button onClick={()=>{
+                        const newCur = Math.min(r.cur+1,r.max);
+                        let nr = {...resources,[k]:{...r,cur:newCur}};
+                        if (k === "霊力") nr.攻撃力 = { ...nr.攻撃力, cur: 1 + Math.floor(newCur / 5) };
+                        onUpdatePc({...pc,resources:nr});
+                      }} style={{ width:14,height:14,fontSize:9,background:"rgba(255,255,255,0.03)", border:`1px solid ${C.border}`,color:C.textFaint,cursor:"pointer",borderRadius:2,padding:0 }}>＋</button>
                     </div>
                   )}
                 </div>
@@ -341,8 +351,12 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
 
           {sc.phase === "move_dest" && (
             <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:C.gold, marginBottom:4 }}>【最大 {sc.selectedMoveDie} マス移動可能】</div>
-              <div style={{ fontSize:10, color:C.textDim, marginBottom:8 }}>マップ上で移動先のスポットをクリックしてください。</div>
+              <div style={{ fontSize:11, color:C.gold, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:Math.max(0, sc.selectedMoveDie-1)}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>−</button>
+                <span>【最大 {sc.selectedMoveDie} マス移動可能】</span>
+                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>
+              </div>
+              <div style={{ fontSize:10, color:C.textDim, marginBottom:8 }}>マップ上で光っている移動先のスポットをクリックしてください。<br/>例外的な移動の際は上のボタンで距離を調整できます。</div>
               {sc.selectedDestSpot ? (
                 <div style={{ padding:8, background:"rgba(200,160,64,0.1)", border:`1px solid ${C.goldDim}`, borderRadius:4, marginBottom:8 }}>
                   <div style={{ fontSize:11, color:C.text, marginBottom:6 }}>選択中: <span style={{color:C.gold, fontWeight:"bold"}}>[{getSpot(sc.selectedDestSpot)?.roll||"?"}] {getSpot(sc.selectedDestSpot)?.name}</span></div>
