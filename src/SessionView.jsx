@@ -548,7 +548,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                 <span>{sc.exactMoveDist ? `【ちょうど ${sc.exactMoveDist} マスにのみ移動可能】` : `【最大 ${sc.selectedMoveDie} マス移動可能】`}</span>
                 
                 {isGm && !sc.exactMoveDist && <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>}
-                )}
               </div>
               
               <div style={{ fontSize:10, color:C.textDim, marginBottom:8 }}>
