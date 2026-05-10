@@ -431,7 +431,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
               <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>
                 探索イベントを選択
               </div>
-              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 10, lineHeight: 1.4 }}>
+              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 10, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
                 {spotDetail.desc}
               </div>
               {spotDetail.tags.length > 0 && (
@@ -448,7 +448,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                       <span style={{ fontSize: 11 }}>{ev.name}</span>
                       <span style={{ fontSize: 10, color: C.blue }}>目標: {ev.target}</span>
                     </div>
-                    <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.2 }}>{ev.effect}</div>
+                    <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.3, whiteSpace: "pre-wrap" }}>
+                      {ev.effect}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -500,7 +502,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                     </div>
                     {isSpecial && !isFumble && <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>✨ スペシャル！（霊力増加 or 変調解除）</div>}
                     
-                    <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", lineHeight: 1.5, marginBottom: 12 }}>
+                    <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>
                       <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
                       {sc.selectedEvent.effect}
                     </div>
