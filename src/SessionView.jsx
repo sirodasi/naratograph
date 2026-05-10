@@ -258,7 +258,7 @@ function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
 }
 
 // ── ScenePanel (シーン進行用UI) ──────────────────────
-function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
+function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const sc = gs.currentScene;
   if (!sc) return null;
   const pc = gs.pcs.find(p => p.uid === sc.pcUid);
@@ -270,6 +270,49 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   const btn = (bg, border, color, extra={}) => ({ width:"100%", padding:"8px", borderRadius:4, cursor:"pointer", background:bg, border:`1px solid ${border}`, color, fontSize:12, ...extra });
   const writeLog = (msg) => { upd(p => ({...p, log:[msg, ...p.log]})); };
   const endScene = () => { upd(p => ({ ...p, actedPcs: [...(p.actedPcs||[]), pc.uid], currentScene: null, log: [`${pc.name} のシーンを終了した`, ...p.log] })); };
+
+  const placeClueWithAnimation = (count) => {
+    animateDice(count * 2, count === 1 ? "手がかり1つ配置" : "手がかり2つ配置", (res) => {
+      upd(p => {
+        let newClues =[...(p.clues || [])];
+        let logs =[];
+        
+        for(let i=0; i<count; i++) {
+          const d1 = res[i*2];
+          const d2 = res[i*2+1];
+          const rollVal = Math.min(d1, d2) * 10 + Math.max(d1, d2);
+          
+          const candidates = SPOTS.filter(s => s.roll === rollVal);
+          let spotId = null;
+          
+          if (candidates.length === 2) {
+            if (d1 < d2) {
+              spotId = candidates.find(s => s.id.endsWith("A"))?.id;
+            } else {
+              spotId = candidates.find(s => s.id.endsWith("B"))?.id;
+            }
+          } else if (candidates.length === 1) {
+            spotId = candidates[0].id;
+          }
+          
+          if (spotId) {
+            if (!newClues.includes(spotId)) {
+              newClues.push(spotId);
+            }
+            const sName = getSpot(spotId)?.name;
+            logs.push(`${pc.name} は手がかりを [${spotId}] ${sName} に配置した（出目: ${d1}, ${d2}）`);
+          }
+        }
+        
+        return {
+          ...p,
+          clues: newClues,
+          currentScene: { ...p.currentScene, phase: "action_done" },
+          log:[...logs.reverse(), ...p.log]
+        };
+      });
+    });
+  };
 
   const chooseStay = () => {
     upd(p => {
@@ -491,9 +534,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
               {/* 成功・失敗判定 */}
               {(() => {
                 const maxDie = Math.max(...(sc.actionDice || [0]));
-                const isFumble = sc.actionDice?.every(d => d === 1);
+                const isFumble = sc.actionDice?.length > 0 && sc.actionDice.every(d => d === 1);
                 const isSpecial = sc.actionDice?.includes(6);
-                const isSuccess = maxDie >= sc.selectedEvent.target;
+                const isSuccess = maxDie >= sc.selectedEvent.target && !isFumble;
+                const hasClueHere = gs.clues?.includes(pc.currentSpot);
                 
                 return (
                   <div>
@@ -506,6 +550,38 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                       <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
                       {sc.selectedEvent.effect}
                     </div>
+
+                    {isSuccess ? (
+                      /* 成功時：現在のマスに手がかりがあるか */
+                      hasClueHere ? (
+                        <div style={{ marginTop: 12, padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
+                          <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストに割り当ててください。</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {(gs.quests || []).filter(q => !q.solved && q.revealed).map(q => (
+                              <button key={q.id} onClick={() => acquireClue(q.id)} style={{ padding: "6px", fontSize: 10, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.text, cursor: "pointer", textAlign: "left" }}>
+                                「{q.name}」に割り当てる
+                              </button>
+                            ))}
+                            {(gs.quests || []).filter(q => !q.solved && q.revealed).length === 0 && (
+                              <div style={{fontSize:9, color:C.textFaint}}>※公開中のクエストがないため、獲得できません</div>
+                            )}
+                          </div>
+                          <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 8, fontSize: 10 }}>獲得せず終了</button>
+                        </div>
+                      ) : (
+                        /* 成功時：現在のマスに手がかりがない ⇒ 手がかり2つ配置 */
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>💡 成功しましたが手がかりがないため、<br/>ランダムなスポットに手がかりを2つ配置します。</div>
+                          <button onClick={() => placeClueWithAnimation(2)} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 手がかり配置（2D6 ×2回）</button>
+                        </div>
+                      )
+                    ) : (
+                      /* 失敗時：手がかり1つ配置 */
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>💡 失敗したため、ランダムなスポットに<br/>手がかりを1つ配置します。</div>
+                        <button onClick={() => placeClueWithAnimation(1)} style={btn(C.redBg, C.redBorder, C.red)}>🎲 手がかり配置（2D6 ×1回）</button>
+                      </div>
+                    )}
 
                     <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={btn(C.blueBg, C.blueBorder, C.blue)}>確認して次へ</button>
                   </div>
@@ -522,7 +598,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
 const btnSmall = { width: 24, height: 24, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer" };
 
 // ── RightPanel ────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doPlaceClue, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doPlaceClue, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab] = useState("progress");
   const[diceResult, setDiceResult] = useState(null);
   const [diceAnim, setDiceAnim] = useState(false);
@@ -591,7 +667,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         </div>
       </div>
 
-      {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} />}
+      {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
 
       {!gs.currentScene && isGm && (
         <div style={{ padding:"8px",borderBottom:`1px solid ${C.border}`,flexShrink:0, background:"rgba(255,255,255,0.01)" }}>
