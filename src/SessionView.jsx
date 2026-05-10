@@ -1,6 +1,7 @@
 // SessionView.jsx  統合セッション画面（GM/PL共通）
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
+import { SPOT_DETAILS } from "./data/spots";
 
 export const ITEM_DATA = {
   "お酒":         { canUse: (pc) => (pc.items?.["お酒"]||0) > 0,
@@ -264,6 +265,34 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   if (!pc) return null;
   const isMyTurn = pc.uid === user?.uid || isGm;
 
+  const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events: [], desc: "" };
+
+  const startExplore = () => {
+    const hasTag = spotDetail.tags.some(t => (pc.tags || []).includes(t) || (pc.charName === t) || (pc.skillName === t));
+    const bonus = hasTag ? 1 : 0;
+    
+    upd(p => ({
+      ...p,
+      currentScene: { 
+        ...p.currentScene, 
+        phase: "explore_select", 
+        actionDiceCount: 2 + bonus,
+        hasTagBonus: hasTag 
+      }
+    }));
+  };
+
+  const selectEvent = (event) => {
+    upd(p => ({
+      ...p,
+      currentScene: { 
+        ...p.currentScene, 
+        phase: "explore_roll", 
+        selectedEvent: event 
+      }
+    }));
+  };
+
   const btn = (bg, border, color, extra={}) => ({ width:"100%", padding:"8px", borderRadius:4, cursor:"pointer", background:bg, border:`1px solid ${border}`, color, fontSize:12, ...extra });
   const writeLog = (msg) => { upd(p => ({...p, log:[msg, ...p.log]})); };
   const endScene = () => { upd(p => ({ ...p, actedPcs: [...(p.actedPcs||[]), pc.uid], currentScene: null, log: [`${pc.name} のシーンを終了した`, ...p.log] })); };
@@ -397,45 +426,90 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
             </div>
           )}
 
-          {sc.phase === "explore_roll" && (
-            <div>
-              <div style={{ fontSize:11, color:C.text, marginBottom:6, textAlign:"center" }}>行為判定（ダイス数を調整して振る）</div>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12, marginBottom:10 }}>
-                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, actionDiceCount:Math.max(1, (sc.actionDiceCount||2)-1)}}))} style={{width:24,height:24,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4}}>−</button>
-                <span style={{ fontSize:18, color:C.gold }}>{sc.actionDiceCount} 個</span>
-                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, actionDiceCount:(sc.actionDiceCount||2)+1}}))} style={{width:24,height:24,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4}}>＋</button>
+          {/* 1. イベント選択フェイズ */}
+          {sc.phase === "explore_select" && (
+            <div style={{ animation: "fadeUp 0.3s ease" }}>
+              <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>
+                探索イベントを選択
               </div>
-              <div style={{ fontSize:9, color:C.textFaint, textAlign:"center", marginBottom:8 }}>※タグの一致や「小銭」の使用がある場合は手動で増やしてください。</div>
-              <button onClick={rollExplore} style={btn(C.goldBg,C.goldDim,C.gold)}>🎲 判定ダイスを振る</button>
+              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 10, lineHeight: 1.4 }}>
+                {spotDetail.desc}
+              </div>
+              {spotDetail.tags.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <span style={{ fontSize: 9, color: C.textFaint }}>指定タグ: </span>
+                  {spotDetail.tags.map(t => <span key={t} style={{ fontSize: 9, color: (pc.tags||[]).includes(t)?C.green:C.textDim, marginLeft: 4 }}>《{t}》</span>)}
+                  {sc.hasTagBonus && <span style={{ fontSize: 9, color: C.green, marginLeft: 4 }}>(判定数+1適用済)</span>}
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {spotDetail.events.map((ev, i) => (
+                  <button key={i} onClick={() => selectEvent(ev)} style={btn("rgba(255,255,255,0.03)", C.border, C.text, { textAlign: "left", padding: "8px" })}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                      <span style={{ fontSize: 11 }}>{ev.name}</span>
+                      <span style={{ fontSize: 10, color: C.blue }}>目標: {ev.target}</span>
+                    </div>
+                    <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.2 }}>{ev.effect}</div>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 8, width: "100%" }}>← 戻る</button>
             </div>
           )}
 
-          {sc.phase === "explore_result" && (
-            <div>
-              <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:8 }}>
-                {sc.actionDice?.map((d,i)=><div key={i} style={{ width:32, height:32, background:"rgba(14,20,36,0.95)", border:`1px solid ${d===6?C.gold:d===1?C.red:C.blueBorder}`, borderRadius:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, color:d===6?C.gold:d===1?C.red:C.blue }}>{d}</div>)}
+          {/* 2. ダイスロールフェイズ */}
+          {sc.phase === "explore_roll" && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ padding: 8, background: "rgba(200,160,64,0.05)", borderRadius: 4, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: C.gold }}>{sc.selectedEvent.name}</div>
+                <div style={{ fontSize: 10, color: C.blue }}>目標値: {sc.selectedEvent.target}</div>
               </div>
-              {hasSpecial && <div style={{ fontSize:12, color:C.gold, textAlign:"center", marginBottom:6 }}>✨ スペシャル！（霊力増加か変調解除）</div>}
-              {isFumble && <div style={{ fontSize:12, color:C.red, textAlign:"center", marginBottom:6 }}>💀 ファンブル！（ランダムな変調を獲得）</div>}
               
-              <div style={{ fontSize:10, color:C.textDim, textAlign:"center", marginBottom:8 }}>結果を確認し、成功または失敗を選んでください</div>
-              <div style={{ display:"flex", gap:6 }}>
-                <button onClick={()=>writeLog(`${pc.name} は行為判定に【失敗】した`)} style={btn("rgba(255,255,255,0.05)",C.border,C.textFaint)}>失敗</button>
-                <button onClick={()=>writeLog(`${pc.name} は行為判定に【成功】した`)} style={btn(C.greenBg,C.greenBorder,C.green)}>成功</button>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 12 }}>
+                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: Math.max(1, sc.actionDiceCount - 1) } }))} style={btnSmall}>-</button>
+                <span style={{ fontSize: 20, color: C.gold }}>{sc.actionDiceCount} <span style={{fontSize:10}}>個</span></span>
+                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: sc.actionDiceCount + 1 } }))} style={btnSmall}>+</button>
+              </div>
+              
+              <button onClick={rollExplore} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
+            </div>
+          )}
+
+          {/* 3. 判定結果フェイズ */}
+          {sc.phase === "explore_result" && (
+            <div style={{ textAlign: "center" }}>
+               {/* 振られたダイスの表示 */}
+               <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
+                {sc.actionDice?.map((d, i) => (
+                  <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d===6?C.gold:d===1?C.red:C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d===6?C.gold:d===1?C.red:C.blue }}>
+                    {d}
+                  </div>
+                ))}
               </div>
 
-              {hasClueHere && (
-                <div style={{ marginTop:12, padding:8, background:"rgba(0,229,255,0.1)", border:"1px solid #00e5ff60", borderRadius:4 }}>
-                  <div style={{ fontSize:10, color:"#00e5ff", marginBottom:6 }}>💡 このスポットには手がかりがあります。成功した場合、クエストに割り当てられます。</div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                    {(gs.quests||[]).filter(q=>!q.solved && q.revealed).map(q=><button key={q.id} onClick={()=>acquireClue(q.id)} style={{ padding:"4px", fontSize:10, background:"rgba(255,255,255,0.05)", border:`1px solid ${C.border}`, color:C.text, cursor:"pointer", textAlign:"left" }}>「{q.name}」に割り当てる</button>)}
-                    {(gs.quests||[]).filter(q=>!q.solved && q.revealed).length===0 && <div style={{fontSize:10,color:C.textFaint}}>※公開中のクエストがありません</div>}
+              {/* 成功・失敗判定 */}
+              {(() => {
+                const maxDie = Math.max(...(sc.actionDice || [0]));
+                const isFumble = sc.actionDice?.every(d => d === 1);
+                const isSpecial = sc.actionDice?.includes(6);
+                const isSuccess = maxDie >= sc.selectedEvent.target;
+                
+                return (
+                  <div>
+                    <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 4 }}>
+                      {isFumble ? "ファンブル！" : (isSuccess ? "成功！" : "失敗…")}
+                    </div>
+                    {isSpecial && !isFumble && <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>✨ スペシャル！（霊力増加 or 変調解除）</div>}
+                    
+                    <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", lineHeight: 1.5, marginBottom: 12 }}>
+                      <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
+                      {sc.selectedEvent.effect}
+                    </div>
+
+                    <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={btn(C.blueBg, C.blueBorder, C.blue)}>確認して次へ</button>
                   </div>
-                </div>
-              )}
-              <div style={{ marginTop:12 }}>
-                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, phase:"action_done"}}))} style={btn("rgba(255,255,255,0.05)",C.border,C.textFaint,{padding:"6px"})}>結果処理を終了する</button>
-              </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -443,6 +517,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
     </div>
   );
 }
+
+const btnSmall = { width: 24, height: 24, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer" };
 
 // ── RightPanel ────────────────────────────────────────
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doPlaceClue, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction }) {
