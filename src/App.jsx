@@ -69,6 +69,24 @@ function getDistances(startSpotId) {
   return dists;
 }
 
+const getSpotIdByDice = (d1, d2) => {
+  const rollVal = d1 * 10 + d2;
+
+  const mapping = {
+    14: "14A", 41: "14B",
+    26: "26A", 62: "26B",
+    35: "35A", 53: "35B",
+    46: "46A", 64: "46B",
+    56: "56A", 65: "56B"
+  };
+
+  if (mapping[rollVal]) return mapping[rollVal];
+
+  const sortedVal = Math.min(d1, d2) * 10 + Math.max(d1, d2);
+  const spot = SPOTS.find(s => s.roll === sortedVal);
+  return spot ? spot.id : null;
+};
+
 const NEWSPAPER = {
   11:{title:"博麗神社の宴会は今夜",effect:"PCは「帰還」の際、「博麗神社」を自身の【拠点】として扱える。そこに移動したキャラクターは【やる気】+1点。"},
   22:{title:"博麗神社の宴会は今夜",effect:"PCは「帰還」の際、「博麗神社」を自身の【拠点】として扱える。そこに移動したキャラクターは【やる気】+1点。"},
@@ -437,17 +455,27 @@ function SessionApp({ roomCode, user }) {
 
   const doNewspaper = (paper) => { upd(p => ({ ...p, newspaper: paper, log: [`新聞[${paper.roll}]「${paper.title}」`, ...p.log] })); };
 
-  const doPlaceClue = () => {
-    function rollD6(){return Math.floor(Math.random()*6)+1;}
-    const a = rollD6(), b = rollD6();
-    const val = Math.min(a,b)*10 + Math.max(a,b);
-    const candidates = SPOTS.filter(s => s.roll === val);
-    if (candidates.length === 0) return;
-    const spot = candidates[Math.floor(Math.random() * candidates.length)];
-    upd(p => ({
-      ...p, cluePlaced: true, clues: [...new Set([...p.clues, spot.id])],
-      log: [`手がかりを[${val}]${spot.name}に配置`, ...p.log],
-    }));
+  const placeClueWithAnimation = async (count) => {
+    for (let i = 0; i < count; i++) {
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+  
+      upd(p => ({ ...p, cluePlacementDice: [d1, d2], log: ["手がかり配置のダイス中...", ...p.log] }));
+  
+      await new Promise(r => setTimeout(r, 1500));
+  
+      const targetId = getSpotIdByDice(d1, d2);
+      if (targetId) {
+        const spot = getSpot(targetId);
+        upd(p => ({
+          ...p,
+          clues: [...new Set([...(p.clues || []), targetId])],
+          cluePlacementDice: null,
+          log: [`💡 手がかりが [${spot.roll}] ${spot.name} に配置された`, ...p.log]
+        }));
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
   };
 
   const doReiryoku = () => {
