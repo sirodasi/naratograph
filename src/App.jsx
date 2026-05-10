@@ -191,9 +191,9 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
     <div ref={mapRef} style={{ position:"relative", width:"100%", height:"100%", overflow:"hidden", background:"#060810" }}>
       <style>{`
         @keyframes pulseReachable {
-          0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0px #64b5f6; }
-          50% { transform: translate(-50%, -50%) scale(1.3); box-shadow: 0 0 15px #64b5f6; }
-          100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0px #64b5f6; }
+          0% { transform: scale(1); box-shadow: 0 0 0px #64b5f6; }
+          50% { transform: scale(1.25); box-shadow: 0 0 20px #64b5f6; }
+          100% { transform: scale(1); box-shadow: 0 0 0px #64b5f6; }
         }
       `}</style>
 
@@ -225,7 +225,6 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
             transform:"translate(-50%,-50%)", 
             zIndex: isReachable ? 15 : (hasClue?4:pcsHere.length?4:3),
             cursor: (canClick && !isDream) ? "pointer" : "default",
-            animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none"
           }}
             onMouseEnter={()=>setHov(spot.id)} onMouseLeave={()=>setHov(null)}
             onClick={()=> {
@@ -256,11 +255,14 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
 
             <div style={{
               width:iSize, height:iSize, borderRadius:"50%",
-              background: isReachable ? "rgba(25, 118, 210, 0.9)" : areaColor(spot.area).bg,
+              background: areaColor(spot.area).bg,
               border:`2px solid ${borderCol}`, display:"flex", alignItems:"center", justifyContent:"center",
               fontWeight:"bold", fontSize: isDream ? fontSize-1 : fontSize,
               color: "#fff",
-              boxShadow: isReachable ? "0 0 10px #64b5f6" : (hasClue ? `0 0 ${Math.round(10*scale*1.5)}px rgba(0,229,255,0.7)` : "none"),
+              boxShadow: hasClue 
+                ? `0 0 15px rgba(0, 229, 255, 0.8), inset 0 0 10px rgba(0, 229, 255, 0.4)`
+                : "none",
+              animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none",
             }}>
               {isDream ? "◇" : (spot.roll || "?")}
             </div>
