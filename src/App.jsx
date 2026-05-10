@@ -578,6 +578,7 @@ function SessionApp({ roomCode, user }) {
         doNewspaper={doNewspaper} doPlaceClue={doPlaceClue} doAdvanceCycle={doAdvanceCycle}
         doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
         pendingAction={pendingAction} setPendingAction={setPendingAction}
+        SPOTS={SPOTS}
       />
 
       {questBanner && (
