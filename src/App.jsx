@@ -207,9 +207,17 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const isDream   = spot.id === "dream";
         const hasClue   = !isDream && gs.clues.includes(spot.id);
         const pcsHere   = !isDream ? (gs.pcs||[]).filter(pc => pc.currentSpot === spot.id) :[];
+        const exactDist = gs.currentScene?.exactMoveDist || null;
         
         const distance = dists[spot.id] ?? 999;
-        const isReachable = isMovePhase && distance > 0 && distance <= maxDist;
+        let isReachable = false;
+        if (isMovePhase) {
+          if (exactDist) {
+            isReachable = (distance === exactDist);
+          } else {
+            isReachable = (distance > 0 && distance <= maxDist);
+          }
+        }
         
         const sx = mapBounds.left + (spot.x/100) * mapBounds.width;
         const sy = mapBounds.top  + (spot.y/100) * mapBounds.height;
@@ -529,6 +537,11 @@ function SessionApp({ roomCode, user }) {
       const dists = getDistances(actingPc.currentSpot);
       const distance = dists[spotId] ?? 999;
       const maxDist = sc.selectedMoveDie || 0;
+      const exactDist = sc.exactMoveDist || null;
+
+      const isValid = exactDist 
+        ? (distance === exactDist) 
+        : (distance > 0 && distance <= maxDist);
 
       if ((distance > 0 && distance <= maxDist) || isGm) {
         upd(p => ({ 
