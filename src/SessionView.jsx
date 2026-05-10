@@ -27,6 +27,15 @@ export const ITEM_DATA = {
                     desc:"1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）", timing:"弾幕ごっこ前" },
 };
 
+const HAPPENING_TABLE = {
+  1: { title: "仲間が恋しい。", desc: "任意のPC1人を選ぶこと。あなたは強制的に、選んだPCのいるスポットに移動する。" },
+  2: { title: "【拠点】が恋しい。", desc: "あなたは強制的にあなたの【拠点】に移動する。" },
+  3: { title: "あれ？行き過ぎてしまったかも。", desc: "ダイスを1つ振り、あなたが今いるスポットから振った出目の分だけ離れた距離にあるスポット1つを選ぶこと。あなたはそのスポットに移動する。" },
+  4: { title: "道に迷ってしまった。", desc: "あなたはD66を振って出た目と同じ番号のスポットに移動する。" },
+  5: { title: "問題なし。", desc: "あなたは今いるスポットから6スポット分離れた距離までにある任意のスポットに移動する。" },
+  6: { title: "「あなたは食べてもいい人類？」", desc: "通りがかりの妖怪に襲われた！\n（※今回は「問題なし」と同様に、6マス以内への移動として処理します）" },
+};
+
 export const INIT_RESOURCES = () => ({ やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:20}, 攻撃力:{cur:1,max:5} });
 export const INIT_ITEMS = () => ({ お酒:0, 小銭:0, お守り:0, Pアイテム:0, 残機のかけら:0, スペカかけら:0, 妖器:0 });
 
@@ -333,7 +342,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const selectMoveDie = (val) => {
     upd(p => {
       let logAdd = `${pc.name} は移動ダイスで「${val}」を選んだ`;
-      if (val === 6) logAdd += "（ハプニング発生！）";
+      if (val === 6) {
+        logAdd += "（ハプニング発生！）";
+        return {...p, currentScene: {...p.currentScene, phase: "happening_roll"}, log:[logAdd, ...p.log]};
+      }
       return {...p, currentScene: {...p.currentScene, phase: "move_dest", selectedMoveDie: val}, log:[logAdd, ...p.log]};
     });
   };
@@ -420,18 +432,122 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
 
+          {/* ハプニング1: ダイスロール */}
+          {sc.phase === "happening_roll" && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:14, color:C.red, marginBottom:8, fontWeight:"bold" }}>⚠️ ハプニング発生！</div>
+              <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_result", happeningDice: res[0]} })))} style={btn(C.redBg, C.redBorder, C.red)}>🎲 ハプニング表を振る</button>
+            </div>
+          )}
+
+          {/* ハプニング2: 結果表示と分岐 */}
+          {sc.phase === "happening_result" && (() => {
+            const h = HAPPENING_TABLE[sc.happeningDice];
+            return (
+              <div style={{ textAlign:"center" }}>
+                <div style={{ fontSize:22, color:C.gold, marginBottom:4 }}>[{sc.happeningDice}]</div>
+                <div style={{ fontSize:13, color:C.red, marginBottom:8 }}>{h.title}</div>
+                <div style={{ fontSize:10, color:C.textDim, whiteSpace:"pre-wrap", marginBottom:14, lineHeight:1.5 }}>{h.desc}</div>
+                <button onClick={() => {
+                  const d = sc.happeningDice;
+                  if (d === 1) {
+                    const others = gs.pcs.filter(p => p.uid !== pc.uid);
+                    if (others.length === 0) upd(p => ({...p, currentScene: {...p.currentScene, phase: "action"}}));
+                    else upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_1"}}));
+                  } else if (d === 2) {
+                    upd(p => {
+                      const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: pc.baseSpotId } : x);
+                      return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は拠点[${getSpot(pc.baseSpotId)?.name}] に強制移動した`, ...p.log] };
+                    });
+                  } else if (d === 3) {
+                    upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_3_roll"}}));
+                  } else if (d === 4) {
+                    upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_4_roll"}}));
+                  } else {
+                    upd(p => ({...p, currentScene: {...p.currentScene, phase: "move_dest", selectedMoveDie: 6}}));
+                  }
+                }} style={btn(C.goldBg, C.goldDim, C.gold)}>この処理を進める</button>
+              </div>
+            );
+          })()}
+
+          {/* 出目1: 仲間の元へ */}
+          {sc.phase === "happening_1" && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>合流するPC（スポット）を選択してください</div>
+              {gs.pcs.filter(p => p.uid !== pc.uid).map(other => (
+                <button key={other.uid} onClick={() => {
+                  upd(p => {
+                    const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: other.currentSpot } : x);
+                    return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は[${getSpot(other.currentSpot)?.name}] にいる ${other.name} と合流した`, ...p.log] };
+                  });
+                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, {marginBottom:4})}>
+                  {other.name} （{getSpot(other.currentSpot)?.name}）
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 出目3: 行き過ぎた距離を振る */}
+          {sc.phase === "happening_3_roll" && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>行き過ぎてしまった距離を決定します</div>
+              <button onClick={() => animateDice(1, "移動距離", res => {
+                upd(p => ({...p, currentScene: {...p.currentScene, phase: "move_dest", exactMoveDist: res[0], selectedMoveDie: res[0]}, log:[`${pc.name} は行き過ぎて ${res[0]} マス離れた場所に移動する`, ...p.log]}));
+              })} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 距離を振る (1D6)</button>
+            </div>
+          )}
+
+          {/* 出目4: 迷い込んだ先を振る */}
+          {sc.phase === "happening_4_roll" && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>迷い込んだ先を決定します</div>
+              <button onClick={() => animateDice(2, "道に迷う", res => {
+                const val = Math.min(res[0], res[1]) * 10 + Math.max(res[0], res[1]);
+                const candidates = SPOTS.filter(s => s.roll === val);
+                upd(p => {
+                  let nextPhase = "action";
+                  let nextSpot = pc.currentSpot;
+                  if (candidates.length === 1) nextSpot = candidates[0].id;
+                  else if (candidates.length > 1) nextPhase = "happening_4_select";
+                  
+                  let logs = [`${pc.name} は道に迷い [${val}] を彷徨う…`, ...p.log];
+                  let newPcs = p.pcs;
+                  if (nextPhase === "action") {
+                    newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: nextSpot } : x);
+                    logs = [`${pc.name} は[${getSpot(nextSpot)?.name}] に迷い込んだ`, ...logs];
+                  }
+                  return {...p, pcs: newPcs, currentScene: {...p.currentScene, phase: nextPhase, happening4Val: val, happening4Candidates: candidates.map(c=>c.id)}, log: logs};
+                });
+              })} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 移動先を振る (D66)</button>
+            </div>
+          )}
+
+          {/* 出目4: A/Bなどの候補がある場合 */}
+          {sc.phase === "happening_4_select" && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>迷い込んだ先を選択してください</div>
+              {sc.happening4Candidates.map(spotId => (
+                <button key={spotId} onClick={() => {
+                  upd(p => {
+                    const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: spotId } : x);
+                    return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は[${getSpot(spotId)?.name}] に迷い込んだ`, ...p.log] };
+                  });
+                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, {marginBottom:4})}>
+                  [{getSpot(spotId).roll}] {getSpot(spotId).name}
+                </button>
+              ))}
+            </div>
+          )}
+
           {sc.phase === "move_dest" && (
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:11, color:C.gold, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                {/* GMの場合のみ距離調整ボタンを表示 */}
-                {isGm && (
-                  <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:Math.max(0, sc.selectedMoveDie-1)}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>−</button>
-                )}
+                {isGm && !sc.exactMoveDist && <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:Math.max(0, sc.selectedMoveDie-1)}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>−</button>}
                 
-                <span>【最大 {sc.selectedMoveDie} マス移動可能】</span>
+                <span>{sc.exactMoveDist ? `【ちょうど ${sc.exactMoveDist} マスにのみ移動可能】` : `【最大 ${sc.selectedMoveDie} マス移動可能】`}</span>
                 
-                {isGm && (
-                  <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>
+                {isGm && !sc.exactMoveDist && <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>}
                 )}
               </div>
               
