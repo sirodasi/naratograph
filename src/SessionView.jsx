@@ -267,32 +267,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
 
   const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events: [], desc: "" };
 
-  const startExplore = () => {
-    const hasTag = spotDetail.tags.some(t => (pc.tags || []).includes(t) || (pc.charName === t) || (pc.skillName === t));
-    const bonus = hasTag ? 1 : 0;
-    
-    upd(p => ({
-      ...p,
-      currentScene: { 
-        ...p.currentScene, 
-        phase: "explore_select", 
-        actionDiceCount: 2 + bonus,
-        hasTagBonus: hasTag 
-      }
-    }));
-  };
-
-  const selectEvent = (event) => {
-    upd(p => ({
-      ...p,
-      currentScene: { 
-        ...p.currentScene, 
-        phase: "explore_roll", 
-        selectedEvent: event 
-      }
-    }));
-  };
-
   const btn = (bg, border, color, extra={}) => ({ width:"100%", padding:"8px", borderRadius:4, cursor:"pointer", background:bg, border:`1px solid ${border}`, color, fontSize:12, ...extra });
   const writeLog = (msg) => { upd(p => ({...p, log:[msg, ...p.log]})); };
   const endScene = () => { upd(p => ({ ...p, actedPcs: [...(p.actedPcs||[]), pc.uid], currentScene: null, log: [`${pc.name} のシーンを終了した`, ...p.log] })); };
@@ -330,7 +304,32 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice }) {
     });
   };
 
-  const startExplore = () => upd(p => ({...p, currentScene: {...p.currentScene, phase: "explore_roll", actionDiceCount: 2}}));
+  const startExplore = () => {
+    const hasTag = spotDetail.tags.some(t => (pc.tags || []).includes(t) || (pc.charName === t) || (pc.skillName === t));
+    const bonus = hasTag ? 1 : 0;
+    
+    upd(p => ({
+      ...p,
+      currentScene: { 
+        ...p.currentScene, 
+        phase: "explore_select", 
+        actionDiceCount: 2 + bonus,
+        hasTagBonus: hasTag 
+      }
+    }));
+  };
+
+  const selectEvent = (event) => {
+    upd(p => ({
+      ...p,
+      currentScene: { 
+        ...p.currentScene, 
+        phase: "explore_roll", 
+        selectedEvent: event 
+      }
+    }));
+  };
+
   const rollExplore = () => {
     animateDice(sc.actionDiceCount||2, "行為判定", (res) => upd(p => ({...p, currentScene: {...p.currentScene, phase: "explore_result", actionDice: res}})));
   };
