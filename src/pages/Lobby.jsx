@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { auth } from "./firebase";
+import { auth } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
-import LoginScreen from "./components/lobby/LoginScreen";
-import RoomSelection from "./components/lobby/RoomSelection";
-import PrepRoom from "./components/lobby/PrepRoom";
-import { LoadingScreen } from "./components/common/LoadingScreen";
+import LoginScreen from "../components/lobby/LoginScreen";
+import RoomSelection from "../components/lobby/RoomSelection";
+import PrepRoom from "../components/lobby/PrepRoom";
+import { LoadingScreen } from "../components/common/LoadingScreen";
 
 export default function LobbyRoot() {
   const [user, setUser] = useState(undefined);

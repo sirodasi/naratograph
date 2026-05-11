@@ -83,3 +83,22 @@ export const AREA_COLORS = {
 
 export const CYCLES       = ["朝", "昼", "夕", "夜"];
 export const CYCLE_COLORS = ["#f9a825", "#29b6f6", "#ef6c00", "#3949ab"];
+
+/**
+ * IDからスポットを取得
+ * @param {string} id - スポットID (例: "11", "14A")
+ */
+export const getSpotById = (id) => SPOTS.find(s => s.id === id) || null;
+
+/**
+ * ダイスの出目からスポットを取得（1つのみ返す）
+ * 14や26のようにA/Bがある場合は、呼び出し側で考慮が必要
+ * @param {number} roll - 出目 (例: 11)
+ */
+export const getSpotByRoll = (roll) => SPOTS.find(s => s.roll === roll) || null;
+
+/**
+ * ダイスの出目から該当する全てのスポットを取得（A/B対応）
+ * @param {number} roll - 出目 (例: 14)
+ */
+export const getSpotsByRoll = (roll) => SPOTS.filter(s => s.roll === roll);
