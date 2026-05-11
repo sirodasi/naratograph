@@ -1,8 +1,9 @@
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { HAPPENING_TABLE } from "../../data/tables";
 import { getSpotById } from "../../data/gameData";
+import { useDiceRoll } from "../../hooks/useDiceRoll";
 
-export function SceneHappeningPhase({ gs, upd, pc, animateDice, SPOTS }) {
+export function SceneHappeningPhase({ gs, upd, pc, SPOTS }) {
   const { startRoll } = useDiceRoll(upd);
   const sc = gs.currentScene;
 

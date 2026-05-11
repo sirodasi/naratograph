@@ -1,8 +1,10 @@
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { SPOT_DETAILS } from "../../data/spots";
 import { getSpotById } from "../../data/gameData";
+import { useDiceRoll } from "../../hooks/useDiceRoll";
 
-export function SceneExplorePhase({ gs, upd, pc, animateDice, SPOTS }) {
+export function SceneExplorePhase({ gs, upd, pc, SPOTS }) {
+  const { startRoll } = useDiceRoll(upd);
   const sc = gs.currentScene;
   const spotDetail = SPOT_DETAILS[pc.currentSpot];
 
@@ -12,8 +14,8 @@ export function SceneExplorePhase({ gs, upd, pc, animateDice, SPOTS }) {
   };
 
   const rollExplore = () => {
-    animateDice(sc.actionDiceCount, "行為判定", (res) => {
-      upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result", actionDice: res } }));
+    startRoll(sc.actionDiceCount, "行為判定", (nextGs, res) => {
+      return { ...nextGs, currentScene: { ...nextGs.currentScene, phase: "explore_result", actionDice: res } };
     });
   };
 

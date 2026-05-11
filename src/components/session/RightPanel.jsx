@@ -2,10 +2,33 @@ import { useState } from "react";
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { PCCard } from "./PCCard";
 import { getSpotById } from "../../data/gameData";
+import { useDiceRoll } from "../../hooks/useDiceRoll";
 
 export function RightPanel({ gs, upd, isGm, CYCLES, CYCLE_COLORS }) {
+  const { startRoll } = useDiceRoll(upd);
   const [tab, setTab] = useState("progress");
   const cycleIdx = gs.cycleIdx || 0;
+
+  const handleNewspaper = () => {
+    startRoll(2, "文々。新聞表", (nextGs, res) => {
+      const val = Math.min(res[0], res[1]) * 10 + Math.max(res[0], res[1]);
+      const paper = NEWSPAPER[val] || { title: "記事なし", effect: "-" };
+      return { ...nextGs, newspaper: { roll: val, ...paper }, log: [`新聞: ${paper.title}`, ...nextGs.log] };
+    }, true);
+  };
+
+  const handleMorningClue = () => {
+    startRoll(2, "手がかり配置", (nextGs, res) => {
+      const val = Math.min(res[0], res[1]) * 10 + Math.max(res[0], res[1]);
+      const spot = getSpotsByRoll(val)[0];
+      return { 
+        ...nextGs, 
+        cluePlaced: true, 
+        clues: [...new Set([...nextGs.clues, spot.id])],
+        log: [`朝の手がかりを ${spot.name} に配置`, ...nextGs.log]
+      };
+    }, true);
+  };
 
   return (
     <div style={{ width: 300, display: "flex", flexDirection: "column", background: "#0b0d14", borderLeft: `1px solid ${COLORS.border}` }}>

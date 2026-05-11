@@ -64,7 +64,6 @@ export function SessionView({ gs, upd, sceneData, setSceneData, isGm, user, room
         <ScenePanel 
           gs={gs} upd={upd} user={user} isGm={isGm}
           SPOTS={SPOTS}
-          animateDice={() => {} /* App.jsx側のDiceロジックが必要なら統合 */} 
         />
 
         {/* マップ表示 */}
