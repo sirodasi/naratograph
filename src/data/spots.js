@@ -1,4 +1,3 @@
-// spots.js
 export const SPOT_DETAILS = {
   "11": {
     tags: ["人間"],

@@ -1,6 +1,5 @@
-// ScenarioEditor.jsx - シナリオ管理・編集
 import { useState, useEffect, useCallback } from "react";
-import { db, auth } from "../firebase";
+import { db, auth } from "./firebase";
 import { ref, onValue, set, update, push, remove } from "firebase/database";
 
 // キャラクター名一覧（選択不可設定用・循環import回避のため独立定義）
