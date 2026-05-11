@@ -1,6 +1,8 @@
+// src/SessionView.jsx
 import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
+import { EDGES } from "./data/gameData";
 import { C } from "./styles/colors";
  
 // ─── ユーティリティ ───────────────────────────────────────────────
@@ -203,10 +205,10 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
  
 // ─── PCCard ───────────────────────────────────────────────────────
 export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
-  const [itemModal, setItemModal]   = useState(null);
+  const[itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const[expanded, setExpanded]     = useState(false);
-  const [gmEdit, setGmEdit]         = useState(false);
+  const[gmEdit, setGmEdit]         = useState(false);
  
   const resources     = pc.resources || INIT_RESOURCES();
   const items         = pc.items     || INIT_ITEMS();
@@ -369,6 +371,607 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   );
 }
  
+// ─── ActionRenderer (イベント効果実行エンジン) ─────────────────────────
+function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone }) {
+  const [selectedLose, setSelectedLose] = useState(null);
+
+  if (isDone) {
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>イベント効果の適用が完了しました</div>
+        <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_clue" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>手がかりの処理へ</button>
+      </div>
+    );
+  }
+
+  if (!act) return null;
+
+  const proceed = (logs =[], extraUpdates = {}) => {
+    setSelectedLose(null);
+    upd(p => {
+      const newPcs = p.pcs.map(x => {
+        if (x.uid !== pc.uid) return x;
+        const base = { ...x };
+        if (extraUpdates.pc) {
+          if (extraUpdates.pc.resources) base.resources = { ...base.resources, ...extraUpdates.pc.resources };
+          if (extraUpdates.pc.items) base.items = { ...base.items, ...extraUpdates.pc.items };
+          if (extraUpdates.pc.badStatus) base.badStatus = extraUpdates.pc.badStatus;
+          if (extraUpdates.pc.bonds) base.bonds = extraUpdates.pc.bonds;
+          if (extraUpdates.pc.tags) base.tags = extraUpdates.pc.tags;
+          if (extraUpdates.pc.flags) base.flags = { ...base.flags, ...extraUpdates.pc.flags };
+          if (extraUpdates.pc.currentSpot) base.currentSpot = extraUpdates.pc.currentSpot;
+        }
+        return base;
+      });
+      const p2 = extraUpdates.pc ? { ...p, pcs: newPcs } : p;
+      const p3 = extraUpdates.gs ? { ...p2, ...extraUpdates.gs } : p2;
+      return { 
+        ...p3, 
+        currentScene: { ...p3.currentScene, currentActionIndex: (p3.currentScene.currentActionIndex || 0) + 1 }, 
+        log:[...logs.reverse(), ...p3.log] 
+      };
+    });
+  };
+
+  // 1. GAIN_REIRYOKU
+  if (act.type === "GAIN_REIRYOKU") {
+    if (act.amount === "1D6") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>【霊力増加】ダイスを振って回復量を決めます</div>
+          <button onClick={() => animateDice(1, "霊力回復", res => {
+            const gain = res[0];
+            let nextCur = pc.resources.霊力?.cur || 0;
+            if (!(pc.badStatus ||[]).includes("スランプ")) {
+              nextCur = Math.min(pc.resources.霊力?.max || 20, nextCur + gain);
+            }
+            proceed([`${pc.name} は霊力を ${gain} 点獲得した`], {
+              pc: { resources: { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } }
+            });
+          })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 1D6 を振る</button>
+        </div>
+      );
+    } else {
+      const gain = parseInt(act.amount) || 0;
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>【霊力増加】霊力を {gain} 点獲得します</div>
+          <button onClick={() => {
+            let nextCur = pc.resources.霊力?.cur || 0;
+            if (!(pc.badStatus ||[]).includes("スランプ")) {
+              nextCur = Math.min(pc.resources.霊力?.max || 20, nextCur + gain);
+            }
+            proceed([`${pc.name} は霊力を ${gain} 点獲得した`], {
+              pc: { resources: { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } }
+            });
+          }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>適用する</button>
+        </div>
+      );
+    }
+  }
+
+  // 2. LOSE_REIRYOKU
+  if (act.type === "LOSE_REIRYOKU") {
+    const lose = parseInt(act.amount) || 0;
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>【霊力減少】霊力を {lose} 点失います</div>
+        <button onClick={() => {
+          const nextCur = Math.max(0, (pc.resources.霊力?.cur || 0) - lose);
+          proceed([`${pc.name} は霊力を ${lose} 点失った`], {
+            pc: { resources: { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } }
+          });
+        }} style={btnFull(C.redBg, C.redBorder, C.red)}>適用する</button>
+      </div>
+    );
+  }
+
+  // 3. GAIN_MOTIVE
+  if (act.type === "GAIN_MOTIVE") {
+    const gain = parseInt(act.amount) || 0;
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+          let nextCur = pc.resources.やる気?.cur || 0;
+          if (!(pc.badStatus ||[]).includes("だるい")) {
+            nextCur = Math.min(pc.resources.やる気?.max || 3, nextCur + gain);
+          }
+          proceed([`${pc.name} はやる気を ${gain} 点獲得した`], {
+            pc: { resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: nextCur } } }
+          });
+        }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>やる気を {gain} 点獲得する</button>
+      </div>
+    );
+  }
+
+  // 4. LOSE_MOTIVE
+  if (act.type === "LOSE_MOTIVE") {
+    const lose = parseInt(act.amount) || 0;
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+          const nextCur = Math.max(0, (pc.resources.やる気?.cur || 0) - lose);
+          proceed([`${pc.name} はやる気を ${lose} 点失った`], {
+            pc: { resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: nextCur } } }
+          });
+        }} style={btnFull(C.redBg, C.redBorder, C.red)}>やる気を {lose} 点失う</button>
+      </div>
+    );
+  }
+
+  // 5. GAIN_ITEM
+  if (act.type === "GAIN_ITEM") {
+    const count = parseInt(act.count) || 1;
+    if (act.item === "random") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <button onClick={() => animateDice(1, "アイテム獲得", res => {
+            const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
+            const itemName = itemNames[res[0] - 1];
+            proceed([`${pc.name} は【${itemName}】を ${count} 個獲得した`], {
+              pc: { items: { ...pc.items, [itemName]: (pc.items[itemName] || 0) + count } }
+            });
+          })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを獲得</button>
+        </div>
+      );
+    } else if (act.item === "any") {
+      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら", "妖器"];
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>獲得するアイテムを選んでください</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+            {itemNames.map(itemName => (
+              <button key={itemName} onClick={() => {
+                proceed([`${pc.name} は【${itemName}】を ${count} 個獲得した`], {
+                  pc: { items: { ...pc.items, [itemName]: (pc.items[itemName] || 0) + count } }
+                });
+              }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
+            ))}
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <button onClick={() => {
+            proceed([`${pc.name} は【${act.item}】を ${count} 個獲得した`], {
+              pc: { items: { ...pc.items, [act.item]: (pc.items[act.item] || 0) + count } }
+            });
+          }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>【{act.item}】を獲得する</button>
+        </div>
+      );
+    }
+  }
+
+  // 6. LOSE_ITEM
+  if (act.type === "LOSE_ITEM") {
+    const ownedItems = Object.entries(pc.items || {}).filter(([k, v]) => v > 0).map(([k]) => k);
+    if (ownedItems.length === 0) {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.textDim, marginBottom: 8, fontSize: 11 }}>失うアイテムを持っていません</div>
+          <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+        </div>
+      );
+    }
+    
+    if (act.item === "all") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>すべてのアイテムを失います</div>
+          <button onClick={() => {
+            proceed([`${pc.name} は所持しているアイテムを全て失った`], {
+              pc: { items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカかけら: 0, 妖器: 0 } }
+            });
+          }} style={btnFull(C.redBg, C.redBorder, C.red)}>適用する</button>
+        </div>
+      );
+    } else if (act.item === "random") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <button onClick={() => {
+            const loseItem = ownedItems[Math.floor(Math.random() * ownedItems.length)];
+            proceed([`${pc.name} は【${loseItem}】を失った`], {
+              pc: { items: { ...pc.items, [loseItem]: Math.max(0, pc.items[loseItem] - 1) } }
+            });
+          }} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 ランダムにアイテムを失う</button>
+        </div>
+      );
+    } else if (act.item === "any") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>失うアイテムを選んでください</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+            {ownedItems.map(itemName => (
+              <button key={itemName} onClick={() => {
+                proceed([`${pc.name} は【${itemName}】を失った`], {
+                  pc: { items: { ...pc.items, [itemName]: Math.max(0, pc.items[itemName] - 1) } }
+                });
+              }} style={btnFull("rgba(192,57,43,0.15)", C.redBorder, C.red)}>{itemName}</button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // 7. GAIN_SELECT_ITEM
+  if (act.type === "GAIN_SELECT_ITEM") {
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>獲得するアイテムを1つ選んでください</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 4 }}>
+          {act.select.map(itemName => (
+            <button key={itemName} onClick={() => {
+              proceed([`${pc.name} は【${itemName}】を獲得した`], {
+                pc: { items: { ...pc.items,[itemName]: (pc.items[itemName] || 0) + 1 } }
+              });
+            }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 8. OPTIONAL_TRADE
+  if (act.type === "OPTIONAL_TRADE") {
+    const ownedItems = Object.entries(pc.items || {}).filter(([k, v]) => v > 0).map(([k]) => k);
+    if (ownedItems.length === 0) {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.textDim, marginBottom: 8, fontSize: 11 }}>交換できるアイテムを持っていません</div>
+          <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+        </div>
+      );
+    }
+    
+    if (!selectedLose) {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.text, marginBottom: 8, fontSize: 11 }}>アイテムを手放して交換しますか？</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 8 }}>
+            {ownedItems.map(itemName => (
+              <button key={itemName} onClick={() => setSelectedLose(itemName)} style={btnFull("rgba(192,57,43,0.15)", C.redBorder, C.red)}>{itemName} を手放す</button>
+            ))}
+          </div>
+          <button onClick={() => proceed()} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>交換しない</button>
+        </div>
+      );
+    }
+
+    if (act.gain === "any") {
+      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら", "妖器"];
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>【{selectedLose}】と交換で獲得するアイテムを選んでください</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+            {itemNames.map(itemName => (
+              <button key={itemName} onClick={() => {
+                proceed([`${pc.name} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
+                  pc: { items: { ...pc.items, [selectedLose]: Math.max(0, pc.items[selectedLose] - 1), [itemName]: (pc.items[itemName] || 0) + 1 } }
+                });
+              }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
+            ))}
+          </div>
+        </div>
+      );
+    } else if (act.gain === "random") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <button onClick={() => animateDice(1, "アイテム交換", res => {
+            const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
+            const itemName = itemNames[res[0] - 1];
+            proceed([`${pc.name} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
+              pc: { items: { ...pc.items, [selectedLose]: Math.max(0, pc.items[selectedLose] - 1), [itemName]: (pc.items[itemName] || 0) + 1 } }
+            });
+          })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを獲得する</button>
+        </div>
+      );
+    }
+  }
+
+  // 9. GAIN_BAD_STATUS / CURE_BAD_STATUS
+  if (act.type === "GAIN_BAD_STATUS") {
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => animateDice(1, "変調決定", res => {
+          const bsName = BAD_STATUS_TABLE[res[0]].name;
+          const newBs  = Array.from(new Set([...(pc.badStatus || []), bsName]));
+          const nextYaruki = bsName === "だるい" ? 1 : pc.resources.やる気?.cur;
+          proceed([`${pc.name} は変調《${bsName}》を獲得した`], {
+            pc: { badStatus: newBs, resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: nextYaruki } } }
+          });
+        })} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 ランダムな変調を獲得する (1D6)</button>
+      </div>
+    );
+  }
+
+  if (act.type === "CURE_BAD_STATUS") {
+    const bs = pc.badStatus ||[];
+    if (bs.length === 0) {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.textDim, marginBottom: 8, fontSize: 11 }}>回復する変調がありません</div>
+          <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+        </div>
+      );
+    }
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>解除する変調を選んでください</div>
+        {bs.map(b => (
+          <button key={b} onClick={() => {
+            proceed([`${pc.name} は変調《${b}》を解除した`], {
+              pc: { badStatus: pc.badStatus.filter(x => x !== b) }
+            });
+          }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>《{b}》を解除</button>
+        ))}
+      </div>
+    );
+  }
+
+  // 10. STOP_MOVEMENT
+  if (act.type === "STOP_MOVEMENT") {
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>足止めを受けました</div>
+        <button onClick={() => {
+          proceed([`${pc.name} は足止めを受けた`], { pc: { flags: { ...pc.flags, stopped: true } } });
+        }} style={btnFull(C.redBg, C.redBorder, C.red)}>適用する</button>
+      </div>
+    );
+  }
+
+  // 11. STOP_IF_NO_ITEM
+  if (act.type === "STOP_IF_NO_ITEM") {
+    const hasItem = Object.values(pc.items || {}).some(v => v > 0);
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+          if (!hasItem) {
+             proceed([`${pc.name} はアイテムを持っていなかったため、足止めを受けた`], { pc: { flags: { ...pc.flags, stopped: true } } });
+          } else {
+             proceed();
+          }
+        }} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>アイテムの所持を確認する</button>
+      </div>
+    );
+  }
+
+  // 12. GAIN_BOND
+  if (act.type === "GAIN_BOND") {
+    if ((pc.badStatus ||[]).includes("不機嫌")) {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>変調《不機嫌》のため絆を獲得できません</div>
+          <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+        </div>
+      );
+    }
+
+    if (act.target === "self") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <button onClick={() => {
+             const bonds = Array.from(new Set([...(pc.bonds || []), pc.name]));
+             proceed([`${pc.name} は自身への絆を獲得した`], { pc: { bonds } });
+          }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>自身への絆を獲得する</button>
+        </div>
+      );
+    }
+
+    if (act.target === "here") {
+      const others = gs.pcs.filter(p => p.uid !== pc.uid && p.currentSpot === pc.currentSpot && !(p.badStatus ||[]).includes("不機嫌"));
+      if (others.length === 0) {
+        return (
+          <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+            <div style={{ color: C.textDim, marginBottom: 8, fontSize: 11 }}>同じスポットに絆を獲得できるキャラクターがいません</div>
+            <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+          </div>
+        );
+      }
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>絆を獲得するキャラクターを選んでください</div>
+          {others.map(o => (
+            <button key={o.uid} onClick={() => {
+              const bonds = Array.from(new Set([...(pc.bonds || []), o.charName || o.name]));
+              proceed([`${pc.name} は《${o.charName || o.name}への絆》を獲得した`], { pc: { bonds } });
+            }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
+              {o.name}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (act.target === "elsewhere") {
+      const others = gs.pcs.filter(p => p.uid !== pc.uid && p.currentSpot !== pc.currentSpot && !(p.badStatus ||[]).includes("不機嫌"));
+      if (others.length === 0) {
+        return (
+          <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+            <div style={{ color: C.textDim, marginBottom: 8, fontSize: 11 }}>他のスポットに絆を獲得できるキャラクターがいません</div>
+            <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+          </div>
+        );
+      }
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>絆を獲得するキャラクターを選んでください</div>
+          <select value={selectedLose || ""} onChange={e => setSelectedLose(e.target.value)} style={{ width: "100%", padding: 6, marginBottom: 8, background: "rgba(255,255,255,0.05)", color: C.text }}>
+             <option value="">キャラクターを選択...</option>
+             {others.map(o => <option key={o.uid} value={o.charName || o.name}>{o.name}</option>)}
+          </select>
+          <button disabled={!selectedLose} onClick={() => {
+             const bonds = Array.from(new Set([...(pc.bonds || []), selectedLose]));
+             proceed([`${pc.name} は《${selectedLose}への絆》を獲得した`], { pc: { bonds } });
+          }} style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}>獲得する</button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+           const bonds = Array.from(new Set([...(pc.bonds || []), act.target]));
+           proceed([`${pc.name} は《${act.target}への絆》を獲得した`], { pc: { bonds } });
+        }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>《{act.target}への絆》を獲得する</button>
+      </div>
+    );
+  }
+
+  // 13. LOSE_LIFE
+  if (act.type === "LOSE_LIFE") {
+    const lose = parseInt(act.amount) || 1;
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+          const nextCur = Math.max(0, (pc.resources.残り人数?.cur || 0) - lose);
+          proceed([`${pc.name} は残り人数を ${lose} 点失った`], {
+            pc: { resources: { ...pc.resources, 残り人数: { ...pc.resources.残り人数, cur: nextCur } } }
+          });
+        }} style={btnFull(C.redBg, C.redBorder, C.red)}>残り人数を {lose} 点失う</button>
+      </div>
+    );
+  }
+
+  // 14. MOVE
+  if (act.type === "MOVE") {
+    if (act.spot === "adjacent") {
+      const adjacentIds = EDGES.filter(([a, b]) => a === pc.currentSpot || b === pc.currentSpot).map(([a, b]) => a === pc.currentSpot ? b : a);
+      const candidates = SPOTS.filter(s => adjacentIds.includes(s.id));
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>移動先（隣接スポット）を選んでください</div>
+          {candidates.map(s => (
+            <button key={s.id} onClick={() => {
+              proceed([`${pc.name} は [${s.name}] に移動した`], { pc: { currentSpot: s.id } });
+            }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>[{s.roll}] {s.name}</button>
+          ))}
+        </div>
+      );
+    }
+
+    if (act.spot === "random") {
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <button onClick={() => animateDice(2, "ランダム移動", res => {
+            const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
+            if (nextSpotId) {
+              proceed([`${pc.name} は[${getSpot(nextSpotId)?.name}] に移動した`], { pc: { currentSpot: nextSpotId } });
+            } else {
+              proceed(["(移動先が見つからなかった)"]);
+            }
+          })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなスポットへ移動</button>
+        </div>
+      );
+    }
+    
+    if (act.spot === "base_or_any") {
+       if (pc.baseSpotId === "dream") {
+          return (
+             <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+               <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>拠点が夢の世界のため、任意の場所に移動します</div>
+               <button onClick={() => animateDice(2, "移動先決定", res => {
+                 const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
+                 proceed([`${pc.name} は[${getSpot(nextSpotId)?.name}] に移動した`], { pc: { currentSpot: nextSpotId } });
+               })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 任意の場所へ (D66で代用)</button>
+             </div>
+          );
+       } else {
+          return (
+             <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+               <button onClick={() => {
+                 proceed([`${pc.name} は拠点に移動した`], { pc: { currentSpot: pc.baseSpotId } });
+               }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>拠点に移動する</button>
+             </div>
+          );
+       }
+    }
+
+    if (act.spot === "pc") {
+      const others = gs.pcs.filter(p => p.uid !== pc.uid);
+      if (others.length === 0) {
+        return (
+          <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+            <div style={{ color: C.textDim, marginBottom: 8, fontSize: 11 }}>移動できるPCがいません</div>
+            <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ</button>
+          </div>
+        );
+      }
+      return (
+        <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+          <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>移動先のPCを選んでください</div>
+          {others.map(o => (
+            <button key={o.uid} onClick={() => {
+              const extraPc = { currentSpot: o.currentSpot };
+              if (act.gainBond && !(pc.badStatus ||[]).includes("不機嫌") && !(o.badStatus ||[]).includes("不機嫌")) {
+                extraPc.bonds = Array.from(new Set([...(pc.bonds || []), o.charName || o.name]));
+              }
+              proceed([`${pc.name} は ${o.name} のいるスポットへ移動した`], { pc: extraPc });
+            }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
+              {o.name}
+            </button>
+          ))}
+        </div>
+      );
+    }
+  }
+
+  // 15. GAIN_SPELL
+  if (act.type === "GAIN_SPELL") {
+    const gain = parseInt(act.amount) || 1;
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+          let nextCur = pc.resources.スペカ?.cur || 0;
+          nextCur = Math.min(pc.resources.スペカ?.max || 5, nextCur + gain);
+          proceed([`${pc.name} はスペルカードを ${gain} 点獲得した`], {
+            pc: { resources: { ...pc.resources, スペカ: { ...pc.resources.スペカ, cur: nextCur } } }
+          });
+        }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>スペルカードを {gain} 点獲得する</button>
+      </div>
+    );
+  }
+
+  // 16. GAIN_TAG
+  if (act.type === "GAIN_TAG") {
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => {
+          proceed([`${pc.name} はセッション中《${act.tag}》のタグを得た`], {
+            pc: { tags: Array.from(new Set([...(pc.tags || []), act.tag])) }
+          });
+        }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>タグ《{act.tag}》を獲得する</button>
+      </div>
+    );
+  }
+
+  // 17. GAIN_CLUE
+  if (act.type === "GAIN_CLUE") {
+    return (
+      <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+        <button onClick={() => animateDice(2, "手がかり配置", res => {
+          const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
+          if (nextSpotId) {
+             const newClues = Array.from(new Set([...(gs.clues || []), nextSpotId]));
+             proceed([`手がかりを[${getSpot(nextSpotId)?.name}] に配置した`], { gs: { clues: newClues } });
+          } else {
+             proceed(["(手がかりの配置先が見つからなかった)"]);
+          }
+        })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 手がかりを配置する</button>
+      </div>
+    );
+  }
+
+  // フォールバック
+  return (
+    <div style={{ textAlign: "center" }}>
+      <button onClick={() => proceed()} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>次へ (未実装: {act.type})</button>
+    </div>
+  );
+}
+ 
 // ─── ScenePanel ───────────────────────────────────────────────────
 function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const sc = gs.currentScene;
@@ -457,36 +1060,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
  
   const selectEvent  = ev  => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_roll", selectedEvent: ev } }));
   const rollExplore  = ()  => animateDice(sc.actionDiceCount || 2, "行為判定", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result", actionDice: res } })));
- 
-  const gainBond = targetName => {
-    // 不機嫌チェック
-    if ((pc.badStatus ||[]).includes("不機嫌")) {
-      writeLog(`${pc.name} は変調《不機嫌》のため絆を獲得できなかった`);
-      return;
-    }
-    const targetPc = gs.pcs.find(p => p.name === targetName || p.charName === targetName);
-    if (targetPc && (targetPc.badStatus ||[]).includes("不機嫌")) {
-      writeLog(`${targetName} が変調《不機嫌》のため絆を獲得できなかった`);
-      return;
-    }
-
-    upd(p => {
-      const newPcs = p.pcs.map(x => {
-        if (x.uid !== pc.uid) return x;
-        const bonds = [...(x.bonds || [])];
-        if (!bonds.includes(targetName)) bonds.push(targetName);
-        return { ...x, bonds };
-      });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.name} は《${targetName}への絆》を獲得した`, ...p.log] };
-    });
-  };
- 
-  const gainItem = (itemName, count = 1) => {
-    upd(p => {
-      const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, items: { ...x.items, [itemName]: (x.items[itemName] || 0) + count } });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.name} は【${itemName}】を獲得した`, ...p.log] };
-    });
-  };
  
   const acquireClue = questId => {
     upd(p => {
@@ -752,28 +1325,69 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                       <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
                       {sc.selectedEvent?.effect}
                     </div>
-                    {isSuccess ? (
-                      hasClueHere ? (
-                        <div style={{ padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
-                          <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストを選択してください。</div>
-                          {(gs.quests ||[]).filter(q => !q.solved && q.revealed).map(q => (
-                            <button key={q.id} onClick={() => acquireClue(q.id)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { fontSize: 10, marginBottom: 4 })}>「{q.name}」</button>
-                          ))}
-                        </div>
-                      ) : (
-                        <button onClick={() => placeClueWithAnimation(2)} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 手がかりを2つ配置</button>
-                      )
-                    ) : (
-                      <button onClick={() => placeClueWithAnimation(1)} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 手がかりを1つ配置</button>
-                    )}
+                    <button onClick={() => {
+                       const event = sc.selectedEvent;
+                       const actions =[];
+                       if (event.onAlways) actions.push(...event.onAlways);
+                       if (isSuccess && event.onSuccess) actions.push(...event.onSuccess);
+                       if (!isSuccess && event.onFailure) actions.push(...event.onFailure);
+                       
+                       upd(p => ({
+                         ...p,
+                         currentScene: {
+                           ...p.currentScene,
+                           phase: "explore_apply_effect",
+                           eventActions: actions,
+                           currentActionIndex: 0,
+                           isSuccess // 手がかり処理のために残す
+                         }
+                       }));
+                    }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>イベント効果を適用する</button>
                   </div>
                 )}
               </div>
             );
           })()}
+
+          {sc.phase === "explore_apply_effect" && (
+            <ActionRenderer 
+              act={(sc.eventActions || [])[sc.currentActionIndex || 0]} 
+              pc={pc} gs={gs} upd={upd} animateDice={animateDice} 
+              SPOTS={SPOTS} getSpot={getSpot} 
+              isDone={(sc.currentActionIndex || 0) >= (sc.eventActions ||[]).length}
+            />
+          )}
+
+          {sc.phase === "explore_clue" && (() => {
+            if (sc.isSuccess) {
+              if (hasClueHere) {
+                return (
+                  <div style={{ padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
+                    <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストを選択してください。</div>
+                    {(gs.quests ||[]).filter(q => !q.solved && q.revealed).map(q => (
+                      <button key={q.id} onClick={() => acquireClue(q.id)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { fontSize: 10, marginBottom: 4 })}>「{q.name}」</button>
+                    ))}
+                    <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btnFull("none", "none", C.textFaint), marginTop: 8 }}>クエストに配置しない</button>
+                  </div>
+                );
+              } else {
+                return (
+                  <div style={{ textAlign: "center" }}>
+                    <button onClick={() => placeClueWithAnimation(2)} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 手がかりを2つ配置</button>
+                  </div>
+                );
+              }
+            } else {
+              return (
+                <div style={{ textAlign: "center" }}>
+                  <button onClick={() => placeClueWithAnimation(1)} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 手がかりを1つ配置</button>
+                </div>
+              );
+            }
+          })()}
  
           {sc.phase === "action_done" && (
-            <div style={{ textAlign: "center" }}>
+            <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
               <button onClick={endScene} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
             </div>
@@ -831,7 +1445,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     if (!targetPc) return;
     upd(p => ({
       ...p,
-      currentScene: { pcUid: sceneSelect, phase: "move_or_stay", moveDice: [], actionDice:[], actionDiceCount: 2 },
+      currentScene: { pcUid: sceneSelect, phase: "move_or_stay", moveDice:[], actionDice:[], actionDiceCount: 2 },
       log:[`🎬 ${targetPc.name} のシーンが開始された`, ...p.log],
     }));
     setSceneSelect("");
@@ -850,7 +1464,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         fn: () => animateDice(2, "朝の手がかり配置", res => {
           const spotId = getSpotByD66(res[0], res[1], SPOTS);
           if (spotId) {
-            upd(p => ({ ...p, cluePlaced: true, clues: [...new Set([...p.clues, spotId])], log: [`手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置（出目: ${res[0]}, ${res[1]}）`, ...p.log] }));
+            upd(p => ({ ...p, cluePlaced: true, clues:[...new Set([...p.clues, spotId])], log: [`手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置（出目: ${res[0]}, ${res[1]}）`, ...p.log] }));
           }
         }),
       };
@@ -918,8 +1532,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       <button onClick={() => upd(p => {
                         const isNowSolved = !q.solved;
                         const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
-                        
-                        // クエスト解決をトリガーとした連鎖公開のチェック
                         if (isNowSolved) {
                           (p.scenarioData?.quests ||[]).forEach(scQ => {
                             if (scQ.unlockType === "quest" && scQ.unlockQuestId === q.id) {
@@ -946,7 +1558,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
                 {gs.clues.map(id => (
                   <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, padding: "2px 0" }}>
-                    <span style={{ color: "#00bcd4" }}>💡 [{getSpot(id)?.roll}] {getSpot(id)?.name}</span>
+                    <span style={{ color: "#00bcd4" }}>💡[{getSpot(id)?.roll}] {getSpot(id)?.name}</span>
                     {isGm && <button onClick={() => upd(p => ({ ...p, clues: p.clues.filter(c => c !== id) }))} style={{ width: 16, height: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>}
                   </div>
                 ))}
