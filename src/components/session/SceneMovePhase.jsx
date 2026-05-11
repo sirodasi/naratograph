@@ -3,10 +3,9 @@ import { useDiceRoll } from "../../hooks/useDiceRoll";
 import { DiceDisplay } from "../common/DiceDisplay";
 import { getSpotById } from "../../data/gameData";
 
-export function SceneMovePhase({ gs, upd, pc, animateDice }) {
+export function SceneMovePhase({ gs, upd, pc, SPOTS }) {
   const { startRoll } = useDiceRoll(upd);
   const sc = gs.currentScene;
-  const { diceResult, diceAnim, animateDice } = useDiceRoll();
 
   const chooseMove = () => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "move_roll" } }));
   const chooseStay = () => {
