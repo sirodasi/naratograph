@@ -3,10 +3,9 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
-import { BackstoryScreen, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS } from "./SessionView";
+import { BackstoryScreen, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, getSpotByD66 } from "./SessionView";
 import mapImg from "./assets/map.png";
 
-// ★ 変更: データ定数は gameData.js に切り出してインポート
 import {
   SPOTS, EDGES, NEWSPAPER,
   AREA_COLORS, CYCLES, CYCLE_COLORS,
@@ -51,24 +50,24 @@ const DEFAULT_GS = {
   sessionPhase: "intro",
   day: 1,
   cycleIdx: 0,
-  clues: [],
+  clues:[],
   newspaper: null,
   newspaperDone: false,
   cluePlaced: false,
   reiryokuDone: false,
-  resources: { やる気: [1, 3], 残り人数: [2, 5], スペカ: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力: [1, 5] },
+  resources: { やる気:[1, 3], 残り人数: [2, 5], スペカ: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力:[1, 5] },
   items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残魔かけら: 0, スペカかけら: 0 },
   quests: [],
   log: [],
-  pcs: [],
+  pcs:[],
   sceneMode: false,
   sceneText: "",
   banner: null,
-  actedPcs: [],
+  actedPcs:[],
   currentScene: null,
 };
 
-const DEFAULT_SCENE = { bg: null, portraits: [] };
+const DEFAULT_SCENE = { bg: null, portraits:[] };
 
 // ─── カスタムフック ──────────────────────────────────────────────
 
@@ -88,7 +87,7 @@ function useMapBounds(containerRef) {
     const ro = new ResizeObserver(calc);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [containerRef]);
+  },[containerRef]);
 
   return bounds;
 }
@@ -98,7 +97,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const cycleIdx  = gs.cycleIdx || 0;
   const isNight   = cycleIdx === 3;
   const isEvening = cycleIdx === 2;
-  const [hov, setHov] = useState(null);
+  const[hov, setHov] = useState(null);
 
   const mapRef   = useRef(null);
   const mapBounds = useMapBounds(mapRef);
@@ -108,12 +107,11 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const fontSize = Math.max(8, Math.round(10 * scale * 1.4));
 
   const isMovePhase = gs.currentScene?.phase === "move_dest";
-  const actingPc    = isMovePhase ? (gs.pcs || []).find(p => p.uid === gs.currentScene.pcUid) : null;
+  const actingPc    = isMovePhase ? (gs.pcs ||[]).find(p => p.uid === gs.currentScene.pcUid) : null;
   const isMyTurn    = actingPc?.uid === user?.uid;
   const dists       = actingPc ? getDistances(actingPc.currentSpot) : {};
   const maxDist     = gs.currentScene?.selectedMoveDie || 0;
 
-  // シーンモード中はポートレート表示
   if (gs.sceneMode) {
     return (
       <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#040608" }}>
@@ -122,7 +120,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         )}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)" }} />
         <div style={{ position: "absolute", bottom: 110, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 16, alignItems: "flex-end" }}>
-          {(sceneData.portraits || []).map((p, i) => (
+          {(sceneData.portraits ||[]).map((p, i) => (
             p.img && <img key={i} src={p.img} alt={p.name || ""} style={{ height: 320, objectFit: "contain", filter: "drop-shadow(0 4px 24px rgba(0,0,0,0.8))" }} />
           ))}
         </div>
@@ -135,7 +133,6 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
     );
   }
 
-  // マップフィルター（昼夜・夕方）
   const mapFilter = isNight   ? "brightness(0.45) sepia(0) saturate(0.5)"
                   : isEvening ? "brightness(0.8) sepia(0.4) saturate(1.4) hue-rotate(-10deg)"
                   :             "brightness(1) sepia(0) saturate(1)";
@@ -149,17 +146,12 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
           100% { transform: scale(1);    box-shadow: 0 0  0px #64b5f6; }
         }
       `}</style>
-
-      <img
-        src={mapImg}
-        alt="幻想郷マップ"
-        style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "left top", filter: mapFilter, transition: "filter 2s ease" }}
-      />
+      <img src={mapImg} alt="幻想郷マップ" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "left top", filter: mapFilter, transition: "filter 2s ease" }} />
 
       {mapBounds.width > 0 && SPOTS.map(spot => {
         const isDream     = spot.id === "dream";
         const hasClue     = !isDream && gs.clues.includes(spot.id);
-        const pcsHere     = !isDream ? (gs.pcs || []).filter(pc => pc.currentSpot === spot.id) : [];
+        const pcsHere     = !isDream ? (gs.pcs ||[]).filter(pc => pc.currentSpot === spot.id) :[];
         const exactDist   = gs.currentScene?.exactMoveDist ?? null;
         const distance    = dists[spot.id] ?? 999;
 
@@ -175,19 +167,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const canClick  = isGm || (isMovePhase && isMyTurn && isReachable);
 
         return (
-          <div
-            key={spot.id}
-            style={{
-              position: "absolute", left: sx, top: sy,
-              transform: "translate(-50%,-50%)",
-              zIndex: isReachable ? 15 : (hasClue || pcsHere.length ? 4 : 3),
-              cursor: (canClick && !isDream) ? "pointer" : "default",
-            }}
-            onMouseEnter={() => setHov(spot.id)}
-            onMouseLeave={() => setHov(null)}
-            onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}
-          >
-            {/* PCマーカー（スポット上部） */}
+          <div key={spot.id}
+            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || pcsHere.length ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
+            onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
+            
             {pcsHere.length > 0 && (
               <div style={{ position: "absolute", top: -baseSize / 2 - 4, left: "50%", transform: "translate(-50%, -100%)", display: "flex", gap: 2, pointerEvents: "none", zIndex: 10 }}>
                 {pcsHere.map(p => {
@@ -204,34 +187,14 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
               </div>
             )}
 
-            {/* スポットアイコン */}
-            <div style={{
-              width: baseSize, height: baseSize, borderRadius: "50%",
-              background: areaColor(spot.area).bg,
-              border: `2px solid ${borderCol}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff",
-              boxShadow: hasClue ? "0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)" : "none",
-              animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none",
-            }}>
+            <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: hasClue ? "0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)" : "none", animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none" }}>
               {isDream ? "◇" : (spot.roll ?? "?")}
             </div>
 
-            {/* 手がかりバッジ */}
-            {hasClue && (
-              <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px #00e5ff)" }}>💡</div>
-            )}
+            {hasClue && <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px #00e5ff)" }}>💡</div>}
 
-            {/* ホバーツールチップ */}
             {isHov && (
-              <div style={{
-                position: "absolute", background: "rgba(6,8,14,0.97)", border: "1px solid #1e2535",
-                borderRadius: 4, padding: "4px 8px", fontSize: 10, color: "#c8b89a", whiteSpace: "nowrap",
-                pointerEvents: "none", zIndex: 20,
-                left: spot.x > 60 ? "auto" : "calc(100% + 6px)",
-                right: spot.x > 60 ? "calc(100% + 6px)" : "auto",
-                top: "50%", transform: "translateY(-50%)",
-              }}>
+              <div style={{ position: "absolute", background: "rgba(6,8,14,0.97)", border: "1px solid #1e2535", borderRadius: 4, padding: "4px 8px", fontSize: 10, color: "#c8b89a", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20, left: spot.x > 60 ? "auto" : "calc(100% + 6px)", right: spot.x > 60 ? "calc(100% + 6px)" : "auto", top: "50%", transform: "translateY(-50%)" }}>
                 {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
                 {pcsHere.length > 0 && <span style={{ color: "#ef9a9a" }}><br />{pcsHere.map(p => p.charName || p.name).join("・")}</span>}
                 {hasClue && <span style={{ color: "#00e5ff" }}><br />💡 手がかりあり</span>}
@@ -241,7 +204,6 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         );
       })}
 
-      {/* サイクル表示バッジ */}
       <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
         {gs.sessionPhase !== "explore" ? (
           <div style={{ padding: "4px 14px", background: "rgba(10,12,20,0.92)", border: `1px solid ${CYCLE_COLORS[cycleIdx]}40`, borderRadius: 14, fontSize: 12, color: CYCLE_COLORS[cycleIdx] }}>
@@ -261,16 +223,15 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
 function SessionApp({ roomCode, user }) {
   const [mode, setMode]             = useState(null);
   const [gs, setGs]                 = useState(DEFAULT_GS);
-  const [sceneData, setSceneData]   = useState(DEFAULT_SCENE);
+  const[sceneData, setSceneData]   = useState(DEFAULT_SCENE);
   const [synced, setSynced]         = useState(false);
   const [room, setRoom]             = useState(null);
-  const [pendingAction, setPendingAction] = useState(null);
+  const[pendingAction, setPendingAction] = useState(null);
   const [questBanner, setQuestBanner]     = useState(null);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
 
-  // 部屋情報の購読（ロール判定）
   useEffect(() => {
     const roomRef = ref(db, `rooms/${roomCode}`);
     const unsub   = onValue(roomRef, snap => {
@@ -283,7 +244,6 @@ function SessionApp({ roomCode, user }) {
     return () => unsub();
   }, [roomCode, user.uid]);
 
-  // ゲーム状態 / シーンデータの購読
   useEffect(() => {
     if (!mode) return;
     const gsRef    = ref(db, gsPath);
@@ -299,9 +259,9 @@ function SessionApp({ roomCode, user }) {
           resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
           items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
           pcs:    val.pcs    || [],
-          quests: val.quests || [],
+          quests: val.quests ||[],
           clues:  val.clues  || [],
-          log:    val.log    || [],
+          log:    val.log    ||[],
         }));
       } else if (mode === "gm") {
         get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
@@ -322,16 +282,15 @@ function SessionApp({ roomCode, user }) {
     const unsubScene = onValue(sceneRef, snap => {
       if (snap.exists()) {
         const val = snap.val();
-        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ?? [] });
+        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ??[] });
       }
     });
 
     return () => { clearTimeout(timeout); unsubGs(); unsubScene(); };
   }, [mode, gsPath, scenePath]);
 
-  // ★ 変更: INIT_RESOURCES / INIT_ITEMS を SessionView からインポートして重複を排除
   function buildPcList(r) {
-    if (!r?.players) return [];
+    if (!r?.players) return[];
     return Object.values(r.players)
       .filter(p => p.role === "pl" && p.charId)
       .map(p => {
@@ -348,7 +307,7 @@ function SessionApp({ roomCode, user }) {
           name:   p.name,
           charId: p.charId,
           charName: p.charName,
-          bonds: [], badStatus: [], flags: {},
+          bonds:[], badStatus:[], flags: {},
           spriteRow:     p.spriteRow ?? -1,
           spriteCol:     p.spriteCol ?? -1,
           customPortrait: p.customPortrait ?? null,
@@ -360,7 +319,7 @@ function SessionApp({ roomCode, user }) {
           items:       INIT_ITEMS(),
           baseSpotId,
           currentSpot: startSpotId ?? "11",
-          log: [],
+          log:[],
         };
       });
   }
@@ -381,20 +340,19 @@ function SessionApp({ roomCode, user }) {
     });
   }, [scenePath]);
 
-  // PCリストが空のとき自動補完
   useEffect(() => {
     if (!synced || !room || mode !== "gm") return;
     const hasPlayers = Object.values(room.players || {}).some(p => p.role === "pl" && p.charId);
-    if ((gs.pcs || []).length === 0 && hasPlayers) {
+    if ((gs.pcs ||[]).length === 0 && hasPlayers) {
       upd(p => ({ ...p, pcs: buildPcList(room) }));
     }
   }, [synced, room, mode]);
 
-  // ─── フェイズ遷移 ─────────────────────────────────────────────
+  // ─── フェイズ遷移・進行処理 ────────────────────────────────────
 
   const doTransitionToExplore = () => {
-    const startQuests = (gs.scenarioData?.quests ?? []).filter(q => (q.unlockType ?? "start") === "start");
-    const clueCount   = Math.ceil(((gs.pcs || []).length || 1) / 2);
+    const startQuests = (gs.scenarioData?.quests ??[]).filter(q => (q.unlockType ?? "start") === "start");
+    const clueCount   = Math.ceil(((gs.pcs ||[]).length || 1) / 2);
     const shuffled    = SPOTS.filter(s => s.roll !== null).sort(() => Math.random() - 0.5);
     const clueSpots   = shuffled.slice(0, clueCount).map(s => s.id);
 
@@ -403,7 +361,7 @@ function SessionApp({ roomCode, user }) {
       sessionPhase: "explore", day: 1, cycleIdx: 0,
       clues:  clueSpots,
       quests: startQuests.map(q => ({ ...q, revealed: true, solved: false })),
-      log:    [`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
+      log:[`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
     }));
 
     if (startQuests.length > 0) {
@@ -418,10 +376,16 @@ function SessionApp({ roomCode, user }) {
 
   const doReiryoku = () => {
     upd(p => {
-      const logParts = [];
+      const logParts =[];
       const newPcs = p.pcs.map(pc => {
         const spot = getSpot(pc.currentSpot);
         if (!spot) return pc;
+
+        // スランプのチェック
+        if ((pc.badStatus ||[]).includes("スランプ")) {
+          logParts.push(`${pc.charName || pc.name} (スランプ)`);
+          return pc;
+        }
 
         let gain = spot.rei || 0;
         if (spot.reiD6) gain = Math.floor(Math.random() * 6) + 1;
@@ -443,7 +407,7 @@ function SessionApp({ roomCode, user }) {
       });
       return {
         ...p, pcs: newPcs, reiryokuDone: true,
-        log: [`【霊力増加】 ${logParts.length > 0 ? logParts.join(" / ") : "なし"}`, ...p.log],
+        log:[`【霊力増加】 ${logParts.length > 0 ? logParts.join(" / ") : "なし"}`, ...p.log],
       };
     });
   };
@@ -452,7 +416,7 @@ function SessionApp({ roomCode, user }) {
     upd(p => {
       let day      = p.day || 1;
       let cycleIdx = p.cycleIdx || 0;
-      const logMsgs = [];
+      const logMsgs =[];
       let nextPcs = p.pcs;
 
       cycleIdx++;
@@ -471,8 +435,9 @@ function SessionApp({ roomCode, user }) {
       }
 
       let newQuests = [...(p.quests || [])];
+      // ※ 朝以外でも、即時解放されるクエストがあれば随時チェックする設計に変更
       if (cycleIdx === 0) {
-        (p.scenarioData?.quests || []).forEach(q => {
+        (p.scenarioData?.quests ||[]).forEach(q => {
           if (newQuests.find(nq => nq.id === q.id)) return;
           if (q.unlockType === "quest") {
             const ref = newQuests.find(nq => nq.id === q.unlockQuestId && nq.solved);
@@ -489,16 +454,14 @@ function SessionApp({ roomCode, user }) {
         cluePlaced:   cycleIdx === 0 ? false : p.cluePlaced,
         reiryokuDone: false,
         quests:       newQuests,
-        actedPcs:     [],
+        actedPcs:[],
         currentScene: null,
         pcs:          nextPcs,
-        log:          [...logMsgs.reverse(), ...p.log],
+        log:[...logMsgs.reverse(), ...p.log],
       };
     });
     setPendingAction(null);
   };
-
-  // ─── スポットクリック処理 ─────────────────────────────────────
 
   const handleSpotClick = (spotId) => {
     const sc = gs.currentScene;
@@ -508,7 +471,7 @@ function SessionApp({ roomCode, user }) {
     const isMyTurn  = sc.pcUid === user.uid;
     if (!isGmMode && !isMyTurn) return;
 
-    const actingPc = (gs.pcs || []).find(p => p.uid === sc.pcUid);
+    const actingPc = (gs.pcs ||[]).find(p => p.uid === sc.pcUid);
     if (!actingPc) return;
 
     const dists     = getDistances(actingPc.currentSpot);
@@ -525,7 +488,6 @@ function SessionApp({ roomCode, user }) {
 
   // ─── レンダリング ────────────────────────────────────────────
 
-  // モード未選択画面
   if (!mode) return (
     <div style={{ background: "#040608", color: "#c8b89a", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "serif" }}>
       <div style={{ textAlign: "center" }}>
@@ -539,18 +501,12 @@ function SessionApp({ roomCode, user }) {
   );
 
   if (!synced) return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#3a4a5a", fontFamily: "serif", fontSize: 12 }}>
-      Firebase に接続中…
-    </div>
+    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#3a4a5a", fontFamily: "serif", fontSize: 12 }}>Firebase に接続中…</div>
   );
 
   if (gs.sessionPhase === "intro") {
     return (
-      <BackstoryScreen
-        gs={gs}
-        isGm={mode === "gm"}
-        onProceed={() => upd(p => ({ ...p, sessionPhase: "intro_main", log: ["導入フェイズを開始した", ...p.log] }))}
-      />
+      <BackstoryScreen gs={gs} isGm={mode === "gm"} onProceed={() => upd(p => ({ ...p, sessionPhase: "intro_main", log: ["導入フェイズを開始した", ...p.log] }))} />
     );
   }
 
@@ -561,11 +517,6 @@ function SessionApp({ roomCode, user }) {
         ::-webkit-scrollbar-thumb { background: #1a1e2a }
         button:hover { opacity: 0.83 }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulseSpot {
-          0%   { transform: scale(1)    translateZ(0); filter: brightness(1);   }
-          50%  { transform: scale(1.15) translateZ(0); filter: brightness(1.2); }
-          100% { transform: scale(1)    translateZ(0); filter: brightness(1);   }
-        }
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -614,17 +565,13 @@ function SessionApp({ roomCode, user }) {
   );
 }
 
-// ─── App（ルートコンポーネント）────────────────────────────────
-
 const LoadingScreen = ({ message, color = "#3a4a5a" }) => (
-  <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color, fontFamily: "serif", fontSize: 12 }}>
-    {message}
-  </div>
+  <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color, fontFamily: "serif", fontSize: 12 }}>{message}</div>
 );
 
 export default function App() {
   const [user, setUser]           = useState(undefined);
-  const [roomCode, setRoomCode]   = useState(null);
+  const[roomCode, setRoomCode]   = useState(null);
   const [roomPhase, setRoomPhase] = useState(null);
 
   useEffect(() => {
@@ -634,7 +581,7 @@ export default function App() {
 
     const unsub = onAuthStateChanged(auth, u => setUser(u || null));
     return () => unsub();
-  }, []);
+  },[]);
 
   useEffect(() => {
     if (!roomCode) return;
