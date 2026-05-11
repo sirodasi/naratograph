@@ -578,7 +578,7 @@ function SessionApp({ roomCode, user }) {
         gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync}
         isGm={mode==="gm"} user={user} room={room}
         CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER} getSpot={getSpot}
-        doNewspaper={doNewspaper} doPlaceClue={doPlaceClue} doAdvanceCycle={doAdvanceCycle}
+        doNewspaper={doNewspaper} doAdvanceCycle={doAdvanceCycle}
         doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
         pendingAction={pendingAction} setPendingAction={setPendingAction}
         SPOTS={SPOTS}
@@ -602,8 +602,8 @@ function SessionApp({ roomCode, user }) {
         <ConfirmModal
           title={pendingAction==="advance" ? "サイクルを進めますか？" : "探索フェイズへ移行しますか？"}
           body={pendingAction==="advance" 
-             ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。` 
-             : "バックストーリーを経て探索フェイズへ移行します。"}
+             ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。` + (gs.cycleIdx === 3 ? "\n※夜が明けるため、全員が拠点に帰還し【やる気】が1減少します。" : "\nスキルや処理の確認をお忘れなく。") 
+             : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
           okLabel="進む"
           onOk={pendingAction==="advance" ? doAdvanceCycle : ()=>{doTransitionToExplore();setPendingAction(null);}}
           onCancel={()=>setPendingAction(null)}
