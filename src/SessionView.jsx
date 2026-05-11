@@ -706,7 +706,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 const btnSmall = { width: 24, height: 24, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer" };
 
 // ── RightPanel ────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doPlaceClue, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab] = useState("progress");
   const[diceResult, setDiceResult] = useState(null);
   const [diceAnim, setDiceAnim] = useState(false);
@@ -715,7 +715,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const timerRef = useRef(null);
 
   const cycleIdx = gs.cycleIdx || 0;
-  const isIntro = gs.sessionPhase === "intro";
+  const isIntro = gs.sessionPhase === "intro" || gs.sessionPhase === "intro_main";
   const isMorning = cycleIdx === 0;
   const cycleColor = CYCLE_COLORS[cycleIdx];
 
