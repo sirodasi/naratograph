@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { PCCard } from "./PCCard";
+import { getSpotById } from "../../data/gameData";
 
-export function RightPanel({ gs, upd, isGm, getSpot, CYCLES, CYCLE_COLORS }) {
+export function RightPanel({ gs, upd, isGm, CYCLES, CYCLE_COLORS }) {
   const [tab, setTab] = useState("progress");
   const cycleIdx = gs.cycleIdx || 0;
 
@@ -38,7 +39,7 @@ export function RightPanel({ gs, upd, isGm, getSpot, CYCLES, CYCLE_COLORS }) {
         {tab === "pcs" && (
           <div>
             {gs.pcs.map(pc => (
-              <PCCard key={pc.uid} pc={pc} gs={gs} isGm={isGm} getSpot={getSpot} onUpdatePc={(updPc) => upd(p => ({ ...p, pcs: p.pcs.map(x => x.uid === pc.uid ? updPc : x) }))} />
+              <PCCard key={pc.uid} pc={pc} gs={gs} isGm={isGm} onUpdatePc={(updPc) => upd(p => ({ ...p, pcs: p.pcs.map(x => x.uid === pc.uid ? updPc : x) }))} />
             ))}
           </div>
         )}

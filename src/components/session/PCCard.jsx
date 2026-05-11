@@ -4,8 +4,9 @@ import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { ITEM_DATA, INIT_ITEMS, INIT_RESOURCES } from "../../data/items";
 import { PERSONALITY_SKILLS } from "../../data/personalitySkills";
 import { BAD_STATUS_TABLE } from "../../data/tables";
+import { getSpotById } from "../../data/gameData";
 
-export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
+export function PCCard({ pc, gs, isGm, onUpdatePc }) {
   const [expanded, setExpanded] = useState(false);
   const [gmEdit, setGmEdit] = useState(false);
   const resources = pc.resources || INIT_RESOURCES();
@@ -34,7 +35,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             {isActing && <span style={{ fontSize: 9, color: COLORS.blue }}>▶ 行動中</span>}
           </div>
           <div style={{ fontSize: 9, color: COLORS.textFaint }}>
-            {pc.charName} / {getSpot(pc.currentSpot)?.name || "-"}
+            {pc.charName} / {getSpotById(pc.currentSpot)?.name || "-"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 4 }}>
