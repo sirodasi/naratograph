@@ -692,8 +692,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                         <button onClick={() => placeClueWithAnimation(1)} style={btn(C.redBg, C.redBorder, C.red)}>🎲 手がかり配置（2D6 ×1回）</button>
                       </div>
                     )}
-
-                    <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={btn(C.blueBg, C.blueBorder, C.blue)}>確認して次へ</button>
                   </div>
                 );
               })()}
