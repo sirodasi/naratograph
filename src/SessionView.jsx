@@ -1463,7 +1463,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     upd(p => ({
       ...p,
       currentScene: { pcUid: sceneSelect, phase: "move_or_stay", moveDice:[], actionDice:[], actionDiceCount: 2 },
-      log:[`🎬 ${targetpc.name} のシーンが開始された`, ...p.log],
+      log:[`🎬 ${targetPc.charName} のシーンが開始された`, ...p.log],
     }));
     setSceneSelect("");
   };
