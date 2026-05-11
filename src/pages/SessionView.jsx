@@ -62,8 +62,7 @@ export function SessionView({ gs, upd, sceneData, setSceneData, isGm, user, room
         
         {/* シーン操作パネル（シーン中のみ表示） */}
         <ScenePanel 
-          gs={gs} upd={upd} user={user} isGm={isGm} 
-          getSpot={(id) => SPOTS.find(s => s.id === id)} 
+          gs={gs} upd={upd} user={user} isGm={isGm}
           SPOTS={SPOTS}
           animateDice={() => {} /* App.jsx側のDiceロジックが必要なら統合 */} 
         />
@@ -82,8 +81,7 @@ export function SessionView({ gs, upd, sceneData, setSceneData, isGm, user, room
 
       {/* 右パネル */}
       <RightPanel 
-        gs={gs} upd={upd} isGm={isGm} 
-        getSpot={(id) => SPOTS.find(s => s.id === id)}
+        gs={gs} upd={upd} isGm={isGm}
         CYCLES={CYCLES} 
         CYCLE_COLORS={CYCLE_COLORS}
         setPendingAction={setPendingAction}

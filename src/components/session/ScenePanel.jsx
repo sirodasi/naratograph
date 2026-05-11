@@ -2,8 +2,9 @@ import { SceneMovePhase } from "./SceneMovePhase";
 import { SceneHappeningPhase } from "./SceneHappeningPhase";
 import { SceneExplorePhase } from "./SceneExplorePhase";
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
+import { getSpotById } from "../../data/gameData";
 
-export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
+export function ScenePanel({ gs, upd, user, isGm, animateDice, SPOTS }) {
   const sc = gs.currentScene;
   if (!sc) return null;
   const pc = gs.pcs.find(p => p.uid === sc.pcUid);
@@ -29,15 +30,15 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS })
         <>
           {/* フェーズに応じたコンポーネントの切り替え */}
           {(sc.phase === "move_or_stay" || sc.phase === "move_roll" || sc.phase === "move_dest") && (
-            <SceneMovePhase gs={gs} upd={upd} pc={pc} getSpot={getSpot} animateDice={animateDice} />
+            <SceneMovePhase gs={gs} upd={upd} pc={pc} animateDice={animateDice} />
           )}
           
           {(sc.phase === "happening_roll" || sc.phase === "happening_result" || sc.phase.startsWith("happening_")) && (
-            <SceneHappeningPhase gs={gs} upd={upd} pc={pc} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />
+            <SceneHappeningPhase gs={gs} upd={upd} pc={pc} animateDice={animateDice} SPOTS={SPOTS} />
           )}
 
           {(sc.phase === "action" || sc.phase.startsWith("explore_")) && (
-            <SceneExplorePhase gs={gs} upd={upd} pc={pc} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />
+            <SceneExplorePhase gs={gs} upd={upd} pc={pc} animateDice={animateDice} SPOTS={SPOTS} />
           )}
 
           {sc.phase === "action_done" && (

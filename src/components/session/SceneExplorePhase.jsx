@@ -1,7 +1,8 @@
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { SPOT_DETAILS } from "../../data/spots";
+import { getSpotById } from "../../data/gameData";
 
-export function SceneExplorePhase({ gs, upd, pc, getSpot, animateDice, SPOTS }) {
+export function SceneExplorePhase({ gs, upd, pc, animateDice, SPOTS }) {
   const sc = gs.currentScene;
   const spotDetail = SPOT_DETAILS[pc.currentSpot];
 

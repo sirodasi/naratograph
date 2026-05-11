@@ -1,7 +1,8 @@
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { HAPPENING_TABLE } from "../../data/tables";
+import { getSpotById } from "../../data/gameData";
 
-export function SceneHappeningPhase({ gs, upd, pc, getSpot, animateDice, SPOTS }) {
+export function SceneHappeningPhase({ gs, upd, pc, animateDice, SPOTS }) {
   const sc = gs.currentScene;
 
   const rollHappening = () => {

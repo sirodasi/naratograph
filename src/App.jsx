@@ -12,8 +12,9 @@ import LobbyRoot from "./Lobby";
 import { LoadingScreen } from "./components/common/LoadingScreen";
 
 // セッション用コンポーネント
-import { SessionView } from "./SessionView";
+import { SessionView } from "./pages/SessionView";
 import { INIT_RESOURCES, INIT_ITEMS } from "./data/items";
+import { getSpotByName } from "./data/gameData";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ function buildPcList(r) {
     .map(p => {
       const charData = CHARACTERS.find(c => c.id === p.charId) ?? null;
       const charBase = charData?.base ?? p.base ?? "人間の里";
-      const baseSpot = SPOTS.find(s => s.name === charBase || charBase.includes(s.name));
+      const baseSpot = getSpotByName(charBase);
       const baseSpotId = baseSpot?.id ?? "11";
 
       let startSpotId = r?.scenarioData?.startSpotId ?? null;

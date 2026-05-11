@@ -1,8 +1,9 @@
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
 import { useDiceRoll } from "../../hooks/useDiceRoll";
 import { DiceDisplay } from "../common/DiceDisplay";
+import { getSpotById } from "../../data/gameData";
 
-export function SceneMovePhase({ gs, upd, pc, getSpot, animateDice }) {
+export function SceneMovePhase({ gs, upd, pc, animateDice }) {
   const sc = gs.currentScene;
   const { diceResult, diceAnim, animateDice } = useDiceRoll();
 
@@ -66,7 +67,7 @@ export function SceneMovePhase({ gs, upd, pc, getSpot, animateDice }) {
               }}
               style={COMMON_STYLES.btn(COLORS.blueBg, COLORS.blueBorder, COLORS.blue, { marginTop: 8, width: "100%" })}
             >
-              {getSpot(sc.selectedDestSpot)?.name} へ移動
+              {getSpotById(sc.selectedDestSpot)?.name} へ移動
             </button>
           )}
         </div>
