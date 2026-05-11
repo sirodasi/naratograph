@@ -7,7 +7,7 @@ export const RANDOM_ITEM_TABLE = {
   6: "スペカかけら"
 };
 
-const HAPPENING_TABLE = {
+export const HAPPENING_TABLE = {
   1: { title: "仲間が恋しい。", desc: "任意のPC1人を選ぶこと。あなたは強制的に、選んだPCのいるスポットに移動する。" },
   2: { title: "【拠点】が恋しい。", desc: "あなたは強制的にあなたの【拠点】に移動する。" },
   3: { title: "あれ？行き過ぎてしまったかも。", desc: "ダイスを1つ振り、あなたが今いるスポットから振った出目の分だけ離れた距離にあるスポット1つを選ぶこと。あなたはそのスポットに移動する。" },
