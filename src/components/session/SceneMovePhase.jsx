@@ -4,6 +4,7 @@ import { DiceDisplay } from "../common/DiceDisplay";
 import { getSpotById } from "../../data/gameData";
 
 export function SceneMovePhase({ gs, upd, pc, animateDice }) {
+  const { startRoll } = useDiceRoll(upd);
   const sc = gs.currentScene;
   const { diceResult, diceAnim, animateDice } = useDiceRoll();
 
@@ -21,11 +22,11 @@ export function SceneMovePhase({ gs, upd, pc, animateDice }) {
 
   const rollMoveDice = () => {
     const count = pc.resources.やる気.cur || 1;
-    animateDice(count, (results) => {
-      upd(p => ({
-        ...p,
-        currentScene: { ...p.currentScene, moveDice: results }
-      }));
+    startRoll(count, "移動ダイス", (nextGs, res) => {
+      if (res.includes(6)) {
+      return { ...nextGs, currentScene: { ...nextGs.currentScene, moveDice: res, phase: "happening_roll" } };
+      }
+      return { ...nextGs, currentScene: { ...nextGs.currentScene, moveDice: res } };
     });
   };
 
@@ -50,7 +51,7 @@ export function SceneMovePhase({ gs, upd, pc, animateDice }) {
           {!sc.moveDice?.length ? (
             <button onClick={rollMoveDice} disabled={diceAnim}>🎲 ダイスを振る</button>
           ) : (
-            <DiceDisplay dice={diceResult} isRolling={diceAnim} />
+            <DiceDisplay dice={sc.diceResult} isRolling={sc.isRolling} count={sc.rollingCount} label={sc.rollLabel} />
           )}
         </div>
       )}

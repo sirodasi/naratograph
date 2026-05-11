@@ -3,13 +3,14 @@ import { HAPPENING_TABLE } from "../../data/tables";
 import { getSpotById } from "../../data/gameData";
 
 export function SceneHappeningPhase({ gs, upd, pc, animateDice, SPOTS }) {
+  const { startRoll } = useDiceRoll(upd);
   const sc = gs.currentScene;
 
   const rollHappening = () => {
-    animateDice(1, "ハプニング表", (res) => {
-      upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_result", happeningDice: res[0] } }));
-    });
-  };
+  startRoll(1, "ハプニング表", (nextGs, res) => {
+    return { ...nextGs, currentScene: { ...nextGs.currentScene, phase: "happening_result", happeningDice: res[0] } };
+  });
+};
 
   return (
     <div style={{ textAlign: "center" }}>

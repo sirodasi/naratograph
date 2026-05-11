@@ -1,33 +1,36 @@
-import { useState, useRef, useCallback } from "react";
+import { useCallback } from "react";
 
-export function useDiceRoll() {
-  const [diceResult, setDiceResult] = useState(null);
-  const [diceAnim, setDiceAnim] = useState(false);
-  const timerRef = useRef(null);
-
-  const rollD6 = () => Math.floor(Math.random() * 6) + 1;
-
-  const animateDice = useCallback((count, callback) => {
-    if (timerRef.current) clearInterval(timerRef.current);
+export function useDiceRoll(upd) {
+  const startRoll = useCallback((count, label, callback, isGlobal = false) => {
+    const diceState = {
+      isRolling: true,
+      rollingCount: count,
+      rollLabel: label,
+      diceResult: null,
+    };
     
-    setDiceAnim(true);
-    setDiceResult(Array(count).fill(0).map(rollD6));
+    upd(prev => {
+      if (isGlobal) return { ...prev, globalDice: diceState };
+      return { ...prev, currentScene: { ...prev.currentScene, ...diceState } };
+    });
 
-    let frame = 0;
-    timerRef.current = setInterval(() => {
-      frame++;
-      // シャッフル中のランダムな出目
-      setDiceResult(Array(count).fill(0).map(rollD6));
+    setTimeout(() => {
+      const results = Array(count).fill(0).map(() => Math.floor(Math.random() * 6) + 1);
+      
+      upd(prev => {
+        const resultState = { isRolling: false, diceResult: results };
+        let next;
+        
+        if (isGlobal) {
+          next = { ...prev, globalDice: { ...prev.globalDice, ...resultState } };
+        } else {
+          next = { ...prev, currentScene: { ...prev.currentScene, ...resultState } };
+        }
 
-      if (frame >= 14) {
-        clearInterval(timerRef.current);
-        const finalResult = Array(count).fill(0).map(rollD6);
-        setDiceResult(finalResult);
-        setDiceAnim(false);
-        if (callback) callback(finalResult);
-      }
-    }, 80);
-  }, []);
+        return callback ? callback(next, results) : next;
+      });
+    }, 1200);
+  }, [upd]);
 
-  return { diceResult, diceAnim, animateDice };
+  return { startRoll };
 }
