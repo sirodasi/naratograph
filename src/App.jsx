@@ -296,7 +296,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
       })}
 
       <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", display:"flex", gap:8 }}>
-        {gs.sessionPhase !== "intro" ? (
+        {gs.sessionPhase !== "explore" ? (
           <div style={{ padding:"4px 14px", background:"rgba(10,12,20,0.92)", border:`1px solid ${CYCLE_COLORS[cycleIdx]}40`, borderRadius:14, fontSize:12, color:CYCLE_COLORS[cycleIdx] }}>
             {gs.day}日目・{CYCLES[cycleIdx]}
           </div>
@@ -554,7 +554,9 @@ function SessionApp({ roomCode, user }) {
 
   if (!synced) return <div style={{ background:"#040608", height:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#3a4a5a", fontFamily:"serif", fontSize:12 }}>Firebase に接続中…</div>;
 
-  if (gs.sessionPhase === "intro") return <BackstoryScreen gs={gs} isGm={mode==="gm"} onProceed={doTransitionToExplore}/>;
+  if (gs.sessionPhase === "intro") {
+    return <BackstoryScreen gs={gs} isGm={mode==="gm"} onProceed={() => upd(p => ({ ...p, sessionPhase: "intro_main", log: ["導入フェイズを開始した", ...p.log] }))}/>;
+  }
 
   return (
     <div style={{ display:"flex", height:"100vh", overflow:"hidden", fontFamily:"serif" }}>
