@@ -503,40 +503,35 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             <div style={{ textAlign:"center" }}>
               <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>迷い込んだ先を決定します</div>
               <button onClick={() => animateDice(2, "道に迷う", res => {
-                const val = Math.min(res[0], res[1]) * 10 + Math.max(res[0], res[1]);
+                const d1 = res[0];
+                const d2 = res[1];
+                const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
                 const candidates = SPOTS.filter(s => s.roll === val);
+                
+                let nextSpotId = null;
+                if (candidates.length === 2) {
+                  if (d1 < d2) {
+                    nextSpotId = candidates.find(s => s.id.endsWith("A"))?.id;
+                  } else {
+                    nextSpotId = candidates.find(s => s.id.endsWith("B"))?.id;
+                  }
+                } else if (candidates.length === 1) {
+                  nextSpotId = candidates[0].id;
+                }
+
                 upd(p => {
-                  let nextPhase = "action";
-                  let nextSpot = pc.currentSpot;
-                  if (candidates.length === 1) nextSpot = candidates[0].id;
-                  else if (candidates.length > 1) nextPhase = "happening_4_select";
-                  
                   let logs = [`${pc.name} は道に迷い [${val}] を彷徨う…`, ...p.log];
                   let newPcs = p.pcs;
-                  if (nextPhase === "action") {
-                    newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: nextSpot } : x);
-                    logs = [`${pc.name} は[${getSpot(nextSpot)?.name}] に迷い込んだ`, ...logs];
+                  
+                  if (nextSpotId) {
+                    newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: nextSpotId } : x);
+                    logs = [`${pc.name} は [${getSpot(nextSpotId)?.name}] に迷い込んだ`, ...logs];
+                    return {...p, pcs: newPcs, currentScene: {...p.currentScene, phase: "action"}, log: logs};
+                  } else {
+                    return {...p, currentScene: {...p.currentScene, phase: "action"}, log: logs};
                   }
-                  return {...p, pcs: newPcs, currentScene: {...p.currentScene, phase: nextPhase, happening4Val: val, happening4Candidates: candidates.map(c=>c.id)}, log: logs};
                 });
               })} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 移動先を振る (D66)</button>
-            </div>
-          )}
-
-          {/* 出目4: A/Bなどの候補がある場合 */}
-          {sc.phase === "happening_4_select" && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>迷い込んだ先を選択してください</div>
-              {sc.happening4Candidates.map(spotId => (
-                <button key={spotId} onClick={() => {
-                  upd(p => {
-                    const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: spotId } : x);
-                    return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は[${getSpot(spotId)?.name}] に迷い込んだ`, ...p.log] };
-                  });
-                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, {marginBottom:4})}>
-                  [{getSpot(spotId).roll}] {getSpot(spotId).name}
-                </button>
-              ))}
             </div>
           )}
 
