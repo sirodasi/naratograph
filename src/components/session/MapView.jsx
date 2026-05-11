@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { SPOTS, EDGES, AREA_COLORS, CYCLES, CYCLE_COLORS } from "../../data/gameData";
+import { SPOTS, EDGES, AREA_COLORS, CYCLES, CYCLE_COLORS, getSpotById } from "../../data/gameData";
 import { CharSprite } from "../common/CharSprite";
 import { useMapBounds } from "../../hooks/useMapBounds";
 import mapImg from "../../assets/map.png";
