@@ -3,26 +3,35 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 
+export const BAD_STATUS_TABLE = {
+  1: { name: "だるい", desc: "あなたの【やる気】は「1点」となり、いかなる処理によってもあなたの【やる気】は回復しなくなります。" },
+  2: { name: "スランプ", desc: "いかなる処理によってもあなたの【霊力】は増加しなくなります。" },
+  3: { name: "二日酔い", desc: "あなたはアイテムを使用することができません。" },
+  4: { name: "怪我", desc: "あなたは自身が行う行為判定の判定ダイス数にかかわらず、行為判定の際にダイスを2つまでしか振ることができなくなります。" },
+  5: { name: "不機嫌", desc: "あなたは絆を獲得することができなくなり、またすべてのキャラクターはあなたへの絆を獲得することができません。" },
+  6: { name: "疲れた", desc: "あなたが自身のシーンの「移動」の処理で移動できる距離は1スポット分少なくなります。" },
+};
+
 export const ITEM_DATA = {
-  "お酒":         { canUse: (pc) => (pc.items?.["お酒"]||0) > 0,
-                    use: (pc) => { const r={...pc.resources}; r.やる気={cur:Math.min((r.やる気?.cur||0)+1,r.やる気?.max||3),max:r.やる気?.max||3}; return {...pc,items:{...pc.items,"お酒":pc.items["お酒"]-1},resources:r}; },
+  "お酒":         { canUse: (pc) => (pc.items?.["お酒"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
+                    use: (pc) => { const r={...pc.resources}; if(!(pc.badStatus||[]).includes("だるい")) r.やる気={cur:Math.min((r.やる気?.cur||0)+1,r.やる気?.max||3),max:r.やる気?.max||3}; return {...pc,items:{...pc.items,"お酒":pc.items["お酒"]-1},resources:r}; },
                     desc:"自身の【やる気】が「1点」回復します。", timing:"いつでも" },
-  "小銭":         { canUse: (pc) => (pc.items?.["小銭"]||0) > 0,
+  "小銭":         { canUse: (pc) => (pc.items?.["小銭"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => ({...pc,items:{...pc.items,"小銭":pc.items["小銭"]-1},flags:{...pc.flags,kosen:true}}),
                     desc:"次の行為判定の判定ダイス数が「1」増加します。", timing:"行為判定直前" },
-  "お守り":       { canUse: (pc) => (pc.items?.["お守り"]||0) > 0,
+  "お守り":       { canUse: (pc) => (pc.items?.["お守り"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => ({...pc,items:{...pc.items,"お守り":pc.items["お守り"]-1},flags:{...pc.flags,omamori:true}}),
                     desc:"移動で「6」が出たとき、ハプニングが発生せず6マス先まで移動できます。", timing:"移動処理中" },
-  "Pアイテム":    { canUse: (pc) => (pc.items?.["Pアイテム"]||0) > 0,
-                    use: (pc) => { const r={...pc.resources}; r.霊力={cur:Math.min((r.霊力?.cur||0)+3,r.霊力?.max||30),max:r.霊力?.max||30}; return {...pc,items:{...pc.items,"Pアイテム":pc.items["Pアイテム"]-1},resources:r}; },
+  "Pアイテム":    { canUse: (pc) => (pc.items?.["Pアイテム"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
+                    use: (pc) => { const r={...pc.resources}; if(!(pc.badStatus||[]).includes("スランプ")) r.霊力={cur:Math.min((r.霊力?.cur||0)+3,r.霊力?.max||30),max:r.霊力?.max||30}; return {...pc,items:{...pc.items,"Pアイテム":pc.items["Pアイテム"]-1},resources:r}; },
                     desc:"【霊力】を「3点」獲得します。", timing:"いつでも" },
-  "残機のかけら": { canUse: (pc) => (pc.items?.["残機のかけら"]||0) >= 3,
+  "残機のかけら": { canUse: (pc) => (pc.items?.["残機のかけら"]||0) >= 3 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; r.残り人数={cur:Math.min((r.残り人数?.cur||0)+1,r.残り人数?.max||5),max:r.残り人数?.max||5}; return {...pc,items:{...pc.items,"残機のかけら":pc.items["残機のかけら"]-3},resources:r}; },
                     desc:"3つ消費して【残り人数】を「1点」獲得します。（3つ以上保持時のみ）", timing:"いつでも" },
-  "スペカかけら": { canUse: (pc) => (pc.items?.["スペカかけら"]||0) >= 2,
+  "スペカかけら": { canUse: (pc) => (pc.items?.["スペカかけら"]||0) >= 2 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; r.スペカ={cur:Math.min((r.スペカ?.cur||0)+1,r.スペカ?.max||5),max:r.スペカ?.max||5}; return {...pc,items:{...pc.items,"スペカかけら":pc.items["スペカかけら"]-2},resources:r}; },
                     desc:"2つ消費して【スペルカード】を「1点」獲得します。（2つ以上保持時のみ）", timing:"いつでも" },
-  "妖器":         { canUse: (pc) => (pc.items?.["妖器"]||0) > 0,
+  "妖器":         { canUse: (pc) => (pc.items?.["妖器"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; r.攻撃力={cur:Math.min((r.攻撃力?.cur||0)+1,r.攻撃力?.max||5),max:r.攻撃力?.max||5}; return {...pc,items:{...pc.items,"妖器":pc.items["妖器"]-1},flags:{...pc.flags,youki:true}}; },
                     desc:"1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）", timing:"弾幕ごっこ前" },
 };
@@ -122,11 +131,12 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 }
 
 // ── PCCard ────────────────────────────────────────────
-function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
+export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const [itemModal, setItemModal] = useState(null);
   const[skillModal, setSkillModal] = useState(null);
   const[expanded, setExpanded] = useState(false);
   const [gmEdit, setGmEdit] = useState(false);
+  const badStatus = pc.badStatus ||[];
 
   const resources = pc.resources || INIT_RESOURCES();
   const items = pc.items || INIT_ITEMS();
@@ -235,6 +245,26 @@ function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             )}
           </div>
 
+          {badStatus.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>変調</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {badStatus.map(bs => {
+                  const bData = Object.values(BAD_STATUS_TABLE).find(x => x.name === bs);
+                  return (
+                    <div key={bs} style={{ padding: "4px 8px", background: "rgba(224,112,96,0.15)", border: `1px solid ${C.redBorder}`, borderRadius: 4 }}>
+                      <div style={{ fontSize: 10, color: C.red, marginBottom: 2, fontWeight: "bold" }}>《{bs}》</div>
+                      <div style={{ fontSize: 8, color: C.textDim, lineHeight: 1.4 }}>{bData?.desc}</div>
+                      {isGm && gmEdit && (
+                        <button onClick={() => onUpdatePc({ ...pc, badStatus: badStatus.filter(x => x !== bs) })} style={{ marginTop: 4, padding: "2px 6px", fontSize: 8, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2 }}>解除</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ fontSize:9,color:C.textFaint,letterSpacing:2,borderBottom:`1px solid #111828`, paddingBottom:3,marginBottom:8 }}>スキル</div>
           {skill && (
             <div style={{ marginBottom:6 }}>
@@ -251,7 +281,7 @@ function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             <div style={{ marginTop:6 }}>
               <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:4 }}>
                 <span style={{ padding:"1px 6px", background:`${SKILL_TYPE_COLOR[pc.abilitySkill.type]||"#90caf9"}18`, border:`1px solid ${SKILL_TYPE_COLOR[pc.abilitySkill.type]||"#90caf9"}50`, borderRadius:8,fontSize:8,color:SKILL_TYPE_COLOR[pc.abilitySkill.type]||"#90caf9" }}>{pc.abilitySkill.type}</span>
-                <span style={{ fontSize:11,color:"#90caf9" }}>【{pc.abilitySkill.name}】</span>
+                <span style={{ fontSize:11,color:"#90caf9" }}>《{pc.abilitySkill.name}》</span>
               </div>
               <div style={{ fontSize:9,color:C.textFaint,lineHeight:1.7,marginBottom:6 }}>{pc.abilitySkill.desc}</div>
               {pc.abilitySkill.type !== "オート" && !isCustomChar && <button onClick={()=>setSkillModal({ name: pc.abilitySkill.name, type: pc.abilitySkill.type, desc: pc.abilitySkill.desc, key: "ability" })} style={{ padding:"4px 12px",cursor:"pointer",borderRadius:3,fontSize:10, background:"rgba(144,202,249,0.15)",border:"1px solid #1565c080",color:"#90caf9" }}>発動する</button>}
@@ -328,9 +358,13 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       const npcs = p.pcs.map(x => {
         if(x.uid!==pc.uid) return x;
         const r = x.resources.やる気 || {cur:0,max:3};
+        if ((x.badStatus||[]).includes("だるい")) return x;
         return {...x, resources:{...x.resources, やる気:{...r, cur:Math.min(r.max, r.cur+1)}}};
       });
-      return {...p, pcs: npcs, currentScene: {...p.currentScene, phase: "action"}, log:[`${pc.name} はその場にとどまり、やる気を1点回復した`, ...p.log]};
+      const logText = (pc.badStatus||[]).includes("だるい")
+        ? `${pc.name} はその場にとどまったが、変調《だるい》のためやる気は回復しなかった`
+        : `${pc.name} はその場にとどまり、やる気を1点回復した`;
+      return {...p, pcs: npcs, currentScene: {...p.currentScene, phase: "action"}, log:[logText, ...p.log]};
     });
   };
   const chooseMove = () => upd(p => ({...p, currentScene: {...p.currentScene, phase: "move_roll"}}));
@@ -345,6 +379,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       if (val === 6) {
         logAdd += "（ハプニング発生！）";
         return {...p, currentScene: {...p.currentScene, phase: "happening_roll"}, log:[logAdd, ...p.log]};
+      }
+      if ((pc.badStatus||[]).includes("疲れた")) {
+        actualVal = Math.max(0, val - 1);
+        logAdd += `（※変調《疲れた》のため移動距離が ${actualVal} に減少）`;
       }
       return {...p, currentScene: {...p.currentScene, phase: "move_dest", selectedMoveDie: val}, log:[logAdd, ...p.log]};
     });
@@ -362,15 +400,15 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const startExplore = () => {
     const hasTag = spotDetail.tags.some(t => (pc.tags || []).includes(t) || (pc.charName === t) || (pc.skillName === t));
     const bonus = hasTag ? 1 : 0;
+
+    let diceCount = 2 + bonus;
+    if ((pc.badStatus||[]).includes("怪我")) {
+      diceCount = Math.min(2, diceCount);
+    }
     
     upd(p => ({
       ...p,
-      currentScene: { 
-        ...p.currentScene, 
-        phase: "explore_select", 
-        actionDiceCount: 2 + bonus,
-        hasTagBonus: hasTag 
-      }
+      currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag }
     }));
   };
 
@@ -622,10 +660,34 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 12 }}>
                 <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: Math.max(1, sc.actionDiceCount - 1) } }))} style={btnSmall}>-</button>
                 <span style={{ fontSize: 20, color: C.gold }}>{sc.actionDiceCount} <span style={{fontSize:10}}>個</span></span>
-                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: sc.actionDiceCount + 1 } }))} style={btnSmall}>+</button>
+                <button onClick={() => upd(p => {
+                  let nextCount = sc.actionDiceCount + 1;
+                  if ((pc.badStatus||[]).includes("怪我")) nextCount = Math.min(2, nextCount);
+                  return { ...p, currentScene: { ...p.currentScene, actionDiceCount: nextCount } };
+                })} style={btnSmall}>+</button>
               </div>
-              
               <button onClick={rollExplore} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
+            </div>
+          )}
+
+          {sc.phase === "special_cure" && (
+            <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+              <div style={{ fontSize: 13, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>✨ 変調解除</div>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 14 }}>解除する変調を選んでください</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+                {(pc.badStatus||[]).map(bs => (
+                  <button key={bs} onClick={() => {
+                    upd(p => {
+                      const newBs = pc.badStatus.filter(x => x !== bs);
+                      const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs } : x);
+                      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log:[`${pc.name} はスペシャルにより変調《${bs}》を解除した`, ...p.log] };
+                    });
+                  }} style={{...btn("rgba(255,255,255,0.05)", C.border, C.text), width: "80%"}}>
+                    《{bs}》を解除
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 12 }}>← 戻る</button>
             </div>
           )}
 
@@ -648,55 +710,117 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                 const isSpecial = sc.actionDice?.includes(6);
                 const isSuccess = maxDie >= sc.selectedEvent.target && !isFumble;
                 const hasClueHere = gs.clues?.includes(pc.currentSpot);
+
+                const pendingFumble = isFumble && !sc.fumbleResolved;
+                const pendingSpecial = isSpecial && !isFumble && !sc.specialResolved;
+                const canProceed = !pendingFumble && !pendingSpecial;
                 
                 return (
                   <div>
-                    <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 4 }}>
+                    <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12 }}>
                       {isFumble ? "ファンブル！" : (isSuccess ? "成功！" : "失敗…")}
                     </div>
-                    {isSpecial && !isFumble && <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>✨ スペシャル！（霊力増加 or 変調解除）</div>}
-                    
-                    <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>
-                      <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
-                      {sc.selectedEvent.effect}
-                    </div>
 
-                    {isSuccess ? (
-                      /* 成功時：現在のマスに手がかりがあるか */
-                      hasClueHere ? (
-                        <div style={{ marginTop: 12, padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
-                          <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストに割り当ててください。</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            {(gs.quests || []).filter(q => !q.solved && q.revealed).map(q => (
-                              <button key={q.id} onClick={() => acquireClue(q.id)} style={{ padding: "6px", fontSize: 10, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.text, cursor: "pointer", textAlign: "left" }}>
-                                「{q.name}」に割り当てる
-                              </button>
-                            ))}
-                            {(gs.quests || []).filter(q => !q.solved && q.revealed).length === 0 && (
-                              <div style={{fontSize:9, color:C.textFaint}}>※公開中のクエストがないため、獲得できません</div>
-                            )}
-                          </div>
-                          <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 8, fontSize: 10 }}>獲得せず終了</button>
+                    {/* スペシャル処理UI */}
+                    {pendingSpecial && (
+                      <div style={{ marginBottom: 12, padding: 12, background: "rgba(200,160,64,0.1)", border: "1px solid #8b691460", borderRadius: 4 }}>
+                        <div style={{ fontSize: 12, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>✨ スペシャル！</div>
+                        <div style={{ fontSize: 10, color: C.textDim, marginBottom: 10 }}>「霊力回復」か「変調解除」を選んでください。</div>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                          <button onClick={() => {
+                            animateDice(1, "霊力回復", (res) => {
+                              const rec = res[0];
+                              upd(p => {
+                                if ((pc.badStatus||[]).includes("スランプ")) {
+                                  return { ...p, currentScene: { ...p.currentScene, specialResolved: true }, log:[`${pc.name} はスペシャルで霊力回復を選んだが、変調《スランプ》のため増加しなかった`, ...p.log] };
+                                }
+                                const cur = pc.resources.霊力?.cur || 0;
+                                const max = pc.resources.霊力?.max || 30;
+                                const nextCur = Math.min(max, cur + rec);
+                                const nextAtk = 1 + Math.floor(nextCur / 5);
+                                const newResources = { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: nextAtk } };
+                                const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, resources: newResources } : x);
+                                return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, specialResolved: true }, log:[`${pc.name} はスペシャルにより霊力が ${rec} 点増加した`, ...p.log] };
+                              });
+                            });
+                          }} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 霊力回復 (1D6)</button>
+                          
+                          {((pc.badStatus ||[]).length > 0) && (
+                            <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btn(C.blueBg, C.blueBorder, C.blue)}>🌿 変調解除</button>
+                          )}
                         </div>
-                      ) : (
-                        /* 成功時：現在のマスに手がかりがない ⇒ 手がかり2つ配置 */
-                        <div style={{ marginTop: 12 }}>
-                          <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>💡 成功しましたが手がかりがないため、<br/>ランダムなスポットに手がかりを2つ配置します。</div>
-                          <button onClick={() => placeClueWithAnimation(2)} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 手がかり配置（2D6 ×2回）</button>
-                        </div>
-                      )
-                    ) : (
-                      /* 失敗時：手がかり1つ配置 */
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>💡 失敗したため、ランダムなスポットに<br/>手がかりを1つ配置します。</div>
-                        <button onClick={() => placeClueWithAnimation(1)} style={btn(C.redBg, C.redBorder, C.red)}>🎲 手がかり配置（2D6 ×1回）</button>
                       </div>
                     )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+
+                    {/* ファンブル処理UI */}
+                    {pendingFumble && (
+                      <div style={{ marginBottom: 12, padding: 12, background: "rgba(224,112,96,0.1)", border: "1px solid #e0706060", borderRadius: 4 }}>
+                        <div style={{ fontSize: 12, color: C.red, marginBottom: 8, fontWeight: "bold" }}>💀 ファンブル！</div>
+                        <div style={{ fontSize: 10, color: C.textDim, marginBottom: 10 }}>ランダムな変調を1つ獲得します。</div>
+                        <button onClick={() => {
+                          animateDice(1, "変調決定", (res) => {
+                            const bsId = res[0];
+                            const bsName = BAD_STATUS_TABLE[bsId].name;
+                            upd(p => {
+                              let newBs = pc.badStatus ||[];
+                              if (!newBs.includes(bsName)) newBs = [...newBs, bsName];
+                              let newResources = pc.resources;
+                              if (bsName === "だるい") newResources = { ...newResources, やる気: { ...newResources.やる気, cur: 1 } };
+                              
+                              const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: newResources } : x);
+                              return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[`${pc.name} はファンブルにより変調《${bsName}》を獲得した`, ...p.log] };
+                            });
+                          });
+                        }} style={btn(C.redBg, C.redBorder, C.red)}>🎲 変調表を振る (1D6)</button>
+                      </div>
+                    )}
+                    {sc.fumbleResolved && (
+                      <div style={{ fontSize: 10, color: C.red, marginBottom: 12, fontWeight: "bold" }}>獲得した変調: 《{sc.fumbleStatus}》</div>
+                    )}
+                    
+                    {canProceed && (
+                      <div style={{ animation: "fadeUp 0.3s ease" }}>
+                        <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                          <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
+                          {sc.selectedEvent.effect}
+                        </div>
+
+                        {isSuccess ? (
+                          /* 成功時：現在のマスに手がかりがあるか */
+                          hasClueHere ? (
+                            <div style={{ marginTop: 12, padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
+                              <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストに割り当ててください。</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                {(gs.quests || []).filter(q => !q.solved && q.revealed).map(q => (
+                                  <button key={q.id} onClick={() => acquireClue(q.id)} style={{ padding: "6px", fontSize: 10, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.text, cursor: "pointer", textAlign: "left" }}>
+                                    「{q.name}」に割り当てる
+                                  </button>
+                                ))}
+                                {(gs.quests || []).filter(q => !q.solved && q.revealed).length === 0 && (
+                                  <div style={{fontSize:9, color:C.textFaint}}>※公開中のクエストがないため、獲得できません</div>
+                                )}
+                              </div>
+                              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 8, fontSize: 10 }}>獲得せず終了</button>
+                            </div>
+                          ) : (
+                            /* 成功時：現在のマスに手がかりがない ⇒ 手がかり2つ配置 */
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>💡 成功しましたが手がかりがないため、<br/>ランダムなスポットに手がかりを2つ配置します。</div>
+                              <button onClick={() => placeClueWithAnimation(2)} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 手がかり配置（2D6 ×2回）</button>
+                            </div>
+                          )
+                        ) : (
+                          /* 失敗時：手がかり1つ配置 */
+                          <div style={{ marginTop: 12 }}>
+                            <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>💡 失敗したため、ランダムなスポットに<br/>手がかりを1つ配置します。</div>
+                            <button onClick={() => placeClueWithAnimation(1)} style={btn(C.redBg, C.redBorder, C.red)}>🎲 手がかり配置（2D6 ×1回）</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
