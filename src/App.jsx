@@ -8,11 +8,11 @@ import { SPOTS, CYCLES } from "./data/gameData";
 import { CHARACTERS } from "./data/characters";
 
 // 共通コンポーネント
-import LobbyRoot from "./pages/Lobby";
+import LobbyRoot from "./Lobby";
 import { LoadingScreen } from "./components/common/LoadingScreen";
 
 // セッション用コンポーネント
-import { SessionView } from "./pages/SessionView";
+import { SessionView } from "./SessionView";
 import { INIT_RESOURCES, INIT_ITEMS } from "./data/items";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
