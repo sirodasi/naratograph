@@ -28,7 +28,10 @@ export const ITEM_DATA = {
       const resources = { ...pc.resources };
       if (!(pc.badStatus ||[]).includes("だるい")) {
         const r = resources.やる気 || { cur: 0, max: 3 };
-        resources.やる気 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
+        const isPremiumFriday = gs?.newspaper?.roll === 12 && pc.currentSpot === "11";
+        const healAmount = isPremiumFriday ? 2 : 1;
+       
+        resources.やる気 = { cur: Math.min(r.cur + healAmount, r.max), max: r.max };
       }
       return { ...pc, items: { ...pc.items, "お酒": Math.max(0, (pc.items["お酒"] || 0) - 1) }, resources };
     },
@@ -223,7 +226,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const useItem = itemName => {
     const data = ITEM_DATA[itemName];
     if (!data) return;
-    onUpdatePc(data.use(pc));
+    onUpdatePc(data.use(pc, gs));
     setItemModal(null);
   };
  
