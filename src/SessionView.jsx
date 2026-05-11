@@ -754,7 +754,34 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     if (isIntro) return { label:"🎬 探索フェイズへ移行する", fn:()=>setPendingAction("toExplore"), color:"#1976d2" };
     if (isMorning) {
       if (!gs.newspaper) return { label:"📰 文々。新聞を読む", fn:handleNewspaper, color:C.blue };
-      if (!gs.cluePlaced) return { label:"🔍 手がかりを配置", fn:()=>setPendingAction("placeClue"), color:C.green };
+      if (!gs.cluePlaced) return {
+        label:"🔍 手がかりを配置", 
+        fn: () => {
+          animateDice(2, "朝の手がかり配置", (res) => {
+            const d1 = res[0];
+            const d2 = res[1];
+            const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
+            const candidates = SPOTS.filter(s => s.roll === val);
+            
+            let spotId = null;
+            if (candidates.length === 2) {
+              if (d1 < d2) spotId = candidates.find(s => s.id.endsWith("A"))?.id;
+              else spotId = candidates.find(s => s.id.endsWith("B"))?.id;
+            } else if (candidates.length === 1) {
+              spotId = candidates[0].id;
+            }
+            if (spotId) {
+              upd(p => ({
+                ...p, 
+                cluePlaced: true, 
+                clues: [...new Set([...p.clues, spotId])],
+                log: [`手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置（出目: ${d1}, ${d2}）`, ...p.log]
+              }));
+            }
+          });
+        },
+        color: C.green
+      };
     }
     if (cycleIdx !== 3 && !gs.reiryokuDone) return { label:"✦ 霊力の増加", fn:doReiryoku, color:"#ab47bc" };
     
