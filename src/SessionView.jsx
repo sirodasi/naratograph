@@ -515,7 +515,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         </div>
       );
     } else if (act.item === "any") {
-      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら", "妖器"];
+      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>獲得するアイテムを選んでください</div>
@@ -640,7 +640,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     }
 
     if (act.gain === "any") {
-      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら", "妖器"];
+      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>【{selectedLose}】と交換で獲得するアイテムを選んでください</div>
@@ -872,10 +872,25 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           return (
              <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
                <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>拠点が夢の世界のため、任意の場所に移動します</div>
-               <button onClick={() => animateDice(2, "移動先決定", res => {
-                 const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
-                 proceed([`${pc.name} は[${getSpot(nextSpotId)?.name}] に移動した`], { pc: { currentSpot: nextSpotId } });
-               })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 任意の場所へ (D66で代用)</button>
+               <select 
+                 value={selectedLose || ""} 
+                 onChange={e => setSelectedLose(e.target.value)} 
+                 style={{ width: "100%", padding: 6, marginBottom: 8, background: "rgba(255,255,255,0.05)", color: C.text }}
+               >
+                 <option value="">移動先を選択...</option>
+                 {SPOTS.filter(s => s.id !== "dream").map(s => (
+                   <option key={s.id} value={s.id}>[{s.roll}] {s.name}</option>
+                 ))}
+               </select>
+               <button 
+                 disabled={!selectedLose} 
+                 onClick={() => {
+                   proceed([`${pc.name} は[${getSpot(selectedLose)?.name}] に移動した`], { pc: { currentSpot: selectedLose } });
+                 }} 
+                 style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}
+               >
+                 移動する
+               </button>
              </div>
           );
        } else {
@@ -955,7 +970,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
           if (nextSpotId) {
              const newClues = Array.from(new Set([...(gs.clues || []), nextSpotId]));
-             proceed([`手がかりを[${getSpot(nextSpotId)?.name}] に配置した`], { gs: { clues: newClues } });
+             proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues } });
           } else {
              proceed(["(手がかりの配置先が見つからなかった)"]);
           }
