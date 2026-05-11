@@ -8,11 +8,6 @@ export function SceneExplorePhase({ gs, upd, pc, SPOTS }) {
   const sc = gs.currentScene;
   const spotDetail = SPOT_DETAILS[pc.currentSpot];
 
-  const startRoll = (ev) => {
-    const diceCount = 2; // 本来はタグボーナス計算など
-    upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_roll", selectedEvent: ev, actionDiceCount: diceCount } }));
-  };
-
   const rollExplore = () => {
     startRoll(sc.actionDiceCount, "行為判定", (nextGs, res) => {
       return { ...nextGs, currentScene: { ...nextGs.currentScene, phase: "explore_result", actionDice: res } };
