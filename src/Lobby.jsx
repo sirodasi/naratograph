@@ -284,6 +284,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       spriteCol:     selectedChar.spriteCol ?? -1,
       base:          selectedChar.base || "人間の里",
       customPortrait: selectedChar.customPortrait || null,
+      tags:          selectedChar.tags ||[],
       abilitySkill:  selectedChar.abilitySkill || null,
       danmakuSkill:  selectedChar.danmakuSkill || null,
     });
