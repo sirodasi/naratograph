@@ -1705,24 +1705,113 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         )}
       </div>
  
-      {paperModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setPaperModal(null)}>
-          <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 9, letterSpacing: 3, color: "#2a3a50", textAlign: "center", marginBottom: 4 }}>— 文々。新聞 —</div>
-            {paperModal.dice && (
-              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 8 }}>
-                {paperModal.dice.map((d, i) => (
-                  <div key={i} style={{ width: 44, height: 44, border: "2px solid #1e3a5a", borderRadius: 6, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#60c0f0", fontWeight: "bold" }}>{d}</div>
-                ))}
-              </div>
-            )}
-            <div style={{ fontSize: 18, color: "#1976d2", textAlign: "center", marginBottom: 6 }}>[{paperModal.roll}]</div>
-            <div style={{ fontSize: 13, color: "#60c0f0", marginBottom: 8, textAlign: "center" }}>{paperModal.title}</div>
-            <div style={{ fontSize: 11, color: "#4a6070", lineHeight: 1.8 }}>{paperModal.effect}</div>
-            <button onClick={() => setPaperModal(null)} style={{ marginTop: 12, width: "100%", padding: "7px", background: "rgba(192,57,43,0.15)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 3, fontSize: 12 }}>確認した</button>
+      {paperModal && (() => { 
+        const r = paperModal.roll;
+        const needsSpot =[14, 35, 46].includes(r);
+        const is25 = r === 25;
+        const is36 = r === 36;
+        const is23 = r === 23;
+        const is56 = r === 56;
+        const needsApply = needsSpot || is25 || is36 || is23 || is56;
+
+        const applyEffect = () => {
+          if (is23) {
+            upd(p => ({
+              ...p,
+              pcs: p.pcs.map(pc => ({
+                ...pc,
+                resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } }
+              })),
+              newspaper: paperModal,
+              log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log]
+            }));
+            setPaperModal(null);
+          } else if (is56) {
+            upd(p => ({
+               ...p,
+               pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
+               newspaper: paperModal,
+               log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log]
+             }));
+             setPaperModal(null);
+           } else if (needsSpot) {
+             animateDice(2, "対象スポットの決定", res => {
+               const spotId = getSpotByD66(res[0], res[1], SPOTS);
+               upd(p => ({
+                 ...p,
+                 newspaper: { ...paperModal, targetSpot: spotId },
+                 log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log]
+               }));
+               setPaperModal(null);
+             });
+           } else if (is25) {
+             animateDice(4, "手がかり2箇所配置", res => {
+               const s1 = getSpotByD66(res[0], res[1], SPOTS);
+               const s2 = getSpotByD66(res[2], res[3], SPOTS);
+               upd(p => ({
+                 ...p,
+                 clues:[...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
+                 newspaper: paperModal,
+                 log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log]
+               }));
+               setPaperModal(null);
+             });
+           } else if (is36) {
+             const count = (gs.clues ||[]).length;
+             if (count > 0) {
+               animateDice(count * 2, "手がかり再配置", res => {
+                 const newClues =[];
+                 for (let i = 0; i < count; i++) {
+                   const s = getSpotByD66(res[i*2], res[i*2+1], SPOTS);
+                   if (s) newClues.push(s);
+                 }
+                 upd(p => ({
+                   ...p,
+                   clues: [...new Set(newClues)],
+                   newspaper: paperModal,
+                   log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log]
+                 }));
+                 setPaperModal(null);
+               });
+             } else {
+               upd(p => ({ ...p, newspaper: paperModal }));
+               setPaperModal(null);
+             }
+           }
+         };
+     
+         return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => !needsApply && setPaperModal(null)}>
+            <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 9, letterSpacing: 3, color: "#2a3a50", textAlign: "center", marginBottom: 4 }}>— 文々。新聞 —</div>
+              {paperModal.dice && (
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 8 }}>
+                  {paperModal.dice.map((d, i) => (
+                    <div key={i} style={{ width: 44, height: 44, border: "2px solid #1e3a5a", borderRadius: 6, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#60c0f0", fontWeight: "bold" }}>{d}</div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 18, color: "#1976d2", textAlign: "center", marginBottom: 6 }}>[{paperModal.roll}]</div>
+              <div style={{ fontSize: 13, color: "#60c0f0", marginBottom: 8, textAlign: "center" }}>{paperModal.title}</div>
+              <div style={{ fontSize: 11, color: "#4a6070", lineHeight: 1.8 }}>{paperModal.effect}</div>
+              
+              {paperModal.targetSpot && (
+                <div style={{ marginTop: 8, padding: 6, background: "rgba(255,255,255,0.05)", borderRadius: 4, textAlign: "center", fontSize: 11, color: C.gold }}>
+                  対象スポット: {getSpot(paperModal.targetSpot)?.name}
+                </div>
+              )}
+
+              {isGm && needsApply && !paperModal.targetSpot ? (
+                <button onClick={applyEffect} style={{ marginTop: 12, width: "100%", padding: "8px", background: "rgba(100,181,246,0.15)", border: "1px solid #1976d2", color: C.blue, cursor: "pointer", borderRadius: 3, fontSize: 12 }}>
+                  効果を適用する
+                </button>
+              ) : (
+                <button onClick={() => setPaperModal(null)} style={{ marginTop: 12, width: "100%", padding: "7px", background: "rgba(192,57,43,0.15)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 3, fontSize: 12 }}>確認した</button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
