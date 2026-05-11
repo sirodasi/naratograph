@@ -459,7 +459,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
         if (!newBonds.includes(targetName)) newBonds.push(targetName);
         return { ...x, bonds: newBonds };
       });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は《${targetName}》との絆を獲得した`, ...p.log] };
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は《${targetName}への絆》を獲得した`, ...p.log] };
     });
   };
 
@@ -470,7 +470,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
         const newItems = { ...x.items, [itemName]: (x.items[itemName] || 0) + count };
         return { ...x, items: newItems };
       });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は [${itemName}] を獲得した`, ...p.log] };
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は【${itemName}】を獲得した`, ...p.log] };
     });
   };
 
@@ -481,6 +481,20 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       const newQuests = p.quests.map(q => q.id === questId ? {...q, clues: (q.clues||0)+1} : q);
       return { ...p, clues: newClues, quests: newQuests, currentScene: {...p.currentScene, phase: "action_done"}, log: [`${pc.name} は [${spotId}] で手がかりを獲得し、クエスト「${newQuests.find(q=>q.id===questId)?.name}」に配置した`, ...p.log] };
     });
+  };
+
+  const handleTradeLose = (itemName) => {
+    upd(p => {
+      const newPcs = p.pcs.map(x => {
+        if (x.uid !== pc.uid) return x;
+        return { ...x, items: { ...x.items, [itemName]: Math.max(0, x.items[itemName] - 1) } };
+      });
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, subPhase: "trade_gain" }, log: [`${pc.name} は【${itemName}】を手放した`, ...p.log] };
+    });
+  };
+  
+  const handleGainAny = (itemName) => {
+    gainItem(itemName, 1);
   };
 
   const hasSpecial = sc.actionDice?.includes(6);
@@ -806,6 +820,26 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 }
 
 const btnSmall = { width: 24, height: 24, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer" };
+
+const BASIC_ITEMS = ["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカかけら"];
+
+function ItemSelector({ title, items, onSelect, onCancel }) {
+  return (
+    <div style={{ padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 4, marginTop: 10 }}>
+      <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, textAlign: "center" }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+        {items.map(itemName => (
+          <button key={itemName} onClick={() => onSelect(itemName)} style={btn("rgba(255,255,255,0.05)", C.border, C.text, { padding: "6px", fontSize: 10 })}>
+            {itemName}
+          </button>
+        ))}
+      </div>
+      {onCancel && (
+        <button onClick={onCancel} style={{ ...btn("none", "none", C.textFaint), width: "100%", marginTop: 4 }}>やめる</button>
+      )}
+    </div>
+  );
+}
 
 // ── RightPanel ────────────────────────────────────────
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
