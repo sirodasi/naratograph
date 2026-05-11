@@ -28,12 +28,21 @@ export const ITEM_DATA = {
   "残機のかけら": { canUse: (pc) => (pc.items?.["残機のかけら"]||0) >= 3 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; r.残り人数={cur:Math.min((r.残り人数?.cur||0)+1,r.残り人数?.max||5),max:r.残り人数?.max||5}; return {...pc,items:{...pc.items,"残機のかけら":pc.items["残機のかけら"]-3},resources:r}; },
                     desc:"3つ消費して【残り人数】を「1点」獲得します。（3つ以上保持時のみ）", timing:"いつでも" },
-  "スペカかけら": { canUse: (pc) => (pc.items?.["スペカかけら"]||0) >= 2 && !(pc.badStatus||[]).includes("二日酔い"),
+  "スペカのかけら": { canUse: (pc) => (pc.items?.["スペカかけら"]||0) >= 2 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; r.スペカ={cur:Math.min((r.スペカ?.cur||0)+1,r.スペカ?.max||5),max:r.スペカ?.max||5}; return {...pc,items:{...pc.items,"スペカかけら":pc.items["スペカかけら"]-2},resources:r}; },
                     desc:"2つ消費して【スペルカード】を「1点」獲得します。（2つ以上保持時のみ）", timing:"いつでも" },
   "妖器":         { canUse: (pc) => (pc.items?.["妖器"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; r.攻撃力={cur:Math.min((r.攻撃力?.cur||0)+1,r.攻撃力?.max||5),max:r.攻撃力?.max||5}; return {...pc,items:{...pc.items,"妖器":pc.items["妖器"]-1},flags:{...pc.flags,youki:true}}; },
                     desc:"1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）", timing:"弾幕ごっこ前" },
+};
+
+export const RANDOM_ITEM_TABLE = {
+  1: "お酒",
+  2: "小銭",
+  3: "お守り",
+  4: "Pアイテム",
+  5: "残機のかけら",
+  6: "スペカかけら"
 };
 
 const HAPPENING_TABLE = {
@@ -265,6 +274,21 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             </div>
           )}
 
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {(pc.bonds || []).length > 0 ? (
+                pc.bonds.map(b => (
+                  <span key={b} style={{ padding: "2px 8px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}50`, borderRadius: 10, fontSize: 10, color: C.gold }}>
+                    《{b}》
+                  </span>
+                ))
+              ) : (
+                <span style={{ fontSize: 9, color: "#2a3545" }}>なし</span>
+              )}
+            </div>
+          </div>
+
           <div style={{ fontSize:9,color:C.textFaint,letterSpacing:2,borderBottom:`1px solid #111828`, paddingBottom:3,marginBottom:8 }}>スキル</div>
           {skill && (
             <div style={{ marginBottom:6 }}>
@@ -425,6 +449,29 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 
   const rollExplore = () => {
     animateDice(sc.actionDiceCount||2, "行為判定", (res) => upd(p => ({...p, currentScene: {...p.currentScene, phase: "explore_result", actionDice: res}})));
+  };
+
+  const gainBond = (targetName) => {
+    upd(p => {
+      const newPcs = p.pcs.map(x => {
+        if (x.uid !== pc.uid) return x;
+        const newBonds = [...(x.bonds || [])];
+        if (!newBonds.includes(targetName)) newBonds.push(targetName);
+        return { ...x, bonds: newBonds };
+      });
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は《${targetName}》との絆を獲得した`, ...p.log] };
+    });
+  };
+
+  const gainItem = (itemName, count = 1) => {
+    upd(p => {
+      const newPcs = p.pcs.map(x => {
+        if (x.uid !== pc.uid) return x;
+        const newItems = { ...x.items, [itemName]: (x.items[itemName] || 0) + count };
+        return { ...x, items: newItems };
+      });
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は [${itemName}] を獲得した`, ...p.log] };
+    });
   };
 
   const acquireClue = (questId) => {
@@ -656,9 +703,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   upd(p => {
                     const newBs = pc.badStatus.filter(x => x !== bs);
                     const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs } : x);
-                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log: [`${pc.name} は変調【${bs}】を解除した`, ...p.log] };
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log: [`${pc.name} は変調《${bs}》を解除した`, ...p.log] };
                   });
-                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>【{bs}】を解除</button>
+                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>《{bs}》を解除</button>
               ))}
               <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 10 }}>戻る</button>
             </div>
@@ -715,7 +762,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                           upd(p => {
                             const newBs = Array.from(new Set([...(pc.badStatus || []), bsName]));
                             const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: bsName === "だるい" ? 1 : x.resources.やる気.cur } } } : x);
-                            return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log: [`${pc.name} は変調【${bsName}】を獲得した`, ...p.log] };
+                            return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log: [`${pc.name} は変調《${bsName}》を獲得した`, ...p.log] };
                           });
                         })} style={btn(C.redBg, C.redBorder, C.red, { fontSize: 10 })}>🎲 変調表を振る (1D6)</button>
                       </div>
