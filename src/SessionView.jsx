@@ -252,7 +252,9 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             <span style={{ fontSize: 11, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pc.name}</span>
             {isActing ? <span style={{ fontSize: 9, color: C.blue }}>▶ シーン進行中</span> : hasActed ? <span style={{ fontSize: 9, color: C.textFaint }}>✓ 行動済み</span> : <span style={{ fontSize: 9, color: C.gold }}>未行動</span>}
           </div>
-          <div style={{ fontSize: 9, color: C.textFaint }}>{pc.charName} / {currentSpotName}</div>
+          <div style={{ fontSize: 9, color: C.textFaint }}>
+            {pc.charName} {(pc.tags ||[]).length > 0 && `《${pc.tags.join("・")}》`}
+          </div>
         </div>
         <div style={{ display: "flex", gap: 4 }}>
           <span style={{ fontSize: 9, color: "#f9a825" }}>やる気{resources.やる気?.cur || 0}/{resources.やる気?.max || 3}</span>
