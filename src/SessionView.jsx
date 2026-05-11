@@ -1058,6 +1058,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
         actualVal = Math.max(0, val - 1);
         logAdd += `（※変調《疲れた》のため移動距離が ${actualVal} に減少）`;
       }
+      if (p.newspaper?.roll === 24) {
+        actualVal = Math.max(0, actualVal - 1);
+        logAdd += `（※新聞[24:雨模様]のため減少）`;
+      }
       return { ...p, currentScene: { ...p.currentScene, phase: "move_dest", selectedMoveDie: actualVal }, log: [logAdd, ...p.log] };
     });
   };
@@ -1091,6 +1095,35 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   };
  
   const hasClueHere = gs.clues?.includes(pc.currentSpot);
+
+  const gainBond = targetName => {
+    if ((pc.badStatus ||[]).includes("不機嫌")) {
+      writeLog(`${pc.charName} は変調《不機嫌》のため絆を獲得できなかった`);
+      return;
+    }
+    const targetPc = gs.pcs.find(p => p.charName === targetName);
+    if (targetPc && (targetPc.badStatus ||[]).includes("不機嫌")) {
+      writeLog(`${targetName} が変調《不機嫌》のため絆を獲得できなかった`);
+      return;
+    }
+
+    upd(p => {
+      const newPcs = p.pcs.map(x => {
+        if (x.uid === pc.uid) {
+          const bonds = [...(x.bonds || [])];
+          if (!bonds.includes(targetName)) bonds.push(targetName);
+          return { ...x, bonds };
+        }
+        if (p.newspaper?.roll === 34 && x.charName === targetName) {
+          const bonds =[...(x.bonds || [])];
+          if (!bonds.includes(pc.charName)) bonds.push(pc.charName);
+          return { ...x, bonds };
+        }
+        return x;
+      });
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.charName} は《${targetName}への絆》を獲得した` + (p.newspaper?.roll === 34 ? `（新聞効果で双方向に獲得！）` : ""), ...p.log] };
+    });
+  };
  
   return (
     <div style={{ padding: 10, background: "rgba(25,118,210,0.1)", borderBottom: `1px solid ${C.blueBorder}`, flexShrink: 0 }}>
@@ -1409,7 +1442,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
           {sc.phase === "action_done" && (
             <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
-              <button onClick={endScene} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
+              <button onClick={} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
             </div>
           )}
         </div>
