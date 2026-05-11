@@ -3,15 +3,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 
-export const BAD_STATUS_TABLE = {
-  1: { name: "だるい", desc: "あなたの【やる気】は「1点」となり、いかなる処理によってもあなたの【やる気】は回復しなくなります。" },
-  2: { name: "スランプ", desc: "いかなる処理によってもあなたの【霊力】は増加しなくなります。" },
-  3: { name: "二日酔い", desc: "あなたはアイテムを使用することができません。" },
-  4: { name: "怪我", desc: "あなたは自身が行う行為判定の判定ダイス数にかかわらず、行為判定の際にダイスを2つまでしか振ることができなくなります。" },
-  5: { name: "不機嫌", desc: "あなたは絆を獲得することができなくなり、またすべてのキャラクターはあなたへの絆を獲得することができません。" },
-  6: { name: "疲れた", desc: "あなたが自身のシーンの「移動」の処理で移動できる距離は1スポット分少なくなります。" },
-};
-
 export const ITEM_DATA = {
   "お酒":         { canUse: (pc) => (pc.items?.["お酒"]||0) > 0 && !(pc.badStatus||[]).includes("二日酔い"),
                     use: (pc) => { const r={...pc.resources}; if(!(pc.badStatus||[]).includes("だるい")) r.やる気={cur:Math.min((r.やる気?.cur||0)+1,r.やる気?.max||3),max:r.やる気?.max||3}; return {...pc,items:{...pc.items,"お酒":pc.items["お酒"]-1},resources:r}; },
@@ -52,6 +43,15 @@ const HAPPENING_TABLE = {
   4: { title: "道に迷ってしまった。", desc: "あなたはD66を振って出た目と同じ番号のスポットに移動する。" },
   5: { title: "問題なし。", desc: "あなたは今いるスポットから6スポット分離れた距離までにある任意のスポットに移動する。" },
   6: { title: "「あなたは食べてもいい人類？」", desc: "通りがかりの妖怪に襲われた！\n（※今回は「問題なし」と同様に、6マス以内への移動として処理します）" },
+};
+
+export const BAD_STATUS_TABLE = {
+  1: { name: "だるい", desc: "あなたの【やる気】は「1点」となり、いかなる処理によってもあなたの【やる気】は回復しなくなります。" },
+  2: { name: "スランプ", desc: "いかなる処理によってもあなたの【霊力】は増加しなくなります。" },
+  3: { name: "二日酔い", desc: "あなたはアイテムを使用することができません。" },
+  4: { name: "怪我", desc: "あなたは自身が行う行為判定の判定ダイス数にかかわらず、行為判定の際にダイスを2つまでしか振ることができなくなります。" },
+  5: { name: "不機嫌", desc: "あなたは絆を獲得することができなくなり、またすべてのキャラクターはあなたへの絆を獲得することができません。" },
+  6: { name: "疲れた", desc: "あなたが自身のシーンの「移動」の処理で移動できる距離は1スポット分少なくなります。" },
 };
 
 export const INIT_RESOURCES = () => ({ やる気:{cur:1,max:3}, 残り人数:{cur:2,max:5}, スペカ:{cur:1,max:5}, グレイズ:{cur:0,max:5}, 霊力:{cur:0,max:20}, 攻撃力:{cur:1,max:5} });
