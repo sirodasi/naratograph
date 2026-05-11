@@ -158,6 +158,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         let isReachable = false;
         if (isMovePhase) {
           isReachable = exactDist ? distance === exactDist : (distance > 0 && distance <= maxDist);
+
+          const isYoukai = (actingPc?.tags ||[]).includes("妖怪");
+          if (gs.newspaper?.roll === 16 && isYoukai && spot.id === "11") {
+            isReachable = false;
         }
 
         const sx       = mapBounds.left + (spot.x / 100) * mapBounds.width;
