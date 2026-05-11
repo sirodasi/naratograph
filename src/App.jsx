@@ -152,14 +152,9 @@ function useMapBounds(containerRef) {
 // ─── MapView（GM/PL共通）────────────────────────────────
 function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const cycleIdx = gs.cycleIdx || 0;
+  const isNight   = cycleIdx === 3;
+  const isEvening = cycleIdx === 2;
   const[hov, setHov] = useState(null);
-
-  const filters = [
-    "brightness(1.05) saturate(1.1) sepia(0.2)",
-    "brightness(1) saturate(1) sepia(0)",
-    "brightness(0.7) sepia(0.5) saturate(1.6) hue-rotate(-15deg)",
-    "brightness(0.3) saturate(0.4) contrast(1.1)",
-  ];
   
   const mapRef = useRef(null);
   const mapBounds = useMapBounds(mapRef);
@@ -204,7 +199,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
       `}</style>
 
       <img src={MAP_SRC} alt="幻想郷マップ" style={{ width:"100%", height:"100%", objectFit:"contain", objectPosition:"left top",
-        filter: filters[cycleIdx] || "none", transition: "filter 4.0s ease-in-out", pointerEvents: "none" }} />
+        filter: isNight ? "brightness(0.45) sepia(0) saturate(0.5) hue-rotate(0deg)" 
+              : isEvening ? "brightness(0.8) sepia(0.4) saturate(1.4) hue-rotate(-10deg)" 
+              : "brightness(1) sepia(0) saturate(1) hue-rotate(0deg)",
+        transition:"filter 2s ease" }} />
 
       {mapBounds.width > 0 && SPOTS.map(spot => {
         const isDream   = spot.id === "dream";
