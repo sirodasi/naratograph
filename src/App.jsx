@@ -307,6 +307,7 @@ function SessionApp({ roomCode, user }) {
           name:   p.name,
           charId: p.charId,
           charName: p.charName,
+          tags:   p.tags ?? charData?.tags ?? [],
           bonds:[], badStatus:[], flags: {},
           spriteRow:     p.spriteRow ?? -1,
           spriteCol:     p.spriteCol ?? -1,
