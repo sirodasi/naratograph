@@ -3,97 +3,93 @@ import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { C } from "./styles/colors";
  
+// ─── ユーティリティ ───────────────────────────────────────────────
+export function getSpotByD66(d1, d2, SPOTS) {
+  const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
+  const candidates = SPOTS.filter(s => s.roll === val);
+  if (candidates.length === 2) {
+    return (d1 < d2 ? candidates.find(s => s.id.endsWith("A")) : candidates.find(s => s.id.endsWith("B")))?.id;
+  } else if (candidates.length === 1) {
+    return candidates[0].id;
+  }
+  return null;
+}
+
 // ─── アイテムデータ ───────────────────────────────────────────────
  
 export const ITEM_DATA = {
   "お酒": {
     timing: "いつでも",
     desc:    "自身の【やる気】が「1点」回復します。",
-    canUse:  pc => (pc.items?.["お酒"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
+    canUse:  pc => (pc.items?.["お酒"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: pc => {
       const resources = { ...pc.resources };
-      if (!(pc.badStatus || []).includes("だるい")) {
+      if (!(pc.badStatus ||[]).includes("だるい")) {
         const r = resources.やる気 || { cur: 0, max: 3 };
         resources.やる気 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
       }
-      return { ...pc, items: { ...pc.items, "お酒": pc.items["お酒"] - 1 }, resources };
+      return { ...pc, items: { ...pc.items, "お酒": Math.max(0, (pc.items["お酒"] || 0) - 1) }, resources };
     },
   },
- 
   "小銭": {
     timing: "行為判定直前",
     desc:    "次の行為判定の判定ダイス数が「1」増加します。",
-    canUse:  pc => (pc.items?.["小銭"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
-    use: pc => ({
-      ...pc,
-      items: { ...pc.items, "小銭": pc.items["小銭"] - 1 },
-      flags: { ...pc.flags, kosen: true },
-    }),
+    canUse:  pc => (pc.items?.["小銭"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
+    use: pc => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, kosen: true } }),
   },
- 
   "お守り": {
     timing: "移動処理中",
     desc:    "移動で「6」が出たとき、ハプニングが発生せず6マス先まで移動できます。",
-    canUse:  pc => (pc.items?.["お守り"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
-    use: pc => ({
-      ...pc,
-      items: { ...pc.items, "お守り": pc.items["お守り"] - 1 },
-      flags: { ...pc.flags, omamori: true },
-    }),
+    canUse:  pc => (pc.items?.["お守り"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
+    use: pc => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, omamori: true } }),
   },
- 
   "Pアイテム": {
     timing: "いつでも",
     desc:    "【霊力】を「3点」獲得します。",
-    canUse:  pc => (pc.items?.["Pアイテム"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
+    canUse:  pc => (pc.items?.["Pアイテム"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: pc => {
       const resources = { ...pc.resources };
-      if (!(pc.badStatus || []).includes("スランプ")) {
+      if (!(pc.badStatus ||[]).includes("スランプ")) {
         const r = resources.霊力 || { cur: 0, max: 30 };
         resources.霊力 = { cur: Math.min(r.cur + 3, r.max), max: r.max };
       }
-      return { ...pc, items: { ...pc.items, "Pアイテム": pc.items["Pアイテム"] - 1 }, resources };
+      return { ...pc, items: { ...pc.items, "Pアイテム": Math.max(0, (pc.items["Pアイテム"] || 0) - 1) }, resources };
     },
   },
- 
   "残機のかけら": {
     timing: "いつでも",
     desc:    "3つ消費して【残り人数】を「1点」獲得します。（3つ以上保持時のみ）",
-    canUse:  pc => (pc.items?.["残機のかけら"] || 0) >= 3 && !(pc.badStatus || []).includes("二日酔い"),
+    canUse:  pc => (pc.items?.["残機のかけら"] || 0) >= 3 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: pc => {
       const resources = { ...pc.resources };
       const r = resources.残り人数 || { cur: 0, max: 5 };
       resources.残り人数 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
-      return { ...pc, items: { ...pc.items, "残機のかけら": pc.items["残機のかけら"] - 3 }, resources };
+      return { ...pc, items: { ...pc.items, "残機のかけら": Math.max(0, (pc.items["残機のかけら"] || 0) - 3) }, resources };
     },
   },
- 
   "スペカのかけら": {
     timing: "いつでも",
     desc:    "2つ消費して【スペルカード】を「1点」獲得します。（2つ以上保持時のみ）",
-    canUse:  pc => (pc.items?.["スペカかけら"] || 0) >= 2 && !(pc.badStatus || []).includes("二日酔い"),
+    canUse:  pc => (pc.items?.["スペカかけら"] || 0) >= 2 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: pc => {
       const resources = { ...pc.resources };
       const r = resources.スペカ || { cur: 0, max: 5 };
       resources.スペカ = { cur: Math.min(r.cur + 1, r.max), max: r.max };
-      return { ...pc, items: { ...pc.items, "スペカかけら": pc.items["スペカかけら"] - 2 }, resources };
+      return { ...pc, items: { ...pc.items, "スペカかけら": Math.max(0, (pc.items["スペカかけら"] || 0) - 2) }, resources };
     },
   },
- 
   "妖器": {
     timing: "弾幕ごっこ前",
     desc:    "1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）",
-    canUse:  pc => (pc.items?.["妖器"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
+    canUse:  pc => (pc.items?.["妖器"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: pc => {
       const resources = { ...pc.resources };
       const r = resources.攻撃力 || { cur: 1, max: 5 };
       resources.攻撃力 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
-      return { ...pc, items: { ...pc.items, "妖器": pc.items["妖器"] - 1 }, resources, flags: { ...pc.flags, youki: true } };
+      return { ...pc, items: { ...pc.items, "妖器": Math.max(0, (pc.items["妖器"] || 0) - 1) }, resources, flags: { ...pc.flags, youki: true } };
     },
   },
 };
- 
-// ─── 初期値エクスポート ───────────────────────────────────────────
  
 export const INIT_RESOURCES = () => ({
   やる気:     { cur: 1, max: 3  },
@@ -105,40 +101,19 @@ export const INIT_RESOURCES = () => ({
 });
  
 export const INIT_ITEMS = () => ({
-  お酒:           0,
-  小銭:           0,
-  お守り:         0,
-  Pアイテム:      0,
-  残機のかけら:   0,
-  スペカかけら:   0,
-  妖器:           0,
+  お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカかけら: 0, 妖器: 0,
 });
  
-// ─── その他テーブル ───────────────────────────────────────────────
- 
-export const RANDOM_ITEM_TABLE = { 1: "お酒", 2: "小銭", 3: "お守り", 4: "Pアイテム", 5: "残機のかけら", 6: "スペカかけら" };
- 
-const HAPPENING_TABLE = {
-  1: { title: "仲間が恋しい。",            desc: "任意のPC1人を選ぶこと。あなたは強制的に、選んだPCのいるスポットに移動する。" },
-  2: { title: "【拠点】が恋しい。",         desc: "あなたは強制的にあなたの【拠点】に移動する。" },
-  3: { title: "あれ？行き過ぎてしまったかも。", desc: "ダイスを1つ振り、あなたが今いるスポットから振った出目の分だけ離れた距離にあるスポット1つを選ぶこと。あなたはそのスポットに移動する。" },
-  4: { title: "道に迷ってしまった。",       desc: "あなたはD66を振って出た目と同じ番号のスポットに移動する。" },
-  5: { title: "問題なし。",                 desc: "あなたは今いるスポットから6スポット分離れた距離までにある任意のスポットに移動する。" },
-  6: { title: "「あなたは食べてもいい人類？」", desc: "通りがかりの妖怪に襲われた！\n（※今回は「問題なし」と同様に、6マス以内への移動として処理します）" },
-};
- 
 export const BAD_STATUS_TABLE = {
-  1: { name: "だるい",   desc: "あなたの【やる気】は「1点」となり、いかなる処理によってもあなたの【やる気】は回復しなくなります。" },
+  1: { name: "だるい",   desc: "あなたの【やる気】は「1点」となり、いかなる処理によっても回復しません。" },
   2: { name: "スランプ", desc: "いかなる処理によってもあなたの【霊力】は増加しなくなります。" },
   3: { name: "二日酔い", desc: "あなたはアイテムを使用することができません。" },
-  4: { name: "怪我",     desc: "あなたは自身が行う行為判定の判定ダイス数にかかわらず、行為判定の際にダイスを2つまでしか振ることができなくなります。" },
-  5: { name: "不機嫌",   desc: "あなたは絆を獲得することができなくなり、またすべてのキャラクターはあなたへの絆を獲得することができません。" },
-  6: { name: "疲れた",   desc: "あなたが自身のシーンの「移動」の処理で移動できる距離は1スポット分少なくなります。" },
+  4: { name: "怪我",     desc: "行為判定の際にダイスを2つまでしか振ることができなくなります。" },
+  5: { name: "不機嫌",   desc: "あなたは絆を獲得できなくなり、他のキャラクターもあなたへの絆を獲得できません。" },
+  6: { name: "疲れた",   desc: "「移動」の処理で移動できる距離が1スポット分少なくなります。" },
 };
  
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
- 
-// ─── 共通スタイルヘルパー（ScenePanel内でも使う） ──────────────────
  
 const btnFull = (bg, border, color, extra = {}) => ({
   width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer",
@@ -151,17 +126,11 @@ const btnSmall = {
 };
  
 // ─── BackstoryScreen ──────────────────────────────────────────────
- 
 export function BackstoryScreen({ gs, isGm, onProceed }) {
   const [visible, setVisible] = useState(false);
- 
-  useEffect(() => { setTimeout(() => setVisible(true), 100); }, []);
- 
+  useEffect(() => { setTimeout(() => setVisible(true), 100); },[]);
   return (
-    <div
-      style={{ background: "#04060a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "serif", cursor: "pointer", padding: "40px 60px", boxSizing: "border-box" }}
-      onClick={isGm ? onProceed : undefined}
-    >
+    <div style={{ background: "#04060a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "serif", cursor: "pointer", padding: "40px 60px", boxSizing: "border-box" }} onClick={isGm ? onProceed : undefined}>
       <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } } @keyframes pulse { 0%,100% { opacity: 0.5 } 50% { opacity: 1 } }`}</style>
       <div style={{ maxWidth: 760, animation: "fadeIn 1.2s ease", opacity: visible ? 1 : 0, transition: "opacity 1s" }}>
         <div style={{ fontSize: 11, color: "#4a6080", letterSpacing: 4, textAlign: "center", marginBottom: 16 }}>{gs.scenarioData?.name || "シナリオ"}</div>
@@ -176,7 +145,6 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
 }
  
 // ─── ConfirmModal ─────────────────────────────────────────────────
- 
 export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行する", okColor = "#e07060" }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
@@ -193,7 +161,6 @@ export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行す
 }
  
 // ─── ItemUseModal ─────────────────────────────────────────────────
- 
 function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
   const data = ITEM_DATA[itemName];
   if (!data) return null;
@@ -206,11 +173,7 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
         <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 14 }}>{data.desc}</div>
         {!canUse && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>使用条件を満たしていません</div>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => canUse && onConfirm()}
-            disabled={!canUse}
-            style={{ flex: 1, padding: "8px", cursor: canUse ? "pointer" : "not-allowed", borderRadius: 3, background: canUse ? "rgba(200,160,64,0.2)" : "rgba(255,255,255,0.02)", border: canUse ? "1px solid #8b6914" : "1px solid #1e2535", color: canUse ? C.gold : "#2a3545", fontSize: 12 }}
-          >使用する</button>
+          <button onClick={() => canUse && onConfirm()} disabled={!canUse} style={{ flex: 1, padding: "8px", cursor: canUse ? "pointer" : "not-allowed", borderRadius: 3, background: canUse ? "rgba(200,160,64,0.2)" : "rgba(255,255,255,0.02)", border: canUse ? "1px solid #8b6914" : "1px solid #1e2535", color: canUse ? C.gold : "#2a3545", fontSize: 12 }}>使用する</button>
           <button onClick={onCancel} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.03)", border: "1px solid #1e2535", color: C.textFaint, fontSize: 12 }}>キャンセル</button>
         </div>
       </div>
@@ -219,7 +182,6 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
 }
  
 // ─── SkillActivateModal ───────────────────────────────────────────
- 
 function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel }) {
   const typeColor = SKILL_TYPE_COLOR[skillType] || C.text;
   return (
@@ -240,19 +202,18 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 }
  
 // ─── PCCard ───────────────────────────────────────────────────────
- 
 export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
-  const [expanded, setExpanded]     = useState(false);
+  const[expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
  
   const resources     = pc.resources || INIT_RESOURCES();
   const items         = pc.items     || INIT_ITEMS();
-  const badStatus     = pc.badStatus || [];
+  const badStatus     = pc.badStatus ||[];
   const skill         = pc.skillId ? PERSONALITY_SKILLS[pc.skillId] : null;
   const isCustomChar  = pc.charId?.startsWith("custom_");
-  const hasActed      = (gs.actedPcs || []).includes(pc.uid);
+  const hasActed      = (gs.actedPcs ||[]).includes(pc.uid);
   const isActing      = gs.currentScene?.pcUid === pc.uid;
   const skillCanActivate = skill && skill.type !== "オート";
   const currentSpotName  = getSpot(pc.currentSpot)?.name || "-";
@@ -265,40 +226,29 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   };
  
   const activateSkill = () => {
-    onUpdatePc({
-      ...pc,
-      skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1,
-      log: [...(pc.log || []), `《${skill?.name}》を発動`],
-    });
+    onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, log:[...(pc.log || []), `《${skill?.name}》を発動`] });
     setSkillModal(null);
   };
  
-  // 霊力変更に連動して攻撃力を更新
   const adjustResource = (key, delta) => {
     const r = resources[key] || { cur: 0, max: 1 };
     const newCur = Math.max(0, Math.min(r.cur + delta, r.max));
-    const updated = { ...resources, [key]: { ...r, cur: newCur } };
+    const updated = { ...resources,[key]: { ...r, cur: newCur } };
     if (key === "霊力") updated.攻撃力 = { ...updated.攻撃力, cur: 1 + Math.floor(newCur / 5) };
     onUpdatePc({ ...pc, resources: updated });
   };
  
-  const resKeys  = ["やる気", "残り人数", "スペカ", "グレイズ", "霊力", "攻撃力"];
+  const resKeys  =["やる気", "残り人数", "スペカ", "グレイズ", "霊力", "攻撃力"];
   const itemKeys = Object.keys(INIT_ITEMS());
  
   return (
     <div style={{ border: `1px solid ${isActing ? C.blue : expanded ? "#2a3545" : C.border}`, borderRadius: 5, marginBottom: 6, overflow: "hidden", transition: "border 0.2s" }}>
-      {/* ヘッダー行（クリックで展開） */}
-      <div
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", background: isActing ? C.blueBg : expanded ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.01)" }}
-        onClick={() => setExpanded(v => !v)}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", background: isActing ? C.blueBg : expanded ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.01)" }} onClick={() => setExpanded(v => !v)}>
         <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 11, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pc.name}</span>
-            {isActing  ? <span style={{ fontSize: 9, color: C.blue     }}>▶ シーン進行中</span>
-           : hasActed  ? <span style={{ fontSize: 9, color: C.textFaint }}>✓ 行動済み</span>
-           :              <span style={{ fontSize: 9, color: C.gold     }}>未行動</span>}
+            {isActing ? <span style={{ fontSize: 9, color: C.blue }}>▶ シーン進行中</span> : hasActed ? <span style={{ fontSize: 9, color: C.textFaint }}>✓ 行動済み</span> : <span style={{ fontSize: 9, color: C.gold }}>未行動</span>}
           </div>
           <div style={{ fontSize: 9, color: C.textFaint }}>{pc.charName} / {currentSpotName}</div>
         </div>
@@ -308,10 +258,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
         </div>
       </div>
  
-      {/* 展開パネル */}
       {expanded && (
         <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}` }}>
-          {/* リソース */}
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>リソース</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginBottom: 10 }}>
             {resKeys.map(k => {
@@ -319,9 +267,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               return (
                 <div key={k} style={{ padding: "4px 6px", background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 3, textAlign: "center" }}>
                   <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 1 }}>【{k}】</div>
-                  <div style={{ fontSize: 12, color: C.gold }}>
-                    {r.cur}{r.max > 1 && <span style={{ fontSize: 8, color: C.textFaint }}>/{r.max}</span>}
-                  </div>
+                  <div style={{ fontSize: 12, color: C.gold }}>{r.cur}{r.max > 1 && <span style={{ fontSize: 8, color: C.textFaint }}>/{r.max}</span>}</div>
                   {isGm && gmEdit && (
                     <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }}>
                       <button onClick={() => adjustResource(k, -1)} style={{ width: 14, height: 14, fontSize: 9, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, padding: 0 }}>−</button>
@@ -333,7 +279,6 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             })}
           </div>
  
-          {/* アイテム */}
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>アイテム</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
             {itemKeys.map(k => {
@@ -341,19 +286,13 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               const canUse = ITEM_DATA[k]?.canUse(pc);
               if (count === 0 && !isGm) return null;
               return (
-                <div
-                  key={k}
-                  style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 7px", borderRadius: 12, cursor: count > 0 ? "pointer" : "default", background: canUse ? "rgba(200,160,64,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${canUse ? C.goldDim : C.border}` }}
-                  onClick={() => count > 0 && setItemModal(k)}
-                >
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 7px", borderRadius: 12, cursor: count > 0 ? "pointer" : "default", background: canUse ? "rgba(200,160,64,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${canUse ? C.goldDim : C.border}` }} onClick={() => count > 0 && setItemModal(k)}>
                   <span style={{ fontSize: 10, color: canUse ? C.gold : C.textFaint }}>{k}</span>
                   <span style={{ fontSize: 9, color: canUse ? C.gold : C.textFaint, padding: "0 4px", background: "rgba(0,0,0,0.3)", borderRadius: 8 }}>{count}</span>
                 </div>
               );
             })}
-            <button onClick={() => setGmEdit(v => !v)} style={{ padding: "2px 8px", fontSize: 9, cursor: "pointer", borderRadius: 10, background: gmEdit ? "rgba(192,57,43,0.2)" : "rgba(255,255,255,0.03)", border: `1px solid ${gmEdit ? "#8b1a1a" : C.border}`, color: gmEdit ? C.red : C.textFaint }}>
-              {gmEdit ? "編集終了" : "GM編集"}
-            </button>
+            <button onClick={() => setGmEdit(v => !v)} style={{ padding: "2px 8px", fontSize: 9, cursor: "pointer", borderRadius: 10, background: gmEdit ? "rgba(192,57,43,0.2)" : "rgba(255,255,255,0.03)", border: `1px solid ${gmEdit ? "#8b1a1a" : C.border}`, color: gmEdit ? C.red : C.textFaint }}>{gmEdit ? "編集終了" : "GM編集"}</button>
             {isGm && gmEdit && (
               <div style={{ width: "100%", marginTop: 4 }}>
                 <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 4 }}>アイテム直接編集:</div>
@@ -371,7 +310,6 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             )}
           </div>
  
-          {/* 変調 */}
           {badStatus.length > 0 && (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>変調</div>
@@ -382,9 +320,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
                     <div key={bs} style={{ padding: "4px 8px", background: "rgba(224,112,96,0.15)", border: `1px solid ${C.redBorder}`, borderRadius: 4 }}>
                       <div style={{ fontSize: 10, color: C.red, marginBottom: 2, fontWeight: "bold" }}>《{bs}》</div>
                       <div style={{ fontSize: 8, color: C.textDim, lineHeight: 1.4 }}>{bData?.desc}</div>
-                      {isGm && gmEdit && (
-                        <button onClick={() => onUpdatePc({ ...pc, badStatus: badStatus.filter(x => x !== bs) })} style={{ marginTop: 4, padding: "2px 6px", fontSize: 8, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2 }}>解除</button>
-                      )}
+                      {isGm && gmEdit && <button onClick={() => onUpdatePc({ ...pc, badStatus: badStatus.filter(x => x !== bs) })} style={{ marginTop: 4, padding: "2px 6px", fontSize: 8, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2 }}>解除</button>}
                     </div>
                   );
                 })}
@@ -392,20 +328,16 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             </div>
           )}
  
-          {/* 絆 */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {(pc.bonds || []).length > 0
-                ? pc.bonds.map(b => (
-                    <span key={b} style={{ padding: "2px 8px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}50`, borderRadius: 10, fontSize: 10, color: C.gold }}>《{b}》</span>
-                  ))
+              {(pc.bonds ||[]).length > 0
+                ? pc.bonds.map(b => <span key={b} style={{ padding: "2px 8px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}50`, borderRadius: 10, fontSize: 10, color: C.gold }}>《{b}》</span>)
                 : <span style={{ fontSize: 9, color: "#2a3545" }}>なし</span>
               }
             </div>
           </div>
  
-          {/* スキル */}
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
           {skill && (
             <div style={{ marginBottom: 6 }}>
@@ -415,9 +347,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
                 {skill.type === "オート" && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{skill.desc}</div>
-              {skillCanActivate && !isCustomChar && (
-                <button onClick={() => setSkillModal(true)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold }}>発動する</button>
-              )}
+              {skillCanActivate && !isCustomChar && <button onClick={() => setSkillModal(true)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold }}>発動する</button>}
             </div>
           )}
           {pc.abilitySkill && (
@@ -427,9 +357,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
                 <span style={{ fontSize: 11, color: "#90caf9" }}>《{pc.abilitySkill.name}》</span>
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{pc.abilitySkill.desc}</div>
-              {pc.abilitySkill.type !== "オート" && !isCustomChar && (
-                <button onClick={() => setSkillModal({ name: pc.abilitySkill.name, type: pc.abilitySkill.type, desc: pc.abilitySkill.desc, key: "ability" })} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
-              )}
+              {pc.abilitySkill.type !== "オート" && !isCustomChar && <button onClick={() => setSkillModal({ name: pc.abilitySkill.name, type: pc.abilitySkill.type, desc: pc.abilitySkill.desc, key: "ability" })} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>}
             </div>
           )}
         </div>
@@ -441,28 +369,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   );
 }
  
-// ─── ItemSelector ─────────────────────────────────────────────────
- 
-function ItemSelector({ title, items, onSelect, onCancel }) {
-  return (
-    <div style={{ padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 4, marginTop: 10 }}>
-      <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, textAlign: "center" }}>{title}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-        {items.map(itemName => (
-          <button key={itemName} onClick={() => onSelect(itemName)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { padding: "6px", fontSize: 10 })}>
-            {itemName}
-          </button>
-        ))}
-      </div>
-      {onCancel && (
-        <button onClick={onCancel} style={{ ...btnFull("none", "none", C.textFaint), width: "100%", marginTop: 4 }}>やめる</button>
-      )}
-    </div>
-  );
-}
- 
 // ─── ScenePanel ───────────────────────────────────────────────────
- 
 function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const sc = gs.currentScene;
   if (!sc) return null;
@@ -470,30 +377,19 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   if (!pc) return null;
  
   const isMyTurn  = pc.uid === user?.uid || isGm;
-  const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events: [], desc: "" };
+  const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events:[], desc: "" };
  
-  // ─ ユーティリティ ─
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
-  const endScene = ()  => upd(p => ({ ...p, actedPcs: [...(p.actedPcs || []), pc.uid], currentScene: null, log: [`${pc.name} のシーンを終了した`, ...p.log] }));
+  const endScene = ()  => upd(p => ({ ...p, actedPcs:[...(p.actedPcs || []), pc.uid], currentScene: null, log:[`${pc.name} のシーンを終了した`, ...p.log] }));
  
-  // ─ 手がかり配置 ─
   const placeClueWithAnimation = count => {
     animateDice(count * 2, count === 1 ? "手がかり1つ配置" : "手がかり2つ配置", res => {
       upd(p => {
         let newClues = [...(p.clues || [])];
-        const logs   = [];
+        const logs   =[];
         for (let i = 0; i < count; i++) {
           const d1 = res[i * 2], d2 = res[i * 2 + 1];
-          const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
-          const candidates = SPOTS.filter(s => s.roll === val);
-          let spotId = null;
-          if (candidates.length === 2) {
-            spotId = (d1 < d2
-              ? candidates.find(s => s.id.endsWith("A"))
-              : candidates.find(s => s.id.endsWith("B")))?.id;
-          } else if (candidates.length === 1) {
-            spotId = candidates[0].id;
-          }
+          const spotId = getSpotByD66(d1, d2, SPOTS);
           if (spotId) {
             if (!newClues.includes(spotId)) newClues.push(spotId);
             logs.push(`${pc.name} は手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置した（出目: ${d1}, ${d2}）`);
@@ -504,12 +400,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
     });
   };
  
-  // ─ 移動系 ─
   const chooseStay = () => {
     upd(p => {
       const x = p.pcs.find(x => x.uid === pc.uid);
       const r = x.resources.やる気 || { cur: 0, max: 3 };
-      const isDebuffed = (x.badStatus || []).includes("だるい");
+      const isDebuffed = (x.badStatus ||[]).includes("だるい");
       const newPcs = p.pcs.map(y =>
         y.uid !== pc.uid ? y
         : isDebuffed ? y
@@ -518,7 +413,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       const logText = isDebuffed
         ? `${pc.name} はその場にとどまったが、変調《だるい》のためやる気は回復しなかった`
         : `${pc.name} はその場にとどまり、やる気を1点回復した`;
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action" }, log: [logText, ...p.log] };
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action" }, log:[logText, ...p.log] };
     });
   };
  
@@ -536,7 +431,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
         return { ...p, currentScene: { ...p.currentScene, phase: "happening_roll" }, log: [logAdd + "（ハプニング発生！）", ...p.log] };
       }
       let actualVal = val;
-      if ((pc.badStatus || []).includes("疲れた")) {
+      if ((pc.badStatus ||[]).includes("疲れた")) {
         actualVal = Math.max(0, val - 1);
         logAdd += `（※変調《疲れた》のため移動距離が ${actualVal} に減少）`;
       }
@@ -549,15 +444,14 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
     upd(p => {
       const pcs   = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: p.currentScene.selectedDestSpot } : x);
       const sName = getSpot(p.currentScene.selectedDestSpot)?.name;
-      return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は [${sName}] に移動した`, ...p.log] };
+      return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は [${sName}] に移動した`, ...p.log] };
     });
   };
  
-  // ─ アクション系 ─
   const startExplore = () => {
-    const hasTag    = spotDetail.tags.some(t => (pc.tags || []).includes(t) || pc.charName === t || pc.skillName === t);
+    const hasTag    = spotDetail.tags.some(t => (pc.tags ||[]).includes(t) || pc.charName === t || pc.skillName === t);
     let diceCount   = 2 + (hasTag ? 1 : 0);
-    if ((pc.badStatus || []).includes("怪我")) diceCount = Math.min(2, diceCount);
+    if ((pc.badStatus ||[]).includes("怪我")) diceCount = Math.min(2, diceCount);
     upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag } }));
   };
  
@@ -565,6 +459,17 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const rollExplore  = ()  => animateDice(sc.actionDiceCount || 2, "行為判定", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result", actionDice: res } })));
  
   const gainBond = targetName => {
+    // 不機嫌チェック
+    if ((pc.badStatus ||[]).includes("不機嫌")) {
+      writeLog(`${pc.name} は変調《不機嫌》のため絆を獲得できなかった`);
+      return;
+    }
+    const targetPc = gs.pcs.find(p => p.name === targetName || p.charName === targetName);
+    if (targetPc && (targetPc.badStatus ||[]).includes("不機嫌")) {
+      writeLog(`${targetName} が変調《不機嫌》のため絆を獲得できなかった`);
+      return;
+    }
+
     upd(p => {
       const newPcs = p.pcs.map(x => {
         if (x.uid !== pc.uid) return x;
@@ -572,40 +477,30 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
         if (!bonds.includes(targetName)) bonds.push(targetName);
         return { ...x, bonds };
       });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は《${targetName}への絆》を獲得した`, ...p.log] };
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.name} は《${targetName}への絆》を獲得した`, ...p.log] };
     });
   };
  
   const gainItem = (itemName, count = 1) => {
     upd(p => {
       const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, items: { ...x.items, [itemName]: (x.items[itemName] || 0) + count } });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は【${itemName}】を獲得した`, ...p.log] };
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.name} は【${itemName}】を獲得した`, ...p.log] };
     });
   };
  
   const acquireClue = questId => {
     upd(p => {
       const spotId   = pc.currentSpot;
-      const newClues = (p.clues || []).filter(c => c !== spotId);
+      const newClues = (p.clues ||[]).filter(c => c !== spotId);
       const newQuests = p.quests.map(q => q.id === questId ? { ...q, clues: (q.clues || 0) + 1 } : q);
       return { ...p, clues: newClues, quests: newQuests, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.name} は [${spotId}] で手がかりを獲得し、クエスト「${newQuests.find(q => q.id === questId)?.name}」に配置した`, ...p.log] };
     });
   };
  
-  const handleTradeLose = itemName => {
-    upd(p => {
-      const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, items: { ...x.items, [itemName]: Math.max(0, x.items[itemName] - 1) } });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, subPhase: "trade_gain" }, log: [`${pc.name} は【${itemName}】を手放した`, ...p.log] };
-    });
-  };
- 
-  const handleGainAny = itemName => gainItem(itemName, 1);
- 
   const hasClueHere = gs.clues?.includes(pc.currentSpot);
  
   return (
     <div style={{ padding: 10, background: "rgba(25,118,210,0.1)", borderBottom: `1px solid ${C.blueBorder}`, flexShrink: 0 }}>
-      {/* シーンヘッダー */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={32} />
         <div>
@@ -617,12 +512,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       </div>
  
       {!isMyTurn ? (
-        <div style={{ fontSize: 11, color: C.textFaint, textAlign: "center", padding: "8px 0" }}>
-          {pc.name} の操作を待っています…
-        </div>
+        <div style={{ fontSize: 11, color: C.textFaint, textAlign: "center", padding: "8px 0" }}>{pc.name} の操作を待っています…</div>
       ) : (
         <div>
-          {/* 1. 移動か停滞か */}
           {sc.phase === "move_or_stay" && (
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={chooseMove} style={btnFull(C.blueBg,  C.blueBorder,  C.blue)}>移動する（やる気D）</button>
@@ -630,46 +522,44 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 2. 移動ダイスロール */}
           {sc.phase === "move_roll" && !sc.moveDice?.length && (
-            <button onClick={rollMoveDice} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
-              🎲 やる気（{pc.resources.やる気?.cur || 1}）個のダイスを振る
-            </button>
+            <button onClick={rollMoveDice} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 やる気（{pc.resources.やる気?.cur || 1}）個のダイスを振る</button>
           )}
           {sc.phase === "move_roll" && sc.moveDice?.length > 0 && (
             <div>
               <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textAlign: "center" }}>移動する距離の出目を選んでください</div>
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 {sc.moveDice.map((d, i) => (
-                  <button key={i} onClick={() => selectMoveDie(d)} style={{ width: 40, height: 40, background: "rgba(14,20,36,0.95)", border: `2px solid ${d === 6 ? C.redBorder : C.border}`, borderRadius: 5, fontSize: 18, color: d === 6 ? C.red : C.blue, cursor: "pointer" }}>
-                    {d}
-                  </button>
+                  <button key={i} onClick={() => selectMoveDie(d)} style={{ width: 40, height: 40, background: "rgba(14,20,36,0.95)", border: `2px solid ${d === 6 ? C.redBorder : C.border}`, borderRadius: 5, fontSize: 18, color: d === 6 ? C.red : C.blue, cursor: "pointer" }}>{d}</button>
                 ))}
               </div>
               {sc.moveDice.includes(6) && <div style={{ fontSize: 10, color: C.red, textAlign: "center", marginTop: 4 }}>※6を選ぶとハプニングが発生します</div>}
             </div>
           )}
  
-          {/* 3. ハプニング：ロール */}
           {sc.phase === "happening_roll" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 14, color: C.red, marginBottom: 8, fontWeight: "bold" }}>⚠️ ハプニング発生！</div>
-              <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_result", happeningDice: res[0] } })))} style={btnFull(C.redBg, C.redBorder, C.red)}>
-                🎲 ハプニング表を振る
-              </button>
+              <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_result", happeningDice: res[0] } })))} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 ハプニング表を振る</button>
             </div>
           )}
  
-          {/* 4. ハプニング：結果 */}
           {sc.phase === "happening_result" && (() => {
-            const h = HAPPENING_TABLE[sc.happeningDice];
+            const h = {
+              1: { title: "仲間が恋しい。", desc: "任意のPC1人を選ぶこと。強制的に選んだPCのいるスポットに移動する。" },
+              2: { title: "【拠点】が恋しい。", desc: "強制的にあなたの【拠点】に移動する。" },
+              3: { title: "あれ？行き過ぎてしまったかも。", desc: "ダイスを1つ振り、今いるスポットから出目の分だけ離れたスポット1つを選んで移動する。" },
+              4: { title: "道に迷ってしまった。", desc: "D66を振って出た目と同じ番号のスポットに移動する。" },
+              5: { title: "問題なし。", desc: "今いるスポットから6スポット分離れた距離までにある任意のスポットに移動する。" },
+              6: { title: "「あなたは食べてもいい人類？」", desc: "通りがかりの妖怪に襲われた！\n（※今回は「問題なし」と同様に、6マス以内への移動として処理します）" },
+            }[sc.happeningDice];
             const proceed = () => {
               const d = sc.happeningDice;
               if (d === 1) {
                 const others = gs.pcs.filter(p => p.uid !== pc.uid);
                 upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: others.length === 0 ? "action" : "happening_1" } }));
               } else if (d === 2) {
-                upd(p => { const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: pc.baseSpotId } : x); return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は強制的に拠点へ移動した`, ...p.log] }; });
+                upd(p => { const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: pc.baseSpotId } : x); return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は強制的に拠点へ移動した`, ...p.log] }; });
               } else if (d === 3) {
                 upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_3_roll" } }));
               } else if (d === 4) {
@@ -688,13 +578,12 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             );
           })()}
  
-          {/* 4-1. ハプニング出目1：仲間の元へ */}
           {sc.phase === "happening_1" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>合流するPC（スポット）を選択してください</div>
               {gs.pcs.filter(p => p.uid !== pc.uid).map(other => (
                 <button key={other.uid} onClick={() => {
-                  upd(p => { const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: other.currentSpot } : x); return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は ${other.name} と合流した`, ...p.log] }; });
+                  upd(p => { const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: other.currentSpot } : x); return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は ${other.name} と合流した`, ...p.log] }; });
                 }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
                   {other.name} （{getSpot(other.currentSpot)?.name}）
                 </button>
@@ -702,7 +591,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 4-3. ハプニング出目3：指定距離ロール */}
           {sc.phase === "happening_3_roll" && (
             <div style={{ textAlign: "center" }}>
               <button onClick={() => animateDice(1, "移動距離", res => {
@@ -711,30 +599,18 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 4-4. ハプニング出目4：D66で迷い込み */}
           {sc.phase === "happening_4_roll" && (
             <div style={{ textAlign: "center" }}>
               <button onClick={() => animateDice(2, "道に迷う", res => {
-                const d1 = res[0], d2 = res[1];
-                const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
-                const candidates = SPOTS.filter(s => s.roll === val);
-                let nextSpotId = null;
-                if (candidates.length === 2) {
-                  nextSpotId = (d1 < d2
-                    ? candidates.find(s => s.id.endsWith("A"))
-                    : candidates.find(s => s.id.endsWith("B")))?.id;
-                } else if (candidates.length === 1) {
-                  nextSpotId = candidates[0].id;
-                }
+                const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
                 upd(p => {
                   const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: nextSpotId || x.currentSpot } : x);
-                  return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は道に迷い [${getSpot(nextSpotId)?.name}] に辿り着いた`, ...p.log] };
+                  return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は道に迷い [${getSpot(nextSpotId)?.name}] に辿り着いた`, ...p.log] };
                 });
               })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 移動先を振る (D66)</button>
             </div>
           )}
  
-          {/* 5. マップ移動先選択 */}
           {sc.phase === "move_dest" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: C.gold, marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -755,7 +631,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 6. アクション選択 */}
           {sc.phase === "action" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <button onClick={startExplore} style={btnFull(C.greenBg, C.greenBorder, C.green)}>🔍 探索イベントの実行</button>
@@ -766,12 +641,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 7. 探索イベント選択 */}
           {sc.phase === "explore_select" && (
             <div>
               <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>探索イベントを選択</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {(SPOT_DETAILS[pc.currentSpot]?.events || []).map((ev, i) => (
+                {(SPOT_DETAILS[pc.currentSpot]?.events ||[]).map((ev, i) => (
                   <button key={i} onClick={() => selectEvent(ev)} style={btnFull("rgba(255,255,255,0.03)", C.border, C.text, { textAlign: "left", padding: "8px" })}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
                       <span style={{ fontSize: 11 }}>{ev.name}</span>
@@ -785,7 +659,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 8. 探索行為判定ロール */}
           {sc.phase === "explore_roll" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ padding: 8, background: "rgba(200,160,64,0.05)", borderRadius: 4, marginBottom: 12 }}>
@@ -797,7 +670,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                 <span style={{ fontSize: 20, color: C.gold }}>{sc.actionDiceCount} 個</span>
                 <button onClick={() => {
                   let next = sc.actionDiceCount + 1;
-                  if ((pc.badStatus || []).includes("怪我")) next = Math.min(2, next);
+                  if ((pc.badStatus ||[]).includes("怪我")) next = Math.min(2, next);
                   upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: next } }));
                 }} style={btnSmall}>+</button>
               </div>
@@ -805,16 +678,15 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 9. スペシャル：変調解除 */}
           {sc.phase === "special_cure" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 13, color: C.gold, marginBottom: 14, fontWeight: "bold" }}>🌿 解除する変調を選択</div>
-              {(pc.badStatus || []).map(bs => (
+              {(pc.badStatus ||[]).map(bs => (
                 <button key={bs} onClick={() => {
                   upd(p => {
                     const newBs  = pc.badStatus.filter(x => x !== bs);
                     const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs } : x);
-                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log: [`${pc.name} は変調《${bs}》を解除した`, ...p.log] };
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log:[`${pc.name} は変調《${bs}》を解除した`, ...p.log] };
                   });
                 }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>《{bs}》を解除</button>
               ))}
@@ -822,9 +694,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
  
-          {/* 10. 判定結果 */}
           {sc.phase === "explore_result" && (() => {
-            const maxDie       = Math.max(...(sc.actionDice || [0]));
+            const maxDie       = Math.max(...(sc.actionDice ||[0]));
             const isFumble     = sc.actionDice?.length > 0 && sc.actionDice.every(d => d === 1);
             const isSpecial    = sc.actionDice?.includes(6);
             const isSuccess    = maxDie >= (sc.selectedEvent?.target || 0) && !isFumble;
@@ -850,15 +721,13 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                     <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
                       <button onClick={() => animateDice(1, "霊力回復", res => {
                         upd(p => {
-                          const gain    = (pc.badStatus || []).includes("スランプ") ? 0 : res[0];
+                          const gain    = (pc.badStatus ||[]).includes("スランプ") ? 0 : res[0];
                           const nextCur = Math.min(pc.resources.霊力.max, (pc.resources.霊力.cur || 0) + gain);
                           const newPcs  = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: nextCur }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } });
-                          return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, specialResolved: true }, log: [`${pc.name} は霊力を ${gain} 点回復した`, ...p.log] };
+                          return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, specialResolved: true }, log:[`${pc.name} は霊力を ${gain} 点回復した`, ...p.log] };
                         });
                       })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>霊力回復 (1D6)</button>
-                      {(pc.badStatus || []).length > 0 && (
-                        <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>変調解除</button>
-                      )}
+                      {(pc.badStatus ||[]).length > 0 && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>変調解除</button>}
                     </div>
                   </div>
                 )}
@@ -871,7 +740,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                       upd(p => {
                         const newBs  = Array.from(new Set([...(pc.badStatus || []), bsName]));
                         const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
-                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log: [`${pc.name} は変調《${bsName}》を獲得した`, ...p.log] };
+                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[`${pc.name} は変調《${bsName}》を獲得した`, ...p.log] };
                       });
                     })} style={btnFull(C.redBg, C.redBorder, C.red, { fontSize: 10 })}>🎲 変調表を振る (1D6)</button>
                   </div>
@@ -887,7 +756,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                       hasClueHere ? (
                         <div style={{ padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
                           <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストを選択してください。</div>
-                          {(gs.quests || []).filter(q => !q.solved && q.revealed).map(q => (
+                          {(gs.quests ||[]).filter(q => !q.solved && q.revealed).map(q => (
                             <button key={q.id} onClick={() => acquireClue(q.id)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { fontSize: 10, marginBottom: 4 })}>「{q.name}」</button>
                           ))}
                         </div>
@@ -903,7 +772,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             );
           })()}
  
-          {/* 11. アクション終了後 */}
           {sc.phase === "action_done" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
@@ -917,13 +785,12 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 }
  
 // ─── RightPanel ───────────────────────────────────────────────────
- 
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab]             = useState("progress");
-  const [diceResult, setDiceResult] = useState(null);
+  const[diceResult, setDiceResult] = useState(null);
   const [diceAnim, setDiceAnim]   = useState(false);
   const [paperModal, setPaperModal] = useState(null);
-  const [sceneSelect, setSceneSelect] = useState("");
+  const[sceneSelect, setSceneSelect] = useState("");
   const timerRef = useRef(null);
  
   const cycleIdx   = gs.cycleIdx || 0;
@@ -931,7 +798,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const isMorning  = cycleIdx === 0;
   const cycleColor = CYCLE_COLORS[cycleIdx];
  
-  // ダイスアニメーション
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
   const animateDice = (count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -965,13 +831,13 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     if (!targetPc) return;
     upd(p => ({
       ...p,
-      currentScene: { pcUid: sceneSelect, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2 },
-      log: [`🎬 ${targetPc.name} のシーンが開始された`, ...p.log],
+      currentScene: { pcUid: sceneSelect, phase: "move_or_stay", moveDice: [], actionDice:[], actionDiceCount: 2 },
+      log:[`🎬 ${targetPc.name} のシーンが開始された`, ...p.log],
     }));
     setSceneSelect("");
   };
  
-  const unactedPcs = (gs.pcs || []).filter(pc => !(gs.actedPcs || []).includes(pc.uid));
+  const unactedPcs = (gs.pcs || []).filter(pc => !(gs.actedPcs ||[]).includes(pc.uid));
  
   const getMainAction = () => {
     if (gs.currentScene) return null;
@@ -982,14 +848,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         label: "🔍 手がかりを配置",
         color: C.green,
         fn: () => animateDice(2, "朝の手がかり配置", res => {
-          const d1  = res[0], d2 = res[1];
-          const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
-          const candidates = SPOTS.filter(s => s.roll === val);
-          let spotId = null;
-          if      (candidates.length === 2) spotId = (d1 < d2 ? candidates.find(s => s.id.endsWith("A")) : candidates.find(s => s.id.endsWith("B")))?.id;
-          else if (candidates.length === 1) spotId = candidates[0].id;
+          const spotId = getSpotByD66(res[0], res[1], SPOTS);
           if (spotId) {
-            upd(p => ({ ...p, cluePlaced: true, clues: [...new Set([...p.clues, spotId])], log: [`手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置（出目: ${d1}, ${d2}）`, ...p.log] }));
+            upd(p => ({ ...p, cluePlaced: true, clues: [...new Set([...p.clues, spotId])], log: [`手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置（出目: ${res[0]}, ${res[1]}）`, ...p.log] }));
           }
         }),
       };
@@ -1001,14 +862,13 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const ma = isGm ? getMainAction() : null;
  
   const TABS = isGm
-    ? [["progress", "進行"], ["pcs", "PC一覧"], ["scene", "描写"], ["log", "ログ"]]
-    : [["progress", "進行"], ["pcs", "PC一覧"], ["log", "ログ"]];
+    ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["log", "ログ"]]
+    : [["progress", "進行"],["pcs", "PC一覧"], ["log", "ログ"]];
  
   return (
     <div style={{ width: 300, display: "flex", flexDirection: "column", background: "#0b0d14", borderLeft: `1px solid ${C.border}`, flexShrink: 0, overflow: "hidden", fontFamily: "serif" }}>
       <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } } @keyframes rollSpin { 50% { transform: scale(1.15) } }`}</style>
  
-      {/* ヘッダー */}
       <div style={{ padding: "8px 12px", borderBottom: `1px solid ${C.border}`, background: "#08090f", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <span style={{ fontSize: 11, color: C.gold, letterSpacing: 2 }}>{isIntro ? "✦ 導入フェイズ" : "✦ 探索フェイズ"}</span>
@@ -1016,10 +876,8 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         </div>
       </div>
  
-      {/* シーンパネル */}
       {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
  
-      {/* GMコントロール */}
       {!gs.currentScene && isGm && (
         <div style={{ padding: "8px", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.01)" }}>
           {ma ? (
@@ -1039,26 +897,43 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         </div>
       )}
  
-      {/* タブ */}
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         {TABS.map(([id, label]) => (
           <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : "#1e2535", borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
         ))}
       </div>
  
-      {/* タブコンテンツ */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
         {tab === "progress" && (
           <div>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>クエスト</div>
-            {(gs.quests || []).length === 0 ? (
+            {(gs.quests ||[]).length === 0 ? (
               <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
             ) : (
-              (gs.quests || []).map(q => (
+              (gs.quests ||[]).map(q => (
                 <div key={q.id || q.name} style={{ padding: "6px 8px", marginBottom: 4, background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${q.solved ? "#1b5e20" : C.border}`, borderRadius: 3 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : C.gold, textDecoration: q.solved ? "line-through" : "none" }}>【Lv.{q.level}】{q.name}</span>
-                    {isGm && <button onClick={() => upd(p => ({ ...p, quests: p.quests.map(x => x.id === q.id ? { ...x, solved: !x.solved } : x) }))} style={{ width: 18, height: 18, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>{q.solved ? "↩" : "✓"}</button>}
+                    {isGm && (
+                      <button onClick={() => upd(p => {
+                        const isNowSolved = !q.solved;
+                        const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
+                        
+                        // クエスト解決をトリガーとした連鎖公開のチェック
+                        if (isNowSolved) {
+                          (p.scenarioData?.quests ||[]).forEach(scQ => {
+                            if (scQ.unlockType === "quest" && scQ.unlockQuestId === q.id) {
+                              if (!newQuests.find(nq => nq.id === scQ.id)) {
+                                newQuests.push({ ...scQ, revealed: true, solved: false });
+                              }
+                            }
+                          });
+                        }
+                        return { ...p, quests: newQuests };
+                      })} style={{ width: 18, height: 18, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>
+                        {q.solved ? "↩" : "✓"}
+                      </button>
+                    )}
                   </div>
                   <div style={{ fontSize: 9, color: C.textFaint, marginTop: 2 }}>{q.summary}</div>
                   {q.clues > 0 && <div style={{ fontSize: 9, color: "#00bcd4", marginTop: 4 }}>💡 割り当てられた手がかり: {q.clues} / {q.level}</div>}
@@ -1066,7 +941,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 </div>
               ))
             )}
-            {!isIntro && (gs.clues || []).length > 0 && (
+            {!isIntro && (gs.clues ||[]).length > 0 && (
               <>
                 <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
                 {gs.clues.map(id => (
@@ -1101,9 +976,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
  
         {tab === "pcs" && (
           <div>
-            {(gs.pcs || []).length === 0
+            {(gs.pcs ||[]).length === 0
               ? <div style={{ fontSize: 10, color: "#2a3545" }}>PCなし</div>
-              : (gs.pcs || []).map(pc => (
+              : (gs.pcs ||[]).map(pc => (
                   <PCCard
                     key={pc.uid}
                     pc={pc}
@@ -1124,14 +999,8 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {gs.sceneMode ? "🎭 描写モード ON（クリックで解除）" : "🎭 描写モードを開始"}
             </button>
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>テキスト（PLに表示）</div>
-            <textarea
-              value={gs.sceneText || ""}
-              onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))}
-              placeholder="PLに見せたいテキスト…"
-              style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }}
-            />
+            <textarea value={gs.sceneText || ""} onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))} placeholder="PLに見せたいテキスト…" style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }} />
  
-            {/* 背景画像 */}
             <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>背景画像</div>
             {sceneData.bg ? (
               <div style={{ position: "relative", marginBottom: 6 }}>
@@ -1162,16 +1031,15 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               </label>
             )}
  
-            {/* 立ち絵 */}
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
-            {(sceneData.portraits || []).map((p, i) => (
+            {(sceneData.portraits ||[]).map((p, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
                 <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
                 <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
                 <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
               </div>
             ))}
-            {(sceneData.portraits || []).length < 4 && (
+            {(sceneData.portraits ||[]).length < 4 && (
               <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
                 ＋ 立ち絵を追加
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
@@ -1186,7 +1054,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       canvas.width  = img.width  * scale;
                       canvas.height = img.height * scale;
                       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                      setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: canvas.toDataURL("image/jpeg", 0.85), name: "" }] }));
+                      setSceneData(d => ({ ...d, portraits:[...(d.portraits || []), { img: canvas.toDataURL("image/jpeg", 0.85), name: "" }] }));
                     };
                     img.src = ev.target.result;
                   };
@@ -1200,13 +1068,12 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         {tab === "log" && (
           <div>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
-            {(gs.log || []).length === 0 && <div style={{ fontSize: 10, color: "#2a3545" }}>なし</div>}
-            {(gs.log || []).map((e, i) => <div key={i} style={{ fontSize: 10, color: "#6a7a8a", padding: "3px 0", borderBottom: "1px solid #0c0f18" }}>{e}</div>)}
+            {(gs.log ||[]).length === 0 && <div style={{ fontSize: 10, color: "#2a3545" }}>なし</div>}
+            {(gs.log ||[]).map((e, i) => <div key={i} style={{ fontSize: 10, color: "#6a7a8a", padding: "3px 0", borderBottom: "1px solid #0c0f18" }}>{e}</div>)}
           </div>
         )}
       </div>
  
-      {/* 新聞モーダル */}
       {paperModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setPaperModal(null)}>
           <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
@@ -1228,5 +1095,3 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     </div>
   );
 }
- 
-export default RightPanel;
