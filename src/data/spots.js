@@ -567,7 +567,7 @@ export const SPOT_DETAILS = {
         name: "自分と向き合う",
         target: 5,
         effect: "成功時:自身の【拠点】に移動し、自身への絆を獲得する。自身の【拠点】が「夢の世界」なら、任意のスポットに移動する。\n失敗時:ランダムなスポットに移動する。",
-        onSuccess:[ { type: "MOVE", "base_or_any" }, { type: "GAIN_BOND", target: "self" } ],
+        onSuccess:[ { type: "MOVE", spot: "base_or_any" }, { type: "GAIN_BOND", target: "self" } ],
         onFailure:[ { type: "MOVE", spot: "random" } ]
       }
     ]
