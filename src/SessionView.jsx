@@ -441,228 +441,205 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const hasClueHere = gs.clues?.includes(pc.currentSpot);
 
   return (
-    <div style={{ padding:10, background:"rgba(25,118,210,0.1)", borderBottom:`1px solid ${C.blueBorder}`, flexShrink:0 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-        <CharSprite spriteRow={pc.spriteRow??-1} spriteCol={pc.spriteCol??-1} size={32}/>
+    <div style={{ padding: 10, background: "rgba(25,118,210,0.1)", borderBottom: `1px solid ${C.blueBorder}`, flexShrink: 0 }}>
+      {/* --- シーンヘッダー：PC情報の表示 --- */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={32} />
         <div>
-          <div style={{ fontSize:10, color:C.blue }}>現在のシーンプレイヤー</div>
-          <div style={{ fontSize:13, color:C.text }}>{pc.name} <span style={{fontSize:9,color:C.textFaint}}>@ {getSpot(pc.currentSpot)?.name}</span></div>
+          <div style={{ fontSize: 10, color: C.blue }}>現在のシーンプレイヤー</div>
+          <div style={{ fontSize: 13, color: C.text }}>
+            {pc.name} <span style={{ fontSize: 9, color: C.textFaint }}>@ {getSpot(pc.currentSpot)?.name}</span>
+          </div>
         </div>
       </div>
 
-      {!isMyTurn ? <div style={{ fontSize:11, color:C.textFaint, textAlign:"center", padding:"8px 0" }}>{pc.name} の操作を待っています…</div> : (
+      {/* --- 他人の手番の場合の待機表示 --- */}
+      {!isMyTurn ? (
+        <div style={{ fontSize: 11, color: C.textFaint, textAlign: "center", padding: "8px 0" }}>
+          {pc.name} の操作を待っています…
+        </div>
+      ) : (
         <div>
+          {/* 1. 移動か停滞かの選択 */}
           {sc.phase === "move_or_stay" && (
-            <div style={{ display:"flex", gap:6 }}>
-              <button onClick={chooseMove} style={btn(C.blueBg,C.blueBorder,C.blue)}>移動する（やる気D）</button>
-              <button onClick={chooseStay} style={btn(C.greenBg,C.greenBorder,C.green)}>とどまる（やる気+1）</button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={chooseMove} style={btn(C.blueBg, C.blueBorder, C.blue)}>移動する（やる気D）</button>
+              <button onClick={chooseStay} style={btn(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
             </div>
           )}
 
-          {sc.phase === "move_roll" && !sc.moveDice?.length && <button onClick={rollMoveDice} style={btn(C.goldBg,C.goldDim,C.gold)}>🎲 やる気（{pc.resources.やる気?.cur||1}）個のダイスを振る</button>}
+          {/* 2. 移動ダイスロール */}
+          {sc.phase === "move_roll" && !sc.moveDice?.length && (
+            <button onClick={rollMoveDice} style={btn(C.goldBg, C.goldDim, C.gold)}>
+              🎲 やる気（{pc.resources.やる気?.cur || 1}）個のダイスを振る
+            </button>
+          )}
           {sc.phase === "move_roll" && sc.moveDice?.length > 0 && (
             <div>
-              <div style={{ fontSize:10, color:C.textDim, marginBottom:6, textAlign:"center" }}>移動する距離の出目を選んでください</div>
-              <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
-                {sc.moveDice.map((d,i) => <button key={i} onClick={()=>selectMoveDie(d)} style={{ width:40, height:40, background:"rgba(14,20,36,0.95)", border:`2px solid ${d===6?C.redBorder:C.border}`, borderRadius:5, fontSize:18, color:d===6?C.red:C.blue, cursor:"pointer" }}>{d}</button>)}
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textAlign: "center" }}>
+                移動する距離の出目を選んでください
               </div>
-              {sc.moveDice.includes(6) && <div style={{ fontSize:10, color:C.red, textAlign:"center", marginTop:4 }}>※6を選ぶとハプニングが発生します</div>}
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {sc.moveDice.map((d, i) => (
+                  <button key={i} onClick={() => selectMoveDie(d)} style={{ 
+                    width: 40, height: 40, background: "rgba(14,20,36,0.95)", 
+                    border: `2px solid ${d === 6 ? C.redBorder : C.border}`, 
+                    borderRadius: 5, fontSize: 18, color: d === 6 ? C.red : C.blue, cursor: "pointer" 
+                  }}>
+                    {d}
+                  </button>
+                ))}
+              </div>
+              {sc.moveDice.includes(6) && <div style={{ fontSize: 10, color: C.red, textAlign: "center", marginTop: 4 }}>※6を選ぶとハプニングが発生します</div>}
             </div>
           )}
 
-          {/* ハプニング1: ダイスロール */}
+          {/* 3. ハプニング：ダイスロール */}
           {sc.phase === "happening_roll" && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:14, color:C.red, marginBottom:8, fontWeight:"bold" }}>⚠️ ハプニング発生！</div>
-              <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_result", happeningDice: res[0]} })))} style={btn(C.redBg, C.redBorder, C.red)}>🎲 ハプニング表を振る</button>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 14, color: C.red, marginBottom: 8, fontWeight: "bold" }}>⚠️ ハプニング発生！</div>
+              <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_result", happeningDice: res[0] } })))} style={btn(C.redBg, C.redBorder, C.red)}>🎲 ハプニング表を振る</button>
             </div>
           )}
 
-          {/* ハプニング2: 結果表示と分岐 */}
+          {/* 4. ハプニング：結果表示と分岐 */}
           {sc.phase === "happening_result" && (() => {
             const h = HAPPENING_TABLE[sc.happeningDice];
             return (
-              <div style={{ textAlign:"center" }}>
-                <div style={{ fontSize:22, color:C.gold, marginBottom:4 }}>[{sc.happeningDice}]</div>
-                <div style={{ fontSize:13, color:C.red, marginBottom:8 }}>{h.title}</div>
-                <div style={{ fontSize:10, color:C.textDim, whiteSpace:"pre-wrap", marginBottom:14, lineHeight:1.5 }}>{h.desc}</div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, color: C.gold, marginBottom: 4 }}>[{sc.happeningDice}]</div>
+                <div style={{ fontSize: 13, color: C.red, marginBottom: 8 }}>{h.title}</div>
+                <div style={{ fontSize: 10, color: C.textDim, whiteSpace: "pre-wrap", marginBottom: 14, lineHeight: 1.5 }}>{h.desc}</div>
                 <button onClick={() => {
                   const d = sc.happeningDice;
                   if (d === 1) {
                     const others = gs.pcs.filter(p => p.uid !== pc.uid);
-                    if (others.length === 0) upd(p => ({...p, currentScene: {...p.currentScene, phase: "action"}}));
-                    else upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_1"}}));
+                    if (others.length === 0) upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }));
+                    else upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_1" } }));
                   } else if (d === 2) {
                     upd(p => {
                       const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: pc.baseSpotId } : x);
-                      return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は拠点[${getSpot(pc.baseSpotId)?.name}] に強制移動した`, ...p.log] };
+                      return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は強制的に拠点へ移動した`, ...p.log] };
                     });
                   } else if (d === 3) {
-                    upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_3_roll"}}));
+                    upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_3_roll" } }));
                   } else if (d === 4) {
-                    upd(p => ({...p, currentScene: {...p.currentScene, phase: "happening_4_roll"}}));
+                    upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_4_roll" } }));
                   } else {
-                    upd(p => ({...p, currentScene: {...p.currentScene, phase: "move_dest", selectedMoveDie: 6}}));
+                    upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "move_dest", selectedMoveDie: 6 } }));
                   }
                 }} style={btn(C.goldBg, C.goldDim, C.gold)}>この処理を進める</button>
               </div>
             );
           })()}
 
-          {/* 出目1: 仲間の元へ */}
+          {/* ハプニング出目1: 仲間の元へ */}
           {sc.phase === "happening_1" && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>合流するPC（スポット）を選択してください</div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>合流するPC（スポット）を選択してください</div>
               {gs.pcs.filter(p => p.uid !== pc.uid).map(other => (
                 <button key={other.uid} onClick={() => {
                   upd(p => {
                     const pcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: other.currentSpot } : x);
-                    return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.name} は[${getSpot(other.currentSpot)?.name}] にいる ${other.name} と合流した`, ...p.log] };
+                    return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は ${other.name} と合流した`, ...p.log] };
                   });
-                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, {marginBottom:4})}>
+                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
                   {other.name} （{getSpot(other.currentSpot)?.name}）
                 </button>
               ))}
             </div>
           )}
 
-          {/* 出目3: 行き過ぎた距離を振る */}
+          {/* ハプニング出目3: 指定距離ロール */}
           {sc.phase === "happening_3_roll" && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>行き過ぎてしまった距離を決定します</div>
+            <div style={{ textAlign: "center" }}>
               <button onClick={() => animateDice(1, "移動距離", res => {
-                upd(p => ({...p, currentScene: {...p.currentScene, phase: "move_dest", exactMoveDist: res[0], selectedMoveDie: res[0]}, log:[`${pc.name} は行き過ぎて ${res[0]} マス離れた場所に移動する`, ...p.log]}));
+                upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "move_dest", exactMoveDist: res[0], selectedMoveDie: res[0] } }));
               })} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 距離を振る (1D6)</button>
             </div>
           )}
 
-          {/* 出目4: 迷い込んだ先を振る */}
+          {/* ハプニング出目4: 迷い込みロール (D66) */}
           {sc.phase === "happening_4_roll" && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:C.textDim, marginBottom:8 }}>迷い込んだ先を決定します</div>
+            <div style={{ textAlign: "center" }}>
               <button onClick={() => animateDice(2, "道に迷う", res => {
-                const d1 = res[0];
-                const d2 = res[1];
+                const d1 = res[0], d2 = res[1];
                 const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
                 const candidates = SPOTS.filter(s => s.roll === val);
-                
                 let nextSpotId = null;
                 if (candidates.length === 2) {
-                  if (d1 < d2) {
-                    nextSpotId = candidates.find(s => s.id.endsWith("A"))?.id;
-                  } else {
-                    nextSpotId = candidates.find(s => s.id.endsWith("B"))?.id;
-                  }
-                } else if (candidates.length === 1) {
-                  nextSpotId = candidates[0].id;
-                }
-
+                  nextSpotId = (d1 < d2) ? candidates.find(s => s.id.endsWith("A"))?.id : candidates.find(s => s.id.endsWith("B"))?.id;
+                } else if (candidates.length === 1) nextSpotId = candidates[0].id;
                 upd(p => {
-                  let logs = [`${pc.name} は道に迷い [${val}] を彷徨う…`, ...p.log];
-                  let newPcs = p.pcs;
-                  
-                  if (nextSpotId) {
-                    newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: nextSpotId } : x);
-                    logs = [`${pc.name} は [${getSpot(nextSpotId)?.name}] に迷い込んだ`, ...logs];
-                    return {...p, pcs: newPcs, currentScene: {...p.currentScene, phase: "action"}, log: logs};
-                  } else {
-                    return {...p, currentScene: {...p.currentScene, phase: "action"}, log: logs};
-                  }
+                  const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: nextSpotId || x.currentSpot } : x);
+                  return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.name} は道に迷い [${getSpot(nextSpotId)?.name}] に辿り着いた`, ...p.log] };
                 });
               })} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 移動先を振る (D66)</button>
             </div>
           )}
 
+          {/* 5. マップ移動先選択 (move_dest) */}
           {sc.phase === "move_dest" && (
-            <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:11, color:C.gold, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                {isGm && !sc.exactMoveDist && <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:Math.max(0, sc.selectedMoveDie-1)}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>−</button>}
-                
-                <span>{sc.exactMoveDist ? `【ちょうど ${sc.exactMoveDist} マスにのみ移動可能】` : `【最大 ${sc.selectedMoveDie} マス移動可能】`}</span>
-                
-                {isGm && !sc.exactMoveDist && <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, selectedMoveDie:sc.selectedMoveDie+1}}))} style={{width:20,height:20,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.textFaint,borderRadius:4,padding:0,cursor:"pointer"}}>＋</button>}
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.gold, marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                {isGm && !sc.exactMoveDist && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, selectedMoveDie: Math.max(0, sc.selectedMoveDie - 1) } }))} style={btnSmall}>-</button>}
+                <span>{sc.exactMoveDist ? `【ちょうど ${sc.exactMoveDist} マス移動】` : `【最大 ${sc.selectedMoveDie} マス移動可能】`}</span>
+                {isGm && !sc.exactMoveDist && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, selectedMoveDie: sc.selectedMoveDie + 1 } }))} style={btnSmall}>+</button>}
               </div>
-              
-              <div style={{ fontSize:10, color:C.textDim, marginBottom:8 }}>
-                {isMyTurn ? "マップ上の光っているスポットをクリックして選択してください。" : "手番プレイヤーが移動先を選択中です。"}
-              </div>
-          
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>マップ上の光っているスポットをクリックしてください。</div>
               {sc.selectedDestSpot ? (
-                <div style={{ padding:8, background:"rgba(200,160,64,0.1)", border:`1px solid ${C.goldDim}`, borderRadius:4, marginBottom:8 }}>
-                  <div style={{ fontSize:11, color:C.text, marginBottom:6 }}>選択中: <span style={{color:C.gold, fontWeight:"bold"}}>[{getSpot(sc.selectedDestSpot)?.roll||"?"}] {getSpot(sc.selectedDestSpot)?.name}</span></div>
-                  {/* 移動の確定は本人、またはGMができる */}
-                  {isMyTurn && (
-                    <button onClick={confirmMove} style={btn(C.blueBg,C.blueBorder,C.blue)}>このスポットへ移動する</button>
-                  )}
+                <div style={{ padding: 8, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 4, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: C.text, marginBottom: 6 }}>選択中: <span style={{ color: C.gold, fontWeight: "bold" }}>{getSpot(sc.selectedDestSpot)?.name}</span></div>
+                  <button onClick={confirmMove} style={btn(C.blueBg, C.blueBorder, C.blue)}>ここへ移動する</button>
                 </div>
-              ) : <div style={{ padding:8, border:`1px dashed ${C.border}`, color:C.textFaint, fontSize:10, marginBottom:8 }}>移動先をマップから選んでください</div>}
-              
-              {isMyTurn && (
-                <button onClick={()=>upd(p=>({...p, currentScene:{...p.currentScene, phase:"action"}}))} style={btn("rgba(255,255,255,0.05)",C.border,C.textFaint,{padding:"6px"})}>移動せずにアクションへ進む</button>
-              )}
+              ) : <div style={{ padding: 8, border: `1px dashed ${C.border}`, color: C.textFaint, fontSize: 10, marginBottom: 8 }}>未選択</div>}
+              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={{ ...btn("none", "none", C.textFaint), fontSize: 10 }}>移動せずにアクションへ進む</button>
             </div>
           )}
-          {(sc.phase === "action" || sc.phase === "action_done") && (
-            <div>
-              {sc.phase === "action" && (
-                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  <button onClick={startExplore} style={btn(C.greenBg,C.greenBorder,C.green)}>🔍 探索イベントの実行</button>
-                  <button onClick={()=>writeLog(`${pc.name} はアクションスキルを使用した`)} style={btn("rgba(255,255,255,0.05)",C.border,C.textFaint)}>💡 アクションスキルの使用</button>
-                </div>
-              )}
-              <div style={{ marginTop:12 }}>
-                <button onClick={endScene} style={btn(C.redBg,C.redBorder,C.red)}>🎬 このシーンを終了する</button>
+
+          {/* 6. アクション選択 */}
+          {sc.phase === "action" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <button onClick={startExplore} style={btn(C.greenBg, C.greenBorder, C.green)}>🔍 探索イベントの実行</button>
+              <button onClick={() => writeLog(`${pc.name} はアクションスキルを使用した`)} style={btn("rgba(255,255,255,0.05)", C.border, C.textFaint)}>💡 アクションスキルの使用</button>
+              <div style={{ marginTop: 8 }}>
+                <button onClick={endScene} style={btn(C.redBg, C.redBorder, C.red)}>🎬 このシーンを終了する</button>
               </div>
             </div>
           )}
 
-          {/* 1. イベント選択フェイズ */}
+          {/* 7. 探索イベント選択 */}
           {sc.phase === "explore_select" && (
-            <div style={{ animation: "fadeUp 0.3s ease" }}>
-              <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>
-                探索イベントを選択
-              </div>
-              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 10, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                {spotDetail.desc}
-              </div>
-              {spotDetail.tags.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
-                  <span style={{ fontSize: 9, color: C.textFaint }}>指定タグ: </span>
-                  {spotDetail.tags.map(t => <span key={t} style={{ fontSize: 9, color: (pc.tags||[]).includes(t)?C.green:C.textDim, marginLeft: 4 }}>《{t}》</span>)}
-                  {sc.hasTagBonus && <span style={{ fontSize: 9, color: C.green, marginLeft: 4 }}>(判定数+1適用済)</span>}
-                </div>
-              )}
+            <div>
+              <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>探索イベントを選択</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {spotDetail.events.map((ev, i) => (
+                {(SPOT_DETAILS[pc.currentSpot]?.events || []).map((ev, i) => (
                   <button key={i} onClick={() => selectEvent(ev)} style={btn("rgba(255,255,255,0.03)", C.border, C.text, { textAlign: "left", padding: "8px" })}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
                       <span style={{ fontSize: 11 }}>{ev.name}</span>
                       <span style={{ fontSize: 10, color: C.blue }}>目標: {ev.target}</span>
                     </div>
-                    <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.3, whiteSpace: "pre-wrap" }}>
-                      {ev.effect}
-                    </div>
+                    <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.3, whiteSpace: "pre-wrap" }}>{ev.effect}</div>
                   </button>
                 ))}
               </div>
-              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 8, width: "100%" }}>← 戻る</button>
+              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 10, width: "100%", fontSize: 10 }}>← 戻る</button>
             </div>
           )}
 
-          {/* 2. ダイスロールフェイズ */}
+          {/* 8. 探索行為判定ロール */}
           {sc.phase === "explore_roll" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ padding: 8, background: "rgba(200,160,64,0.05)", borderRadius: 4, marginBottom: 12 }}>
-                <div style={{ fontSize: 12, color: C.gold }}>{sc.selectedEvent.name}</div>
-                <div style={{ fontSize: 10, color: C.blue }}>目標値: {sc.selectedEvent.target}</div>
+                <div style={{ fontSize: 12, color: C.gold }}>{sc.selectedEvent?.name}</div>
+                <div style={{ fontSize: 10, color: C.blue }}>目標値: {sc.selectedEvent?.target}</div>
               </div>
-              
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 12 }}>
                 <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: Math.max(1, sc.actionDiceCount - 1) } }))} style={btnSmall}>-</button>
-                <span style={{ fontSize: 20, color: C.gold }}>{sc.actionDiceCount} <span style={{fontSize:10}}>個</span></span>
+                <span style={{ fontSize: 20, color: C.gold }}>{sc.actionDiceCount} 個</span>
                 <button onClick={() => upd(p => {
                   let nextCount = sc.actionDiceCount + 1;
-                  if ((pc.badStatus||[]).includes("怪我")) nextCount = Math.min(2, nextCount);
+                  if ((pc.badStatus || []).includes("怪我")) nextCount = Math.min(2, nextCount);
                   return { ...p, currentScene: { ...p.currentScene, actionDiceCount: nextCount } };
                 })} style={btnSmall}>+</button>
               </div>
@@ -670,157 +647,109 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
 
+          {/* 9. スペシャル：変調解除の選択 */}
           {sc.phase === "special_cure" && (
-            <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-              <div style={{ fontSize: 13, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>✨ 変調解除</div>
-              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 14 }}>解除する変調を選んでください</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
-                {(pc.badStatus||[]).map(bs => (
-                  <button key={bs} onClick={() => {
-                    upd(p => {
-                      const newBs = pc.badStatus.filter(x => x !== bs);
-                      const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs } : x);
-                      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log:[`${pc.name} はスペシャルにより変調《${bs}》を解除した`, ...p.log] };
-                    });
-                  }} style={{...btn("rgba(255,255,255,0.05)", C.border, C.text), width: "80%"}}>
-                    《{bs}》を解除
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 12 }}>← 戻る</button>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: C.gold, marginBottom: 14, fontWeight: "bold" }}>🌿 解除する変調を選択</div>
+              {(pc.badStatus || []).map(bs => (
+                <button key={bs} onClick={() => {
+                  upd(p => {
+                    const newBs = pc.badStatus.filter(x => x !== bs);
+                    const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs } : x);
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log: [`${pc.name} は変調【${bs}】を解除した`, ...p.log] };
+                  });
+                }} style={btn("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>【{bs}】を解除</button>
+              ))}
+              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 10 }}>戻る</button>
             </div>
           )}
 
-          {/* 3. 判定結果フェイズ */}
+          {/* 10. 判定結果・スペシャル/ファンブル解決 */}
           {sc.phase === "explore_result" && (
             <div style={{ textAlign: "center" }}>
-               {/* 振られたダイスの表示 */}
-               <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
                 {sc.actionDice?.map((d, i) => (
-                  <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d===6?C.gold:d===1?C.red:C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d===6?C.gold:d===1?C.red:C.blue }}>
-                    {d}
-                  </div>
+                  <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue }}>{d}</div>
                 ))}
               </div>
 
-              {/* 成功・失敗判定 */}
               {(() => {
                 const maxDie = Math.max(...(sc.actionDice || [0]));
                 const isFumble = sc.actionDice?.length > 0 && sc.actionDice.every(d => d === 1);
                 const isSpecial = sc.actionDice?.includes(6);
-                const isSuccess = maxDie >= sc.selectedEvent.target && !isFumble;
+                const isSuccess = maxDie >= (sc.selectedEvent?.target || 0) && !isFumble;
                 const hasClueHere = gs.clues?.includes(pc.currentSpot);
 
                 const pendingFumble = isFumble && !sc.fumbleResolved;
                 const pendingSpecial = isSpecial && !isFumble && !sc.specialResolved;
                 const canProceed = !pendingFumble && !pendingSpecial;
-                
+
                 return (
                   <div>
                     <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12 }}>
                       {isFumble ? "ファンブル！" : (isSuccess ? "成功！" : "失敗…")}
                     </div>
 
-                    {/* スペシャル処理UI */}
                     {pendingSpecial && (
-                      <div style={{ marginBottom: 12, padding: 12, background: "rgba(200,160,64,0.1)", border: "1px solid #8b691460", borderRadius: 4 }}>
-                        <div style={{ fontSize: 12, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>✨ スペシャル！</div>
-                        <div style={{ fontSize: 10, color: C.textDim, marginBottom: 10 }}>「霊力回復」か「変調解除」を選んでください。</div>
-                        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                          <button onClick={() => {
-                            animateDice(1, "霊力回復", (res) => {
-                              const rec = res[0];
-                              upd(p => {
-                                if ((pc.badStatus||[]).includes("スランプ")) {
-                                  return { ...p, currentScene: { ...p.currentScene, specialResolved: true }, log:[`${pc.name} はスペシャルで霊力回復を選んだが、変調《スランプ》のため増加しなかった`, ...p.log] };
-                                }
-                                const cur = pc.resources.霊力?.cur || 0;
-                                const max = pc.resources.霊力?.max || 30;
-                                const nextCur = Math.min(max, cur + rec);
-                                const nextAtk = 1 + Math.floor(nextCur / 5);
-                                const newResources = { ...pc.resources, 霊力: { ...pc.resources.霊力, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: nextAtk } };
-                                const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, resources: newResources } : x);
-                                return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, specialResolved: true }, log:[`${pc.name} はスペシャルにより霊力が ${rec} 点増加した`, ...p.log] };
-                              });
+                      <div style={{ marginBottom: 12, padding: 10, background: "rgba(200,160,64,0.1)", border: "1px solid #8b691460", borderRadius: 4 }}>
+                        <div style={{ fontSize: 11, color: C.gold, marginBottom: 8 }}>✨ スペシャル報酬を選択</div>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          <button onClick={() => animateDice(1, "霊力回復", res => {
+                            upd(p => {
+                              const gain = (pc.badStatus || []).includes("スランプ") ? 0 : res[0];
+                              const nextCur = Math.min(pc.resources.霊力.max, (pc.resources.霊力.cur || 0) + gain);
+                              const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: nextCur }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } } : x);
+                              return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, specialResolved: true }, log: [`${pc.name} は霊力を ${gain} 点回復した`, ...p.log] };
                             });
-                          }} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 霊力回復 (1D6)</button>
-                          
-                          {((pc.badStatus ||[]).length > 0) && (
-                            <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btn(C.blueBg, C.blueBorder, C.blue)}>🌿 変調解除</button>
-                          )}
+                          })} style={btn(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>霊力回復 (1D6)</button>
+                          {(pc.badStatus || []).length > 0 && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btn(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>変調解除</button>}
                         </div>
                       </div>
                     )}
 
-                    {/* ファンブル処理UI */}
                     {pendingFumble && (
-                      <div style={{ marginBottom: 12, padding: 12, background: "rgba(224,112,96,0.1)", border: "1px solid #e0706060", borderRadius: 4 }}>
-                        <div style={{ fontSize: 12, color: C.red, marginBottom: 8, fontWeight: "bold" }}>💀 ファンブル！</div>
-                        <div style={{ fontSize: 10, color: C.textDim, marginBottom: 10 }}>ランダムな変調を1つ獲得します。</div>
-                        <button onClick={() => {
-                          animateDice(1, "変調決定", (res) => {
-                            const bsId = res[0];
-                            const bsName = BAD_STATUS_TABLE[bsId].name;
-                            upd(p => {
-                              let newBs = pc.badStatus ||[];
-                              if (!newBs.includes(bsName)) newBs = [...newBs, bsName];
-                              let newResources = pc.resources;
-                              if (bsName === "だるい") newResources = { ...newResources, やる気: { ...newResources.やる気, cur: 1 } };
-                              
-                              const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: newResources } : x);
-                              return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[`${pc.name} はファンブルにより変調《${bsName}》を獲得した`, ...p.log] };
-                            });
+                      <div style={{ marginBottom: 12, padding: 10, background: "rgba(224,112,96,0.1)", border: "1px solid #e0706060", borderRadius: 4 }}>
+                        <div style={{ fontSize: 11, color: C.red, marginBottom: 8 }}>💀 変調を獲得します</div>
+                        <button onClick={() => animateDice(1, "変調決定", res => {
+                          const bsName = BAD_STATUS_TABLE[res[0]].name;
+                          upd(p => {
+                            const newBs = Array.from(new Set([...(pc.badStatus || []), bsName]));
+                            const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: bsName === "だるい" ? 1 : x.resources.やる気.cur } } } : x);
+                            return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log: [`${pc.name} は変調【${bsName}】を獲得した`, ...p.log] };
                           });
-                        }} style={btn(C.redBg, C.redBorder, C.red)}>🎲 変調表を振る (1D6)</button>
+                        })} style={btn(C.redBg, C.redBorder, C.red, { fontSize: 10 })}>🎲 変調表を振る (1D6)</button>
                       </div>
                     )}
-                    {sc.fumbleResolved && (
-                      <div style={{ fontSize: 10, color: C.red, marginBottom: 12, fontWeight: "bold" }}>獲得した変調: 《{sc.fumbleStatus}》</div>
-                    )}
-                    
+
                     {canProceed && (
                       <div style={{ animation: "fadeUp 0.3s ease" }}>
-                        <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                        <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", whiteSpace: "pre-wrap", marginBottom: 12 }}>
                           <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
-                          {sc.selectedEvent.effect}
+                          {sc.selectedEvent?.effect}
                         </div>
-
                         {isSuccess ? (
-                          /* 成功時：現在のマスに手がかりがあるか */
                           hasClueHere ? (
-                            <div style={{ marginTop: 12, padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
-                              <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストに割り当ててください。</div>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                {(gs.quests || []).filter(q => !q.solved && q.revealed).map(q => (
-                                  <button key={q.id} onClick={() => acquireClue(q.id)} style={{ padding: "6px", fontSize: 10, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.text, cursor: "pointer", textAlign: "left" }}>
-                                    「{q.name}」に割り当てる
-                                  </button>
-                                ))}
-                                {(gs.quests || []).filter(q => !q.solved && q.revealed).length === 0 && (
-                                  <div style={{fontSize:9, color:C.textFaint}}>※公開中のクエストがないため、獲得できません</div>
-                                )}
-                              </div>
-                              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btn("none", "none", C.textFaint), marginTop: 8, fontSize: 10 }}>獲得せず終了</button>
+                            <div style={{ padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
+                              <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストを選択してください。</div>
+                              {(gs.quests || []).filter(q => !q.solved && q.revealed).map(q => (
+                                <button key={q.id} onClick={() => acquireClue(q.id)} style={btn("rgba(255,255,255,0.05)", C.border, C.text, { fontSize: 10, marginBottom: 4 })}>「{q.name}」</button>
+                              ))}
                             </div>
-                          ) : (
-                            /* 成功時：現在のマスに手がかりがない ⇒ 手がかり2つ配置 */
-                            <div style={{ marginTop: 12 }}>
-                              <div style={{ fontSize: 10, color: C.gold, marginBottom: 8 }}>💡 成功しましたが手がかりがないため、<br/>ランダムなスポットに手がかりを2つ配置します。</div>
-                              <button onClick={() => placeClueWithAnimation(2)} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 手がかり配置（2D6 ×2回）</button>
-                            </div>
-                          )
-                        ) : (
-                          /* 失敗時：手がかり1つ配置 */
-                          <div style={{ marginTop: 12 }}>
-                            <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>💡 失敗したため、ランダムなスポットに<br/>手がかりを1つ配置します。</div>
-                            <button onClick={() => placeClueWithAnimation(1)} style={btn(C.redBg, C.redBorder, C.red)}>🎲 手がかり配置（2D6 ×1回）</button>
-                          </div>
-                        )}
+                          ) : <button onClick={() => placeClueWithAnimation(2)} style={btn(C.goldBg, C.goldDim, C.gold)}>🎲 手がかりを2つ配置</button>
+                        ) : <button onClick={() => placeClueWithAnimation(1)} style={btn(C.redBg, C.redBorder, C.red)}>🎲 手がかりを1つ配置</button>}
                       </div>
                     )}
                   </div>
                 );
-              })}
+              })()}
+            </div>
+          )}
+
+          {/* 11. アクション終了後 */}
+          {sc.phase === "action_done" && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
+              <button onClick={endScene} style={btn(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
             </div>
           )}
         </div>
