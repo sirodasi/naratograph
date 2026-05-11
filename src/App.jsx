@@ -395,6 +395,7 @@ function SessionApp({ roomCode, user }) {
         return {
           uid: p.uid, name: p.name,
           charId: p.charId, charName: p.charName,
+          bonds: [], badStatus: [], flags: {},
           spriteRow: p.spriteRow ?? -1, spriteCol: p.spriteCol ?? -1,
           customPortrait: p.customPortrait || null,
           skillId: p.skillId || null, skillName: p.skillName || "",
