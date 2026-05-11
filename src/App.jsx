@@ -252,7 +252,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
                       {p.customPortrait ? (
                         <img src={p.customPortrait} style={{width:"100%", height:"100%", objectFit:"cover"}} />
                       ) : (
-                        <div style={{ transform: "translateY(-3px)" }}>
+                        <div style={{ transform: "translateY(-4px)" }}>
                           <CharSprite spriteRow={p.spriteRow??-1} spriteCol={p.spriteCol??-1} size={34} />
                         </div>
                       )}
