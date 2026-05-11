@@ -448,19 +448,6 @@ function SessionApp({ roomCode, user }) {
 
   const doNewspaper = (paper) => { upd(p => ({ ...p, newspaper: paper, log: [`新聞[${paper.roll}]「${paper.title}」`, ...p.log] })); };
 
-  const doPlaceClue = () => {
-    function rollD6(){return Math.floor(Math.random()*6)+1;}
-    const a = rollD6(), b = rollD6();
-    const val = Math.min(a,b)*10 + Math.max(a,b);
-    const candidates = SPOTS.filter(s => s.roll === val);
-    if (candidates.length === 0) return;
-    const spot = candidates[Math.floor(Math.random() * candidates.length)];
-    upd(p => ({
-      ...p, cluePlaced: true, clues: [...new Set([...p.clues, spot.id])],
-      log: [`手がかりを[${val}]${spot.name}に配置`, ...p.log],
-    }));
-  };
-
   const doReiryoku = () => {
     upd(p => {
       let logMsg =[];
@@ -613,13 +600,12 @@ function SessionApp({ roomCode, user }) {
 
       {pendingAction && (
         <ConfirmModal
-          title={pendingAction==="advance" ? "サイクルを進めますか？" : pendingAction==="placeClue" ? "手がかりを配置しますか？" : "探索フェイズへ移行しますか？"}
+          title={pendingAction==="advance" ? "サイクルを進めますか？" : "探索フェイズへ移行しますか？"}
           body={pendingAction==="advance" 
-             ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。` + (gs.cycleIdx === 3 ? "\n※夜が明けるため、全員が拠点に帰還し【やる気】が1減少します。" : "\nスキルや処理の確認をお忘れなく。") 
-             : pendingAction==="placeClue" ? "ランダムなスポットに手がかりを1つ配置します。" 
-             : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"}
+             ? `${gs.day}日目・${CYCLES[gs.cycleIdx||0]} → 次のフェーズへ進みます。` 
+             : "バックストーリーを経て探索フェイズへ移行します。"}
           okLabel="進む"
-          onOk={pendingAction==="advance" ? doAdvanceCycle : pendingAction==="placeClue" ? ()=>{doPlaceClue();setPendingAction(null);} : ()=>{doTransitionToExplore();setPendingAction(null);}}
+          onOk={pendingAction==="advance" ? doAdvanceCycle : ()=>{doTransitionToExplore();setPendingAction(null);}}
           onCancel={()=>setPendingAction(null)}
         />
       )}
