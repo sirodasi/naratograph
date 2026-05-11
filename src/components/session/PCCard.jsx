@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { CharSprite } from "../common/CharSprite";
 import { COLORS, COMMON_STYLES } from "../../styles/theme";
-import { ITEM_DATA, INIT_ITEMS, INIT_RESOURCES } from "../../data/items";
+import { ITEM_DATA } from "../../data/items";
 import { PERSONALITY_SKILLS } from "../../data/personalitySkills";
 import { BAD_STATUS_TABLE } from "../../data/tables";
-import { getSpotById } from "../../data/gameData";
+import { getSpotById, INIT_ITEMS, INIT_RESOURCES } from "../../data/gameData";
 
 export function PCCard({ pc, gs, isGm, onUpdatePc }) {
   const [expanded, setExpanded] = useState(false);

@@ -98,3 +98,22 @@ export const getSpotsByRoll = (roll) => SPOTS.filter(s => s.roll === roll);
  * 名前からスポットを取得（初期位置設定用）
  */
 export const getSpotByName = (name) => SPOTS.find(s => s.name === name || name.includes(s.name)) || null;
+
+export const INIT_RESOURCES = () => ({
+  "やる気": { cur: 1, max: 3 },
+  "残り人数": { cur: 2, max: 5 },
+  "スペカ": { cur: 1, max: 5 },
+  "グレイズ": { cur: 0, max: 5 },
+  "霊力": { cur: 0, max: 20 },
+  "攻撃力": { cur: 1, max: 5 }
+});
+
+export const INIT_ITEMS = () => ({
+  "お酒": 0,
+  "小銭": 0,
+  "お守り": 0,
+  "Pアイテム": 0,
+  "残機のかけら": 0,
+  "スペカかけら": 0,
+  "妖器": 0
+});

@@ -74,3 +74,5 @@ export const CharSprite = ({ spriteRow = -1, spriteCol = -1, size = 80, customPo
     </div>
   );
 };
+
+export default CharSprite;

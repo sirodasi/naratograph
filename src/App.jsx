@@ -13,8 +13,7 @@ import { LoadingScreen } from "./components/common/LoadingScreen";
 
 // セッション用コンポーネント
 import { SessionView } from "./pages/SessionView";
-import { INIT_RESOURCES, INIT_ITEMS } from "./data/items";
-import { getSpotByName } from "./data/gameData";
+import { INIT_RESOURCES, INIT_ITEMS, getSpotByName } from "./data/gameData";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
 
