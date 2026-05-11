@@ -72,12 +72,12 @@ export const ITEM_DATA = {
   "スペカのかけら": {
     timing: "いつでも",
     desc:    "2つ消費して【スペルカード】を「1点」獲得します。（2つ以上保持時のみ）",
-    canUse:  pc => (pc.items?.["スペカかけら"] || 0) >= 2 && !(pc.badStatus ||[]).includes("二日酔い"),
+    canUse:  pc => (pc.items?.["スペカのかけら"] || 0) >= 2 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: pc => {
       const resources = { ...pc.resources };
       const r = resources.スペカ || { cur: 0, max: 5 };
       resources.スペカ = { cur: Math.min(r.cur + 1, r.max), max: r.max };
-      return { ...pc, items: { ...pc.items, "スペカかけら": Math.max(0, (pc.items["スペカかけら"] || 0) - 2) }, resources };
+      return { ...pc, items: { ...pc.items, "スペカのかけら": Math.max(0, (pc.items["スペカのかけら"] || 0) - 2) }, resources };
     },
   },
   "妖器": {
@@ -103,7 +103,7 @@ export const INIT_RESOURCES = () => ({
 });
  
 export const INIT_ITEMS = () => ({
-  お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカかけら: 0, 妖器: 0,
+  お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0, 妖器: 0,
 });
  
 export const BAD_STATUS_TABLE = {
@@ -563,7 +563,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>すべてのアイテムを失います</div>
           <button onClick={() => {
             proceed([`${pc.name} は所持しているアイテムを全て失った`], {
-              pc: { items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカかけら: 0, 妖器: 0 } }
+              pc: { items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0, 妖器: 0 } }
             });
           }} style={btnFull(C.redBg, C.redBorder, C.red)}>適用する</button>
         </div>
