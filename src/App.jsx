@@ -150,7 +150,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
 
       {mapBounds.width > 0 && SPOTS.map(spot => {
         const isDream     = spot.id === "dream";
-        const hasClue     = !isDream && gs.clues.includes(spot.id);
+        const hasClue     = !isDream && (gs.clues ||[]).includes(spot.id);
         const pcsHere     = !isDream ? (gs.pcs ||[]).filter(pc => pc.currentSpot === spot.id) :[];
         const exactDist   = gs.currentScene?.exactMoveDist ?? null;
         const distance    = dists[spot.id] ?? 999;

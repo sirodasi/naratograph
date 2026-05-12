@@ -1974,13 +1974,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 </div>
               )}
 
-              {isGm && needsApply && !paperModal.targetSpot ? (
-                <button onClick={applyEffect} style={{ marginTop: 12, width: "100%", padding: "8px", background: "rgba(100,181,246,0.15)", border: "1px solid #1976d2", color: C.blue, cursor: "pointer", borderRadius: 3, fontSize: 12 }}>
-                  効果を適用する
-                </button>
-              ) : (
-                <button onClick={() => setPaperModal(null)} style={{ marginTop: 12, width: "100%", padding: "7px", background: "rgba(192,57,43,0.15)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 3, fontSize: 12 }}>確認した</button>
-              )}
+              {isGm && !paperModal.targetSpot ? <button onClick={applyEffect} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button> : <button onClick={() => setPaperModal(null)} style={{ ...btnFull("transparent", C.border, C.textFaint), marginTop: 12 }}>閉じる</button>}
             </div>
           </div>
         );
