@@ -1918,7 +1918,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                           const isNowSolved = !q.solved;
                           const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
                           return { ...p, quests: newQuests };
-                        })} style={btnSmallStyle}> {q.solved ? "↩" : "✓"} </button>
+                        })} style={btnSmall}> {q.solved ? "↩" : "✓"} </button>
                       )}
                     </div>
                     
