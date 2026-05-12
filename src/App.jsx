@@ -97,7 +97,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const cycleIdx  = gs.cycleIdx || 0;
   const isNight   = cycleIdx === 3;
   const isEvening = cycleIdx === 2;
-  const[hov, setHov] = useState(null);
+  const [hov, setHov] = useState(null);
 
   const mapRef   = useRef(null);
   const mapBounds = useMapBounds(mapRef);
@@ -261,10 +261,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
 function SessionApp({ roomCode, user }) {
   const [mode, setMode]             = useState(null);
   const [gs, setGs]                 = useState(DEFAULT_GS);
-  const[sceneData, setSceneData]   = useState(DEFAULT_SCENE);
+  const [sceneData, setSceneData]   = useState(DEFAULT_SCENE);
   const [synced, setSynced]         = useState(false);
   const [room, setRoom]             = useState(null);
-  const[pendingAction, setPendingAction] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
   const [questBanner, setQuestBanner]     = useState(null);
 
   const gsPath    = `rooms/${roomCode}/state`;

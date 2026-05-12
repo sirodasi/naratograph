@@ -436,7 +436,7 @@ export const SPOT_DETAILS = {
         name: "組織のボスに面通しする",
         target: 5,
         effect: "成功時:セッション中《地獄》のタグを得る。ランダムなスポット1箇所に【手がかり】を配置する。\n失敗時:ランダムな【変調】1つを獲得する。",
-        onSuccess:[ { taype: "GAIN_TAG", tag: "地獄" }, { type: "GAIN_CLUE", count: "1", spot: "random" } ],
+        onSuccess:[ { type: "GAIN_TAG", tag: "地獄" }, { type: "GAIN_CLUE", count: "1", spot: "random" } ],
         onFailure:[ { type: "GAIN_BAD_STATUS" } ]
       }
     ]
