@@ -39,13 +39,13 @@ export const ITEM_DATA = {
   "小銭": {
     timing: "行為判定直前",
     desc:    "次の行為判定の判定ダイス数が「1」増加します。",
-    canUse:  pc => (pc.items?.["小銭"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
+    canUse:  () => false,
     use: (pc, gs) => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, money: true } }),
   },
   "お守り": {
     timing: "移動処理中",
     desc:    "移動で「6」が出たとき、ハプニングが発生せず6マス先まで移動できます。",
-    canUse:  pc => (pc.items?.["お守り"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
+    canUse:  () => false,
     use: (pc, gs) => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, amulet: true } }),
   },
   "Pアイテム": {
@@ -1272,6 +1272,23 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
           {sc.phase === "happening_roll" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 14, color: C.red, marginBottom: 8, fontWeight: "bold" }}>⚠️ ハプニング発生！</div>
+
+              {pc.items?.["お守り"] > 0 && !(pc.badStatus ||[]).includes("二日酔い") && (
+                <button onClick={() => {
+                  upd(p => {
+                    const nextPc = { ...pc, items: { ...pc.items, お守り: pc.items["お守り"] - 1 } };
+                    return {
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid === pc.uid ? nextPc : x),
+                      currentScene: { ...p.currentScene, phase: "move_dest", exactMoveDist: null, selectedMoveDie: 6 },
+                      log: [`${pc.charName} はお守りを使用し、ハプニングを無効化して6マス移動を選択した！`, ...p.log]
+                    };
+                  });
+                }} style={{ ...btnFull("rgba(76,175,80,0.15)", C.greenBorder, C.green, { marginBottom: 12 }) }}>
+                  🛡️ お守りを使用する（残り: {pc.items["お守り"]}）
+                </button>
+              )}
+
               <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_result", happeningDice: res[0] } })))} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 ハプニング表を振る</button>
             </div>
           )}
@@ -1396,7 +1413,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                     <button key={k} onClick={() => {
                       upd(p => {
                         const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, items: { ...x.items, [k]: x.items[k] - 1 } } : x);
-                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "gamble_roll", gambleItem: k } };
+                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "gamble_roll", gambleItem: k, gambleDiceCount: 2 } };
                       });
                     }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { width: "auto" })}>{k}を消費</button>
                   );
@@ -1407,12 +1424,29 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
           )}
           {sc.phase === "gamble_roll" && (
             <div style={{ textAlign: "center" }}>
-              <button onClick={() => animateDice(2, "賭博の判定", res => {
+              {pc.items?.["小銭"] > 0 && !(pc.badStatus ||[]).includes("二日酔い") && (
+                <button onClick={() => {
+                  upd(p => {
+                    const nextCount = (p.currentScene.gambleDiceCount || 2) + 1;
+                    const nextPc = { ...pc, items: { ...pc.items, 小銭: pc.items["小銭"] - 1 } };
+                    return {
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid === pc.uid ? nextPc : x),
+                      currentScene: { ...p.currentScene, gambleDiceCount: nextCount },
+                      log: [`${pc.charName} は小銭を使用し、判定ダイスを1つ増やした！`, ...p.log]
+                    };
+                  });
+                }} style={{ ...btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold, { marginBottom: 12 }) }}>
+                  💰 小銭を使用する（残り: {pc.items["小銭"]}）
+                </button>
+              )}
+
+              <button onClick={() => animateDice(sc.gambleDiceCount || 2, "賭博の判定", res => {
                 const max = Math.max(...res);
-                const isFumble = res[0] === 1 && res[1] === 1;
-                const success = max >= 6 && !isFumble; // 目標値6
+                const isFumble = res.every(d => d === 1);
+                const success = max >= 6 && !isFumble;
                 upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "gamble_result", gambleDice: res, gambleSuccess: success } }));
-              })} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 2D:6で勝負する</button>
+              })} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 {sc.gambleDiceCount || 2}D:6で勝負する</button>
             </div>
           )}
           {sc.phase === "gamble_result" && (
@@ -1474,9 +1508,24 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: next } }));
                 }} style={btnSmall}>+</button>
               </div>
-              {sc.moneyUsed && (
-                <div style={{ fontSize: 10, color: "#81c784", textAlign: "center", marginBottom: 8 }}>💰 【小銭】の効果で判定ダイス+1</div>
+
+              {pc.items?.["小銭"] > 0 && !(pc.badStatus ||[]).includes("二日酔い") && (
+                <button onClick={() => {
+                  upd(p => {
+                    const nextCount = (p.currentScene.actionDiceCount || 2) + 1;
+                    const nextPc = { ...pc, items: { ...pc.items, 小銭: pc.items["小銭"] - 1 } };
+                    return {
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid === pc.uid ? nextPc : x),
+                      currentScene: { ...p.currentScene, actionDiceCount: nextCount },
+                      log: [`${pc.charName} は小銭を使用し、判定ダイスを1つ増やした！`, ...p.log]
+                    };
+                  });
+                }} style={{ ...btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold, { marginBottom: 12 }) }}>
+                  💰 小銭を使用する（残り: {pc.items["小銭"]}）
+                </button>
               )}
+
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
           )}
