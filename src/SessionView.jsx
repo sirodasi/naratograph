@@ -382,6 +382,26 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             </div>
           )}
 
+          {pc.flags?.canCureBadStatus && (pc.badStatus ||[]).length > 0 && (
+            <div style={{ marginTop: 8, padding: 6, background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
+              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>📰 ストレッチ効果で変調を1つ解除できます</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {pc.badStatus.map(bs => (
+                  <button key={bs} onClick={() => {
+                    onUpdatePc({
+                      ...pc,
+                      badStatus: pc.badStatus.filter(x => x !== bs),
+                      flags: { ...pc.flags, canCureBadStatus: false },
+                      log: [...(pc.log||[]), `${pc.charName} は新聞効果で変調《${bs}》を解除した`]
+                    });
+                  }} style={btnFull(C.blueBg, C.blueBorder, C.blue, { padding: "4px", fontSize: 10, width: "auto" })}>
+                    {bs} を解除
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {gs.cycleIdx === 3 && (
             <div style={{ marginTop: 8, padding: 6, background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
               <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>今夜の帰還先</div>
@@ -1878,83 +1898,89 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         const is36 = r === 36;
         const is23 = r === 23;
         const is56 = r === 56;
-        const needsApply = isZoro || needsSpot || is25 || is36 || is23 || is56;
 
-        const applyEffect = () => {
-          if (is23) {
+        const applyZoro = () => {
+          const target = "66";
+          upd(p => ({
+            ...p,
+            newspaper: { ...p.newspaper, targetSpot: target },
+            log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log]
+          }));
+          setPaperModal(prev => ({ ...prev, targetSpot: target, applied: true }));
+        };
+
+        const rollTargetSpot = () => {
+          animateDice(2, "対象スポットの決定", res => {
+            const spotId = getSpotByD66(res[0], res[1], SPOTS);
             upd(p => ({
               ...p,
-              pcs: p.pcs.map(pc => ({
-                ...pc,
-                resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } }
-              })),
-              newspaper: paperModal,
-              log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log]
+              newspaper: { ...p.newspaper, targetSpot: spotId },
+              log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log]
             }));
-            setPaperModal(null);
-          } else if (is56) {
+            setPaperModal(prev => ({ ...prev, targetSpot: spotId, applied: true }));
+          });
+        };
+
+        const apply25 = () => {
+          animateDice(4, "手がかり2箇所配置", res => {
+            const s1 = getSpotByD66(res[0], res[1], SPOTS);
+            const s2 = getSpotByD66(res[2], res[3], SPOTS);
             upd(p => ({
               ...p,
-              pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
-              newspaper: paperModal,
-              log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log]
+              clues:[...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
+              log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log]
             }));
-            setPaperModal(null);
-          } else if (isZoro) {
-            upd(p => ({
-              ...p,
-              newspaper: { ...paperModal, targetSpot: "66" },
-              log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log]
-            }));
-            setPaperModal(null);
-          } else if (needsSpot) {
-            animateDice(2, "対象スポットの決定", res => {
-              const spotId = getSpotByD66(res[0], res[1], SPOTS);
+            setPaperModal(prev => ({ ...prev, applied: true }));
+          });
+        };
+
+        const apply36 = () => {
+          const count = (gs.clues ||[]).length;
+          if (count > 0) {
+            animateDice(count * 2, "手がかり再配置", res => {
+              const newClues =[];
+              for (let i = 0; i < count; i++) {
+                const s = getSpotByD66(res[i*2], res[i*2+1], SPOTS);
+                if (s) newClues.push(s);
+              }
               upd(p => ({
                 ...p,
-                newspaper: { ...paperModal, targetSpot: spotId },
-                log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log]
+                clues: [...new Set(newClues)],
+                log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log]
               }));
-              setPaperModal(null);
+              setPaperModal(prev => ({ ...prev, applied: true }));
             });
-          } else if (is25) {
-            animateDice(4, "手がかり2箇所配置", res => {
-              const s1 = getSpotByD66(res[0], res[1], SPOTS);
-              const s2 = getSpotByD66(res[2], res[3], SPOTS);
-              upd(p => ({
-                ...p,
-                clues:[...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
-                newspaper: paperModal,
-                log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log]
-              }));
-              setPaperModal(null);
-            });
-          } else if (is36) {
-            const count = (gs.clues ||[]).length;
-            if (count > 0) {
-              animateDice(count * 2, "手がかり再配置", res => {
-                const newClues =[];
-                for (let i = 0; i < count; i++) {
-                  const s = getSpotByD66(res[i*2], res[i*2+1], SPOTS);
-                  if (s) newClues.push(s);
-                }
-                upd(p => ({
-                  ...p,
-                  clues: [...new Set(newClues)],
-                  newspaper: paperModal,
-                  log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log]
-                }));
-                setPaperModal(null);
-              });
-            } else {
-              upd(p => ({ ...p, newspaper: paperModal }));
-              setPaperModal(null);
-            }
+          } else {
+            setPaperModal(prev => ({ ...prev, applied: true }));
           }
         };
 
+        const apply23 = () => {
+          upd(p => ({
+            ...p,
+            pcs: p.pcs.map(pc => ({
+              ...pc,
+              resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } }
+            })),
+            log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log]
+          }));
+          setPaperModal(prev => ({ ...prev, applied: true }));
+        };
+
+        const apply56 = () => {
+          upd(p => ({
+            ...p,
+            pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
+            log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log]
+          }));
+          setPaperModal(prev => ({ ...prev, applied: true }));
+        };
+
+        const isActionNeeded = isZoro || needsSpot || is25 || is36 || is23 || is56;
+        const canClose = !isActionNeeded || paperModal.applied;
+
         return (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => !needsApply && setPaperModal(null)}>
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => canClose && setPaperModal(null)}>
             <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontSize: 9, letterSpacing: 3, color: "#2a3a50", textAlign: "center", marginBottom: 4 }}>— 文々。新聞 —</div>
               {paperModal.dice && (
@@ -1966,15 +1992,24 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               )}
               <div style={{ fontSize: 18, color: "#1976d2", textAlign: "center", marginBottom: 6 }}>[{paperModal.roll}]</div>
               <div style={{ fontSize: 13, color: "#60c0f0", marginBottom: 8, textAlign: "center" }}>{paperModal.title}</div>
-              <div style={{ fontSize: 11, color: "#4a6070", lineHeight: 1.8 }}>{paperModal.effect}</div>
+              <div style={{ fontSize: 11, color: "#4a6070", lineHeight: 1.8, marginBottom: 8 }}>{paperModal.effect}</div>
               
               {paperModal.targetSpot && (
-                <div style={{ marginTop: 8, padding: 6, background: "rgba(255,255,255,0.05)", borderRadius: 4, textAlign: "center", fontSize: 11, color: C.gold }}>
+                <div style={{ padding: 6, background: "rgba(255,255,255,0.05)", borderRadius: 4, textAlign: "center", fontSize: 11, color: C.gold, animation: "fadeUp 0.3s ease" }}>
                   対象スポット: {getSpot(paperModal.targetSpot)?.name}
                 </div>
               )}
 
-              {isGm && !paperModal.targetSpot ? <button onClick={applyEffect} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button> : <button onClick={() => setPaperModal(null)} style={{ ...btnFull("transparent", C.border, C.textFaint), marginTop: 12 }}>閉じる</button>}
+              {isGm && !paperModal.applied && isZoro && <button onClick={applyZoro} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
+              {isGm && !paperModal.applied && needsSpot && <button onClick={rollTargetSpot} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 対象スポットを決定する</button>}
+              {isGm && !paperModal.applied && is25 && <button onClick={apply25} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを配置する</button>}
+              {isGm && !paperModal.applied && is36 && <button onClick={apply36} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを再配置する</button>}
+              {isGm && !paperModal.applied && is23 && <button onClick={apply23} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
+              {isGm && !paperModal.applied && is56 && <button onClick={apply56} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
+
+              {(!isGm || canClose) && (
+                <button onClick={() => setPaperModal(null)} style={{ ...btnFull("transparent", C.border, C.textFaint), marginTop: 12 }}>閉じる</button>
+              )}
             </div>
           </div>
         );

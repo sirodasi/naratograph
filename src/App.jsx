@@ -155,6 +155,19 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const exactDist   = gs.currentScene?.exactMoveDist ?? null;
         const distance    = dists[spot.id] ?? 999;
 
+        let newsMarker = null;
+        if (gs.newspaper) {
+          const r = gs.newspaper.roll;
+          if (gs.newspaper.targetSpot === spot.id) {
+            if ([14, 35, 46].includes(r) || r % 11 === 0) newsMarker = "📰";
+          }
+          if (r === 12 && spot.id === "11") newsMarker = "🍺";
+          if (r === 13 && spot.id === "13") newsMarker = "🛍️";
+          if (r === 15 && spot.id === "15") newsMarker = "♨️";
+          if (r === 16 && spot.id === "11") newsMarker = "🚫";
+          if (r === 45 && spot.id === "45") newsMarker = "🎲";
+        }
+
         let isReachable = false;
         if (isMovePhase) {
           isReachable = exactDist ? distance === exactDist : (distance > 0 && distance <= maxDist);
@@ -197,6 +210,12 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
             </div>
 
             {hasClue && <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px #00e5ff)" }}>💡</div>}
+
+            {newsMarker && (
+              <div style={{ position: "absolute", bottom: -Math.round(8 * scale * 1.4), left: -Math.round(8 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px rgba(255,183,77,0.8))", zIndex: 20 }}>
+                {newsMarker}
+              </div>
+            )}
 
             {isHov && (
               <div style={{ position: "absolute", background: "rgba(6,8,14,0.97)", border: "1px solid #1e2535", borderRadius: 4, padding: "4px 8px", fontSize: 10, color: "#c8b89a", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20, left: spot.x > 60 ? "auto" : "calc(100% + 6px)", right: spot.x > 60 ? "calc(100% + 6px)" : "auto", top: "50%", transform: "translateY(-50%)" }}>
