@@ -1252,7 +1252,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                     ...p,
                     currentScene: { 
                       ...p.currentScene, 
-                      phase: "quest_scene_start", 
+                      phase: "quest_scene_wait_others", 
                       targetQuestId: q.id 
                     }
                   }))}
