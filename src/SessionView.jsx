@@ -1244,25 +1244,37 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       ) : (
         <div>
           {sc.phase === "move_or_stay" && (
-            <div style={{ display: "flex", gap: 6 }}>
-              {(gs.quests || []).filter(q => !q.solved && (q.clues || 0) >= (q.level || 1)).map(q => (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={chooseMove} style={btnFull(C.blueBg,  C.blueBorder,  C.blue)}>移動する（やる気D）</button>
+                <button onClick={chooseStay} style={btnFull(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
+              </div>
+
+              {(gs.quests || []).filter(q => !q.solved && q.revealed && (q.clues || 0) >= q.level).map(q => (
                 <button 
-                  key={q.id}
-                  onClick={() => upd(p => ({
-                    ...p,
-                    currentScene: { 
-                      ...p.currentScene, 
-                      phase: "quest_scene_wait_others", 
-                      targetQuestId: q.id 
-                    }
-                  }))}
-                  style={btnFull(C.goldBg, C.gold, C.gold, { fontWeight: "bold" })}
+                  key={q.id} 
+                  onClick={() => {
+                    const loc = q.location || pc.currentSpot;
+                    upd(p => {
+                      const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: loc } : x);
+                      return {
+                        ...p,
+                        pcs: newPcs,
+                        currentScene: { 
+                          ...p.currentScene, 
+                          phase: "quest_setup", 
+                          questId: q.id,
+                          questLocation: loc 
+                        },
+                        log: [`🎬 ${pc.charName} はクエスト「${q.name}」の解決に向かった！`, ...p.log]
+                      };
+                    });
+                  }}
+                  style={btnFull(C.goldBg, C.goldDim, C.gold, { marginTop: 4, fontWeight: "bold" })}
                 >
-                  🚩 クエストシーン：{q.name}
+                  ✨ クエストシーン：{q.name}
                 </button>
               ))}
-              <button onClick={chooseMove} style={btnFull(C.blueBg,  C.blueBorder,  C.blue)}>移動する（やる気D）</button>
-              <button onClick={chooseStay} style={btnFull(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
             </div>
           )}
 
@@ -1681,49 +1693,27 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             }
           })()}
 
-          {sc.phase === "quest_scene_wait_others" && (() => {
-            const q = gs.quests.find(x => x.id === sc.targetQuestId);
-            const participants = gs.pcs.filter(p => p.currentSpot === q?.location);
-
-            return (
-              <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-                <div style={{ fontSize: 11, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>
-                  🤝 仲間の合流を待っています...
-                </div>
-                <div style={{ fontSize: 9, color: C.textDim, marginBottom: 12, lineHeight: 1.5 }}>
-                  他のプレイヤーの画面に参加確認が表示されています。<br />
-                  揃ったタイミングで「判定へ進む」を押してください。
-                </div>
-
-                <div style={{ 
-                  marginBottom: 12, padding: "8px", 
-                  background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`,
-                  borderRadius: 4 
-                }}>
-                  <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 4, letterSpacing: 1 }}>
-                    現在の合流メンバー
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", justifyContent: "center" }}>
-                    {participants.map(p => (
-                      <div key={p.uid} style={{ fontSize: 10, color: C.text }}>
-                        ✦ {p.charName}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => upd(p => ({ 
-                    ...p, 
-                    currentScene: { ...p.currentScene, phase: "quest_resolution" } 
-                  }))}
-                  style={btnFull(C.blueBg, C.blueBorder, C.blue)}
-                >
-                  全員揃ったので判定へ
-                </button>
+          {sc.phase === "quest_setup" && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.gold, marginBottom: 12 }}>
+                仲間の合流を待っています...<br/>
+                <span style={{ fontSize: 9, color: C.textDim }}>（他のプレイヤーの画面に合流ボタンが表示されています）</span>
               </div>
-            );
-          })()}
+              <button 
+                onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_resolve" } }))}
+                style={btnFull(C.blueBg, C.blueBorder, C.blue)}
+              >
+                全員揃ったので解決に進む
+              </button>
+            </div>
+          )}
+
+          {sc.phase === "quest_resolve" && (
+            <div style={{ textAlign: "center", color: C.textDim, fontSize: 11 }}>
+              解決処理の実装待ちです...
+              <button onClick={endScene} style={{...btnFull(C.redBg, C.redBorder, C.red), marginTop: 10}}>シーンを強制終了</button>
+            </div>
+          )}
 
           {sc.phase === "action_done" && (
             <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
@@ -1820,6 +1810,17 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["log", "ログ"]]
     : [["progress", "進行"],["pcs", "PC一覧"], ["log", "ログ"]];
 
+  const joinQuest = () => {
+    const myPc = gs.pcs.find(p => p.uid === user.uid);
+    if (!myPc || !gs.currentScene?.questLocation) return;
+    
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid === user.uid ? { ...x, currentSpot: gs.currentScene.questLocation } : x),
+      log: [`🏃 ${myPc.charName} がクエストに合流した！`, ...p.log]
+    }));
+  };
+
   return (
     <div style={{ width: 300, display: "flex", flexDirection: "column", background: "#0b0d14", borderLeft: `1px solid ${C.border}`, flexShrink: 0, overflow: "hidden", fontFamily: "serif" }}>
       <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } } @keyframes rollSpin { 50% { transform: scale(1.15) } }`}</style>
@@ -1830,6 +1831,23 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
           {!isIntro && <div style={{ padding: "2px 10px", background: `${cycleColor}18`, border: `1px solid ${cycleColor}40`, borderRadius: 10, fontSize: 10, color: cycleColor }}>{gs.day}日目・{CYCLES[cycleIdx]}</div>}
         </div>
       </div>
+
+      {gs.currentScene?.phase === "quest_setup" && gs.currentScene?.pcUid !== user.uid && (
+        <div style={{ padding: "10px", background: "rgba(200,160,64,0.15)", borderBottom: `1px solid ${C.goldDim}`, animation: "fadeUp 0.3s ease" }}>
+          <div style={{ fontSize: 10, color: C.gold, marginBottom: 6, textAlign: "center" }}>
+            🌟 クエストシーンが開始されました
+          </div>
+          <button 
+            onClick={joinQuest}
+            disabled={gs.pcs.find(p => p.uid === user.uid)?.currentSpot === gs.currentScene.questLocation}
+            style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}
+          >
+            {gs.pcs.find(p => p.uid === user.uid)?.currentSpot === gs.currentScene.questLocation 
+              ? "合流済み" 
+              : "このクエストに合流する（移動）"}
+          </button>
+        </div>
+      )}
 
       {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
 
@@ -1851,40 +1869,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
           )}
         </div>
       )}
-
-      {!isGm && gs.currentScene?.phase === "quest_scene_wait_others" && gs.currentScene?.pcUid !== user.uid && (() => {
-        const myPc = gs.pcs.find(p => p.uid === user.uid);
-        const q = gs.quests.find(x => x.id === gs.currentScene.targetQuestId);
-        const isAlreadyAtLoc = myPc?.currentSpot === q?.location;
-
-        if (!q || isAlreadyAtLoc) return null;
-
-        return (
-          <div style={{ 
-            margin: "8px", padding: "12px", background: "rgba(200,160,64,0.15)", 
-            border: `1px solid ${C.gold}`, borderRadius: 6, animation: "fadeUp 0.3s ease" 
-          }}>
-            <div style={{ fontSize: 11, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>
-              🚩 クエスト「{q.name}」が開始されました
-            </div>
-            <div style={{ fontSize: 10, color: C.text, marginBottom: 10, lineHeight: 1.5 }}>
-              解決場所へ移動して、このクエストに参加しますか？
-            </div>
-            <button 
-              onClick={() => {
-                upd(p => ({
-                  ...p,
-                  pcs: p.pcs.map(x => x.uid === user.uid ? { ...x, currentSpot: q.location } : x),
-                  log: [`🏃 ${myPc.charName} がクエスト「${q.name}」に合流しました`, ...p.log]
-                }));
-              }}
-              style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 11 })}
-            >
-              移動して参加する
-            </button>
-          </div>
-        );
-      })()}
 
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         {TABS.map(([id, label]) => (
@@ -1918,7 +1902,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                           const isNowSolved = !q.solved;
                           const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
                           return { ...p, quests: newQuests };
-                        })} style={btnSmall}> {q.solved ? "↩" : "✓"} </button>
+                        })} style={btnSmallStyle}> {q.solved ? "↩" : "✓"} </button>
                       )}
                     </div>
                     
