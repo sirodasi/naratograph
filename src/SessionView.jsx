@@ -1245,6 +1245,22 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
         <div>
           {sc.phase === "move_or_stay" && (
             <div style={{ display: "flex", gap: 6 }}>
+              {(gs.quests || []).filter(q => !q.solved && (q.clues || 0) >= (q.level || 1)).map(q => (
+                <button 
+                  key={q.id}
+                  onClick={() => upd(p => ({
+                    ...p,
+                    currentScene: { 
+                      ...p.currentScene, 
+                      phase: "quest_scene_start", 
+                      targetQuestId: q.id 
+                    }
+                  }))}
+                  style={btnFull(C.goldBg, C.gold, C.gold, { fontWeight: "bold" })}
+                >
+                  🚩 クエストシーン：{q.name}
+                </button>
+              ))}
               <button onClick={chooseMove} style={btnFull(C.blueBg,  C.blueBorder,  C.blue)}>移動する（やる気D）</button>
               <button onClick={chooseStay} style={btnFull(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
             </div>
@@ -1665,6 +1681,50 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             }
           })()}
 
+          {sc.phase === "quest_scene_wait_others" && (() => {
+            const q = gs.quests.find(x => x.id === sc.targetQuestId);
+            const participants = gs.pcs.filter(p => p.currentSpot === q?.location);
+
+            return (
+              <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+                <div style={{ fontSize: 11, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>
+                  🤝 仲間の合流を待っています...
+                </div>
+                <div style={{ fontSize: 9, color: C.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+                  他のプレイヤーの画面に参加確認が表示されています。<br />
+                  揃ったタイミングで「判定へ進む」を押してください。
+                </div>
+
+                <div style={{ 
+                  marginBottom: 12, padding: "8px", 
+                  background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`,
+                  borderRadius: 4 
+                }}>
+                  <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 4, letterSpacing: 1 }}>
+                    現在の合流メンバー
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", justifyContent: "center" }}>
+                    {participants.map(p => (
+                      <div key={p.uid} style={{ fontSize: 10, color: C.text }}>
+                        ✦ {p.charName}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => upd(p => ({ 
+                    ...p, 
+                    currentScene: { ...p.currentScene, phase: "quest_resolution" } 
+                  }))}
+                  style={btnFull(C.blueBg, C.blueBorder, C.blue)}
+                >
+                  全員揃ったので判定へ
+                </button>
+              </div>
+            );
+          })()}
+
           {sc.phase === "action_done" && (
             <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
@@ -1792,6 +1852,40 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         </div>
       )}
 
+      {!isGm && gs.currentScene?.phase === "quest_scene_wait_others" && gs.currentScene?.pcUid !== user.uid && (() => {
+        const myPc = gs.pcs.find(p => p.uid === user.uid);
+        const q = gs.quests.find(x => x.id === gs.currentScene.targetQuestId);
+        const isAlreadyAtLoc = myPc?.currentSpot === q?.location;
+
+        if (!q || isAlreadyAtLoc) return null;
+
+        return (
+          <div style={{ 
+            margin: "8px", padding: "12px", background: "rgba(200,160,64,0.15)", 
+            border: `1px solid ${C.gold}`, borderRadius: 6, animation: "fadeUp 0.3s ease" 
+          }}>
+            <div style={{ fontSize: 11, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>
+              🚩 クエスト「{q.name}」が開始されました
+            </div>
+            <div style={{ fontSize: 10, color: C.text, marginBottom: 10, lineHeight: 1.5 }}>
+              解決場所へ移動して、このクエストに参加しますか？
+            </div>
+            <button 
+              onClick={() => {
+                upd(p => ({
+                  ...p,
+                  pcs: p.pcs.map(x => x.uid === user.uid ? { ...x, currentSpot: q.location } : x),
+                  log: [`🏃 ${myPc.charName} がクエスト「${q.name}」に合流しました`, ...p.log]
+                }));
+              }}
+              style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 11 })}
+            >
+              移動して参加する
+            </button>
+          </div>
+        );
+      })()}
+
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         {TABS.map(([id, label]) => (
           <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : "#1e2535", borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
@@ -1805,34 +1899,49 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             {(gs.quests ||[]).length === 0 ? (
               <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
             ) : (
-              (gs.quests ||[]).map(q => (
-                <div key={q.id || q.name} style={{ padding: "6px 8px", marginBottom: 4, background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${q.solved ? "#1b5e20" : C.border}`, borderRadius: 3 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : C.gold, textDecoration: q.solved ? "line-through" : "none" }}>【Lv.{q.level}】{q.name}</span>
-                    {isGm && (
-                      <button onClick={() => upd(p => {
-                        const isNowSolved = !q.solved;
-                        const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
-                        if (isNowSolved) {
-                          (p.scenarioData?.quests ||[]).forEach(scQ => {
-                            if (scQ.unlockType === "quest" && scQ.unlockQuestId === q.id) {
-                              if (!newQuests.find(nq => nq.id === scQ.id)) {
-                                newQuests.push({ ...scQ, revealed: true, solved: false });
-                              }
-                            }
-                          });
-                        }
-                        return { ...p, quests: newQuests };
-                      })} style={{ width: 18, height: 18, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>
-                        {q.solved ? "↩" : "✓"}
-                      </button>
+              (gs.quests ||[]).map(q => {
+                const isReadyToSolve = (q.clues || 0) >= (q.level || 1);
+
+                return (
+                  <div key={q.id || q.name} style={{ 
+                    padding: "6px 8px", marginBottom: 4, 
+                    background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", 
+                    border: `1px solid ${q.solved ? "#1b5e20" : isReadyToSolve ? C.gold : C.border}`, 
+                    borderRadius: 3 
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : C.gold, textDecoration: q.solved ? "line-through" : "none" }}>
+                        【Lv.{q.level}】{q.name}
+                      </span>
+                      {isGm && (
+                        <button onClick={() => upd(p => {
+                          const isNowSolved = !q.solved;
+                          const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
+                          return { ...p, quests: newQuests };
+                        })} style={btnSmallStyle}> {q.solved ? "↩" : "✓"} </button>
+                      )}
+                    </div>
+                    
+                    <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>{q.summary}</div>
+
+                    {!q.solved && (
+                      <div style={{ fontSize: 9, color: isReadyToSolve ? C.gold : "#00bcd4", marginTop: 4, fontWeight: isReadyToSolve ? "bold" : "normal" }}>
+                        {isReadyToSolve ? "✨ 調査完了：解決可能です" : `💡 手がかり: ${q.clues || 0} / ${q.level}`}
+                      </div>
+                    )}
+
+                    {(isReadyToSolve || q.solved || isGm) && (
+                      <div style={{ marginTop: 6, padding: "4px 6px", background: "rgba(200,160,64,0.05)", borderRadius: 2, borderLeft: `2px solid ${C.goldDim}` }}>
+                        <div style={{ fontSize: 8, color: C.goldDim, letterSpacing: 1 }}>真相 / 解決場所</div>
+                        <div style={{ fontSize: 9, color: C.text, marginTop: 2, whiteSpace: "pre-wrap" }}>{q.truth || "（真相なし）"}</div>
+                        {q.location && (
+                          <div style={{ fontSize: 9, color: "#90caf9", marginTop: 2 }}>📍 解決場所: {getSpot(q.location)?.name || `スポット[${q.location}]`}</div>
+                        )}
+                      </div>
                     )}
                   </div>
-                  <div style={{ fontSize: 9, color: C.textFaint, marginTop: 2 }}>{q.summary}</div>
-                  {q.clues > 0 && <div style={{ fontSize: 9, color: "#00bcd4", marginTop: 4 }}>💡 割り当てられた手がかり: {q.clues} / {q.level}</div>}
-                  {isGm && !q.solved && q.truth && <div style={{ fontSize: 8, color: "#3a6040", marginTop: 2 }}>🔒 {q.truth}</div>}
-                </div>
-              ))
+                );
+              })
             )}
             {!isIntro && (gs.clues ||[]).length > 0 && (
               <>
