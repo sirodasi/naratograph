@@ -4,7 +4,7 @@ import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES } from "./data/gameData";
 import { C } from "./styles/colors";
- 
+
 // ─── ユーティリティ ───────────────────────────────────────────────
 export function getSpotByD66(d1, d2, SPOTS) {
   const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
@@ -18,7 +18,7 @@ export function getSpotByD66(d1, d2, SPOTS) {
 }
 
 // ─── アイテムデータ ───────────────────────────────────────────────
- 
+
 export const ITEM_DATA = {
   "お酒": {
     timing: "いつでも",
@@ -30,7 +30,7 @@ export const ITEM_DATA = {
         const r = resources.やる気 || { cur: 0, max: 3 };
         const isPremiumFriday = gs?.newspaper?.roll === 12 && pc.currentSpot === "11";
         const healAmount = isPremiumFriday ? 2 : 1;
-       
+
         resources.やる気 = { cur: Math.min(r.cur + healAmount, r.max), max: r.max };
       }
       return { ...pc, items: { ...pc.items, "お酒": Math.max(0, (pc.items["お酒"] || 0) - 1) }, resources };
@@ -95,7 +95,7 @@ export const ITEM_DATA = {
     },
   },
 };
- 
+
 export const INIT_RESOURCES = () => ({
   やる気:     { cur: 1, max: 3  },
   残り人数:   { cur: 2, max: 5  },
@@ -104,11 +104,11 @@ export const INIT_RESOURCES = () => ({
   霊力:       { cur: 0, max: 20 },
   攻撃力:     { cur: 1, max: 5  },
 });
- 
+
 export const INIT_ITEMS = () => ({
   お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0, 妖器: 0,
 });
- 
+
 export const BAD_STATUS_TABLE = {
   1: { name: "だるい",   desc: "あなたの【やる気】は「1点」となり、いかなる処理によっても回復しません。" },
   2: { name: "スランプ", desc: "いかなる処理によってもあなたの【霊力】は増加しなくなります。" },
@@ -117,19 +117,19 @@ export const BAD_STATUS_TABLE = {
   5: { name: "不機嫌",   desc: "あなたは絆を獲得できなくなり、他のキャラクターもあなたへの絆を獲得できません。" },
   6: { name: "疲れた",   desc: "「移動」の処理で移動できる距離が1スポット分少なくなります。" },
 };
- 
+
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
- 
+
 const btnFull = (bg, border, color, extra = {}) => ({
   width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer",
   background: bg, border: `1px solid ${border}`, color, fontSize: 12, ...extra,
 });
- 
+
 const btnSmall = {
   width: 24, height: 24, background: "rgba(255,255,255,0.05)",
   border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer",
 };
- 
+
 // ─── BackstoryScreen ──────────────────────────────────────────────
 export function BackstoryScreen({ gs, isGm, onProceed }) {
   const [visible, setVisible] = useState(false);
@@ -148,7 +148,7 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
     </div>
   );
 }
- 
+
 // ─── ConfirmModal ─────────────────────────────────────────────────
 export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行する", okColor = "#e07060" }) {
   return (
@@ -164,7 +164,7 @@ export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行す
     </div>
   );
 }
- 
+
 // ─── ItemUseModal ─────────────────────────────────────────────────
 function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
   const data = ITEM_DATA[itemName];
@@ -185,7 +185,7 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
     </div>
   );
 }
- 
+
 // ─── SkillActivateModal ───────────────────────────────────────────
 function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel }) {
   const typeColor = SKILL_TYPE_COLOR[skillType] || C.text;
@@ -205,14 +205,14 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
     </div>
   );
 }
- 
+
 // ─── PCCard ───────────────────────────────────────────────────────
 export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const[itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const[expanded, setExpanded]     = useState(false);
   const[gmEdit, setGmEdit]         = useState(false);
- 
+
   const resources     = pc.resources || INIT_RESOURCES();
   const items         = pc.items     || INIT_ITEMS();
   const badStatus     = pc.badStatus ||[];
@@ -222,19 +222,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const isActing      = gs.currentScene?.pcUid === pc.uid;
   const skillCanActivate = skill && skill.type !== "オート";
   const currentSpotName  = getSpot(pc.currentSpot)?.name || "-";
- 
+
   const useItem = itemName => {
     const data = ITEM_DATA[itemName];
     if (!data) return;
     onUpdatePc(data.use(pc, gs));
     setItemModal(null);
   };
- 
+
   const activateSkill = () => {
     onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, log:[...(pc.log || []), `《${skill?.name}》を発動`] });
     setSkillModal(null);
   };
- 
+
   const adjustResource = (key, delta) => {
     const r = resources[key] || { cur: 0, max: 1 };
     const newCur = Math.max(0, Math.min(r.cur + delta, r.max));
@@ -242,10 +242,10 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
     if (key === "霊力") updated.攻撃力 = { ...updated.攻撃力, cur: 1 + Math.floor(newCur / 5) };
     onUpdatePc({ ...pc, resources: updated });
   };
- 
+
   const resKeys  =["やる気", "残り人数", "スペカ", "グレイズ", "霊力", "攻撃力"];
   const itemKeys = Object.keys(INIT_ITEMS());
- 
+
   return (
     <div style={{ border: `1px solid ${isActing ? C.blue : expanded ? "#2a3545" : C.border}`, borderRadius: 5, marginBottom: 6, overflow: "hidden", transition: "border 0.2s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", background: isActing ? C.blueBg : expanded ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.01)" }} onClick={() => setExpanded(v => !v)}>
@@ -264,7 +264,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
           <span style={{ fontSize: 9, color: "#ab47bc" }}>霊力{resources.霊力?.cur || 0}</span>
         </div>
       </div>
- 
+
       {expanded && (
         <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>リソース</div>
@@ -285,7 +285,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               );
             })}
           </div>
- 
+
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>アイテム</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
             {itemKeys.map(k => {
@@ -316,7 +316,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               </div>
             )}
           </div>
- 
+
           {badStatus.length > 0 && (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>変調</div>
@@ -334,7 +334,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               </div>
             </div>
           )}
- 
+
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -344,7 +344,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               }
             </div>
           </div>
- 
+
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
           {skill && (
             <div style={{ marginBottom: 6 }}>
@@ -367,15 +367,45 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               {pc.abilitySkill.type !== "オート" && !isCustomChar && <button onClick={() => setSkillModal({ name: pc.abilitySkill.name, type: pc.abilitySkill.type, desc: pc.abilitySkill.desc, key: "ability" })} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>}
             </div>
           )}
+
+          {pc.flags?.liveAvailable && gs.cycleIdx === 2 && (
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => {
+                onUpdatePc({
+                  ...pc,
+                  currentSpot: gs.newspaper?.targetSpot || pc.currentSpot,
+                  resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気?.cur || 0) + 1) } },
+                  flags: { ...pc.flags, liveAvailable: false },
+                  log: [...(pc.log||[]), `${pc.charName} はゲリラライブ会場に移動し、やる気を1回復した！`]
+                });
+              }} style={btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>🎵 ゲリラライブ会場へ移動（やる気+1）</button>
+            </div>
+          )}
+
+          {gs.cycleIdx === 3 && (
+            <div style={{ marginTop: 8, padding: 6, background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
+              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>今夜の帰還先</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button onClick={() => onUpdatePc({...pc, returnSpotId: pc.baseSpotId})} style={btnFull(pc.returnSpotId === pc.baseSpotId || !pc.returnSpotId ? C.goldBg : "rgba(255,255,255,0.02)", pc.returnSpotId === pc.baseSpotId || !pc.returnSpotId ? C.goldDim : C.border, pc.returnSpotId === pc.baseSpotId || !pc.returnSpotId ? C.gold : C.textDim, { padding: "4px", fontSize: 10 })}>
+                  拠点 ({getSpot(pc.baseSpotId)?.name})
+                </button>
+                {gs.newspaper?.targetSpot && (gs.newspaper.roll === 14 || gs.newspaper.roll % 11 === 0) && (
+                  <button onClick={() => onUpdatePc({...pc, returnSpotId: gs.newspaper.targetSpot})} style={btnFull(pc.returnSpotId === gs.newspaper.targetSpot ? C.goldBg : "rgba(255,255,255,0.02)", pc.returnSpotId === gs.newspaper.targetSpot ? C.goldDim : C.border, pc.returnSpotId === gs.newspaper.targetSpot ? C.gold : C.textDim, { padding: "4px", fontSize: 10 })}>
+                    📰 {getSpot(gs.newspaper.targetSpot)?.name}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
- 
+
       {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => useItem(itemModal)} onCancel={() => setItemModal(null)} />}
       {skillModal && skill && <SkillActivateModal skillName={skill.name} skillType={skill.type} desc={skill.desc} onConfirm={activateSkill} onCancel={() => setSkillModal(null)} />}
     </div>
   );
 }
- 
+
 // ─── ActionRenderer (イベント効果実行エンジン) ─────────────────────────
 function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone }) {
   const [selectedLose, setSelectedLose] = useState(null);
@@ -734,9 +764,9 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
       <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
         <button onClick={() => {
           if (!hasItem) {
-             proceed([`${pc.charName} はアイテムを持っていなかったため、足止めを受けた`], { pc: { flags: { ...pc.flags, stopped: true } } });
+            proceed([`${pc.charName} はアイテムを持っていなかったため、足止めを受けた`], { pc: { flags: { ...pc.flags, stopped: true } } });
           } else {
-             proceed();
+            proceed();
           }
         }} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>アイテムの所持を確認する</button>
       </div>
@@ -758,8 +788,8 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <button onClick={() => {
-             const bonds = Array.from(new Set([...(pc.bonds || []), pc.name]));
-             proceed([`${pc.charName} は自身への絆を獲得した`], { pc: { bonds } });
+            const bonds = Array.from(new Set([...(pc.bonds || []), pc.name]));
+            proceed([`${pc.charName} は自身への絆を獲得した`], { pc: { bonds } });
           }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>自身への絆を獲得する</button>
         </div>
       );
@@ -804,12 +834,12 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>絆を獲得するキャラクターを選んでください</div>
           <select value={selectedLose || ""} onChange={e => setSelectedLose(e.target.value)} style={{ width: "100%", padding: 6, marginBottom: 8, background: "rgba(255,255,255,0.05)", color: C.text }}>
-             <option value="">キャラクターを選択...</option>
-             {others.map(o => <option key={o.uid} value={o.charName || o.name}>{o.name}</option>)}
+            <option value="">キャラクターを選択...</option>
+            {others.map(o => <option key={o.uid} value={o.charName || o.name}>{o.name}</option>)}
           </select>
           <button disabled={!selectedLose} onClick={() => {
-             const bonds = Array.from(new Set([...(pc.bonds || []), selectedLose]));
-             proceed([`${pc.charName} は《${selectedLose}への絆》を獲得した`], { pc: { bonds } });
+            const bonds = Array.from(new Set([...(pc.bonds || []), selectedLose]));
+            proceed([`${pc.charName} は《${selectedLose}への絆》を獲得した`], { pc: { bonds } });
           }} style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}>獲得する</button>
         </div>
       );
@@ -818,8 +848,8 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     return (
       <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
         <button onClick={() => {
-           const bonds = Array.from(new Set([...(pc.bonds || []), act.target]));
-           proceed([`${pc.charName} は《${act.target}への絆》を獲得した`], { pc: { bonds } });
+          const bonds = Array.from(new Set([...(pc.bonds || []), act.target]));
+          proceed([`${pc.charName} は《${act.target}への絆》を獲得した`], { pc: { bonds } });
         }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>《{act.target}への絆》を獲得する</button>
       </div>
     );
@@ -873,40 +903,40 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     }
     
     if (act.spot === "base_or_any") {
-       if (pc.baseSpotId === "dream") {
-          return (
-             <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
-               <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>拠点が夢の世界のため、任意の場所に移動します</div>
-               <select 
-                 value={selectedLose || ""} 
-                 onChange={e => setSelectedLose(e.target.value)} 
-                 style={{ width: "100%", padding: 6, marginBottom: 8, background: "rgba(255,255,255,0.05)", color: C.text }}
-               >
-                 <option value="">移動先を選択...</option>
-                 {SPOTS.filter(s => s.id !== "dream").map(s => (
-                   <option key={s.id} value={s.id}>[{s.roll}] {s.name}</option>
-                 ))}
-               </select>
-               <button 
-                 disabled={!selectedLose} 
-                 onClick={() => {
-                   proceed([`${pc.charName} は[${getSpot(selectedLose)?.name}] に移動した`], { pc: { currentSpot: selectedLose } });
-                 }} 
-                 style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}
-               >
-                 移動する
-               </button>
-             </div>
-          );
-       } else {
-          return (
-             <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
-               <button onClick={() => {
-                 proceed([`${pc.charName} は拠点に移動した`], { pc: { currentSpot: pc.baseSpotId } });
-               }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>拠点に移動する</button>
-             </div>
-          );
-       }
+      if (pc.baseSpotId === "dream") {
+        return (
+          <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+            <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>拠点が夢の世界のため、任意の場所に移動します</div>
+            <select 
+              value={selectedLose || ""} 
+              onChange={e => setSelectedLose(e.target.value)} 
+              style={{ width: "100%", padding: 6, marginBottom: 8, background: "rgba(255,255,255,0.05)", color: C.text }}
+            >
+              <option value="">移動先を選択...</option>
+              {SPOTS.filter(s => s.id !== "dream").map(s => (
+                <option key={s.id} value={s.id}>[{s.roll}] {s.name}</option>
+              ))}
+            </select>
+            <button 
+              disabled={!selectedLose} 
+              onClick={() => {
+                proceed([`${pc.charName} は[${getSpot(selectedLose)?.name}] に移動した`], { pc: { currentSpot: selectedLose } });
+              }} 
+              style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}
+            >
+              移動する
+            </button>
+          </div>
+        );
+      } else {
+        return (
+          <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+            <button onClick={() => {
+              proceed([`${pc.charName} は拠点に移動した`], { pc: { currentSpot: pc.baseSpotId } });
+            }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>拠点に移動する</button>
+          </div>
+        );
+      }
     }
 
     if (act.spot === "pc") {
@@ -974,10 +1004,10 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         <button onClick={() => animateDice(2, "手がかり配置", res => {
           const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
           if (nextSpotId) {
-             const newClues = Array.from(new Set([...(gs.clues || []), nextSpotId]));
-             proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues } });
+            const newClues = Array.from(new Set([...(gs.clues || []), nextSpotId]));
+            proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues } });
           } else {
-             proceed(["(手がかりの配置先が見つからなかった)"]);
+            proceed(["(手がかりの配置先が見つからなかった)"]);
           }
         })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 手がかりを配置する</button>
       </div>
@@ -991,20 +1021,20 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     </div>
   );
 }
- 
+
 // ─── ScenePanel ───────────────────────────────────────────────────
 function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const sc = gs.currentScene;
   if (!sc) return null;
   const pc = gs.pcs.find(p => p.uid === sc.pcUid);
   if (!pc) return null;
- 
+
   const isMyTurn  = pc.uid === user?.uid || isGm;
   const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events:[], desc: "" };
- 
+
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
   const endScene = ()  => upd(p => ({ ...p, actedPcs:[...(p.actedPcs || []), pc.uid], currentScene: null, log:[`${pc.charName} のシーンを終了した`, ...p.log] }));
- 
+
   const placeClueWithAnimation = count => {
     animateDice(count * 2, count === 1 ? "手がかり1つ配置" : "手がかり2つ配置", res => {
       upd(p => {
@@ -1022,7 +1052,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       });
     });
   };
- 
+
   const chooseStay = () => {
     upd(p => {
       const x = p.pcs.find(x => x.uid === pc.uid);
@@ -1039,14 +1069,14 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action" }, log:[logText, ...p.log] };
     });
   };
- 
+
   const chooseMove = () => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "move_roll" } }));
- 
+
   const rollMoveDice = () => {
     const count = pc.resources.やる気?.cur || 1;
     animateDice(count, "移動ダイス", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, moveDice: res } })));
   };
- 
+
   const selectMoveDie = val => {
     upd(p => {
       let logAdd = `${pc.charName} は移動ダイスで「${val}」を選んだ`;
@@ -1065,26 +1095,57 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       return { ...p, currentScene: { ...p.currentScene, phase: "move_dest", selectedMoveDie: actualVal }, log: [logAdd, ...p.log] };
     });
   };
- 
+
   const confirmMove = () => {
     if (!sc.selectedDestSpot) return;
-    upd(p => {
-      const pcs   = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: p.currentScene.selectedDestSpot } : x);
-      const sName = getSpot(p.currentScene.selectedDestSpot)?.name;
-      return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.charName} は [${sName}] に移動した`, ...p.log] };
-    });
+    const dest = sc.selectedDestSpot;
+    const sDetail = SPOTS.find(s => s.id === dest);
+
+    const isMountain = sDetail?.area === "妖怪の山" && dest !== "22";
+    const isHuman = (pc.tags ||[]).includes("人間");
+    const news26 = gs.newspaper?.roll === 26 && isHuman && isMountain;
+    const news35 = gs.newspaper?.roll === 35 && dest === gs.newspaper.targetSpot;
+    if (news26 || news35) {
+      animateDice(1, "霊力減少ペナルティ", res => {
+        const dmg = res[0];
+        upd(p => {
+          const r = pc.resources.霊力 || { cur: 0, max: 20 };
+          const nextRei = Math.max(0, r.cur - dmg);
+          const pcs = p.pcs.map(x => x.uid === pc.uid ? {
+            ...x,
+            currentSpot: dest,
+            resources: { ...x.resources, 霊力: { ...r, cur: nextRei }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) } }
+          } : x);
+          const reason = news26 ? "《人間》の妖怪の山侵入ペナルティ(新聞26)" : "凶暴化した妖精の襲撃(新聞35)";
+          return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.charName} は [${sDetail.name}] に移動したが、${reason}で霊力が ${dmg} 点減少した！`, ...p.log] };
+        });
+      });
+    } else {
+      upd(p => {
+        const pcs   = p.pcs.map(x => x.uid === pc.uid ? { ...x, currentSpot: dest } : x);
+        return { ...p, pcs, currentScene: { ...p.currentScene, phase: "action" }, log:[`${pc.charName} は [${sDetail?.name}] に移動した`, ...p.log] };
+      });
+    }
   };
- 
+
   const startExplore = () => {
+    if (gs.newspaper?.roll === 15 && pc.currentSpot === "15") {
+      const r = pc.resources.やる気 || { cur: 0, max: 3 };
+      upd(p => {
+        const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, resources: { ...x.resources, やる気: { ...r, cur: r.max } } } : x);
+        return { ...p, pcs: newPcs, log: [`${pc.charName} は間欠泉地下センターの足湯でやる気をMAXまで回復した！`, ...p.log] };
+      });
+    }
+
     const hasTag    = spotDetail.tags.some(t => (pc.tags ||[]).includes(t) || pc.charName === t || pc.skillName === t);
     let diceCount   = 2 + (hasTag ? 1 : 0);
     if ((pc.badStatus ||[]).includes("怪我")) diceCount = Math.min(2, diceCount);
     upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag } }));
   };
- 
+
   const selectEvent  = ev  => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_roll", selectedEvent: ev } }));
   const rollExplore  = ()  => animateDice(sc.actionDiceCount || 2, "行為判定", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result", actionDice: res } })));
- 
+
   const acquireClue = questId => {
     upd(p => {
       const spotId   = pc.currentSpot;
@@ -1093,7 +1154,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       return { ...p, clues: newClues, quests: newQuests, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.charName} は [${spotId}] で手がかりを獲得し、クエスト「${newQuests.find(q => q.id === questId)?.name}」に配置した`, ...p.log] };
     });
   };
- 
+
   const hasClueHere = gs.clues?.includes(pc.currentSpot);
 
   const gainBond = targetName => {
@@ -1124,7 +1185,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.charName} は《${targetName}への絆》を獲得した` + (p.newspaper?.roll === 34 ? `（新聞効果で双方向に獲得！）` : ""), ...p.log] };
     });
   };
- 
+
   return (
     <div style={{ padding: 10, background: "rgba(25,118,210,0.1)", borderBottom: `1px solid ${C.blueBorder}`, flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -1136,7 +1197,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
           </div>
         </div>
       </div>
- 
+
       {!isMyTurn ? (
         <div style={{ fontSize: 11, color: C.textFaint, textAlign: "center", padding: "8px 0" }}>{pc.charName} の操作を待っています…</div>
       ) : (
@@ -1147,7 +1208,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               <button onClick={chooseStay} style={btnFull(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
             </div>
           )}
- 
+
           {sc.phase === "move_roll" && !sc.moveDice?.length && (
             <button onClick={rollMoveDice} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 やる気（{pc.resources.やる気?.cur || 1}）個のダイスを振る</button>
           )}
@@ -1162,14 +1223,14 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               {sc.moveDice.includes(6) && <div style={{ fontSize: 10, color: C.red, textAlign: "center", marginTop: 4 }}>※6を選ぶとハプニングが発生します</div>}
             </div>
           )}
- 
+
           {sc.phase === "happening_roll" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 14, color: C.red, marginBottom: 8, fontWeight: "bold" }}>⚠️ ハプニング発生！</div>
               <button onClick={() => animateDice(1, "ハプニング表", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "happening_result", happeningDice: res[0] } })))} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 ハプニング表を振る</button>
             </div>
           )}
- 
+
           {sc.phase === "happening_result" && (() => {
             const h = {
               1: { title: "仲間が恋しい。", desc: "任意のPC1人を選ぶこと。強制的に選んだPCのいるスポットに移動する。" },
@@ -1203,7 +1264,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               </div>
             );
           })()}
- 
+
           {sc.phase === "happening_1" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>合流するPC（スポット）を選択してください</div>
@@ -1216,7 +1277,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               ))}
             </div>
           )}
- 
+
           {sc.phase === "happening_3_roll" && (
             <div style={{ textAlign: "center" }}>
               <button onClick={() => animateDice(1, "移動距離", res => {
@@ -1224,7 +1285,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 距離を振る (1D6)</button>
             </div>
           )}
- 
+
           {sc.phase === "happening_4_roll" && (
             <div style={{ textAlign: "center" }}>
               <button onClick={() => animateDice(2, "道に迷う", res => {
@@ -1236,7 +1297,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 移動先を振る (D66)</button>
             </div>
           )}
- 
+
           {sc.phase === "move_dest" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: C.gold, marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -1256,17 +1317,85 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={{ ...btnFull("none", "none", C.textFaint), fontSize: 10 }}>移動せずにアクションへ進む</button>
             </div>
           )}
- 
+
           {sc.phase === "action" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <button onClick={startExplore} style={btnFull(C.greenBg, C.greenBorder, C.green)}>🔍 探索イベントの実行</button>
+              {gs.newspaper?.roll === 13 && pc.currentSpot === "13" && (
+                <button onClick={() => {
+                  upd(p => {
+                    const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, flags: { ...x.flags, kourindouNPC: true } } : x);
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.charName} はアクションを消費し、香霖堂のNPCの応援を取り付けた！`, ...p.log] };
+                  });
+                }} style={btnFull(C.purpleBg, C.purpleBorder, C.purple)}>🤝 香霖堂の新商品を見る（NPCの応援獲得）</button>
+              )}
+
+              {gs.newspaper?.roll === 45 && pc.currentSpot === "45" && (
+                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "gamble_select_item" } }))} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 鬼の賭博に挑戦</button>
+              )}
+
               <button onClick={() => writeLog(`${pc.charName} はアクションスキルを使用した`)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>💡 アクションスキルの使用</button>
               <div style={{ marginTop: 8 }}>
                 <button onClick={endScene} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 このシーンを終了する</button>
               </div>
             </div>
           )}
- 
+
+          {sc.phase === "gamble_select_item" && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.gold, marginBottom: 8 }}>消費するアイテムを選んでください</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginBottom: 12 }}>
+                {Object.keys(INIT_ITEMS()).map(k => {
+                  if ((pc.items[k] || 0) === 0) return null;
+                  return (
+                    <button key={k} onClick={() => {
+                      upd(p => {
+                        const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, items: { ...x.items, [k]: x.items[k] - 1 } } : x);
+                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "gamble_roll", gambleItem: k } };
+                      });
+                    }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { width: "auto" })}>{k}を消費</button>
+                  );
+                })}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={btnFull("none", "none", C.textFaint)}>戻る</button>
+            </div>
+          )}
+          {sc.phase === "gamble_roll" && (
+            <div style={{ textAlign: "center" }}>
+              <button onClick={() => animateDice(2, "賭博の判定", res => {
+                const max = Math.max(...res);
+                const isFumble = res[0] === 1 && res[1] === 1;
+                const success = max >= 6 && !isFumble; // 目標値6
+                upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "gamble_result", gambleDice: res, gambleSuccess: success } }));
+              })} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 2D:6で勝負する</button>
+            </div>
+          )}
+          {sc.phase === "gamble_result" && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 8 }}>
+                {sc.gambleDice?.map((d, i) => <div key={i} style={{ width: 36, height: 36, border: "1px solid #e07060", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{d}</div>)}
+              </div>
+              <div style={{ fontSize: 16, color: sc.gambleSuccess ? C.green : C.red, marginBottom: 12 }}>
+                {sc.gambleSuccess ? "成功！ アイテムを3つ獲得できます" : "失敗… アイテムを失った"}
+              </div>
+              {sc.gambleSuccess ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+                  {["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"].map(k => (
+                    <button key={k} onClick={() => {
+                        gainItem(k, 1);
+                        const count = (sc.gambleRewards || 0) + 1;
+                        if (count >= 3) upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }));
+                        else upd(p => ({ ...p, currentScene: { ...p.currentScene, gambleRewards: count } }));
+                    }} style={btnFull("rgba(200,160,64,0.1)", C.goldDim, C.gold, { width: "auto" })}>+ {k}</button>
+                  ))}
+                  <div style={{ width: "100%", fontSize: 9, color: C.textDim, marginTop: 4 }}>残り獲得数: {3 - (sc.gambleRewards || 0)}</div>
+                </div>
+              ) : (
+                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.charName} は賭博に敗北した`, ...p.log] }))} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>終了</button>
+              )}
+            </div>
+          )}
+
           {sc.phase === "explore_select" && (
             <div>
               <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>探索イベントを選択</div>
@@ -1284,7 +1413,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" } }))} style={{ ...btnFull("none", "none", C.textFaint), marginTop: 10, fontSize: 10 }}>← 戻る</button>
             </div>
           )}
- 
+
           {sc.phase === "explore_roll" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ padding: 8, background: "rgba(200,160,64,0.05)", borderRadius: 4, marginBottom: 12 }}>
@@ -1303,7 +1432,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
           )}
- 
+
           {sc.phase === "special_cure" && (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 13, color: C.gold, marginBottom: 14, fontWeight: "bold" }}>🌿 解除する変調を選択</div>
@@ -1319,7 +1448,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result" } }))} style={{ ...btnFull("none", "none", C.textFaint), marginTop: 10 }}>戻る</button>
             </div>
           )}
- 
+
           {sc.phase === "explore_result" && (() => {
             const maxDie       = Math.max(...(sc.actionDice ||[0]));
             const isFumble     = sc.actionDice?.length > 0 && sc.actionDice.every(d => d === 1);
@@ -1328,7 +1457,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             const pendingFumble  = isFumble  && !sc.fumbleResolved;
             const pendingSpecial = isSpecial && !isFumble && !sc.specialResolved;
             const canProceed   = !pendingFumble && !pendingSpecial;
- 
+
             return (
               <div style={{ textAlign: "center" }}>
                 <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
@@ -1336,11 +1465,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                     <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue }}>{d}</div>
                   ))}
                 </div>
- 
+
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12 }}>
                   {isFumble ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
                 </div>
- 
+
                 {pendingSpecial && (
                   <div style={{ marginBottom: 12, padding: 10, background: "rgba(200,160,64,0.1)", border: "1px solid #8b691460", borderRadius: 4 }}>
                     <div style={{ fontSize: 11, color: C.gold, marginBottom: 8 }}>✨ スペシャル報酬を選択</div>
@@ -1357,7 +1486,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                     </div>
                   </div>
                 )}
- 
+
                 {pendingFumble && (
                   <div style={{ marginBottom: 12, padding: 10, background: "rgba(224,112,96,0.1)", border: "1px solid #e0706060", borderRadius: 4 }}>
                     <div style={{ fontSize: 11, color: C.red, marginBottom: 8 }}>💀 変調を獲得します</div>
@@ -1371,7 +1500,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                     })} style={btnFull(C.redBg, C.redBorder, C.red, { fontSize: 10 })}>🎲 変調表を振る (1D6)</button>
                   </div>
                 )}
- 
+
                 {canProceed && (
                   <div style={{ animation: "fadeUp 0.3s ease" }}>
                     <div style={{ padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 4, fontSize: 10, color: C.textDim, textAlign: "left", whiteSpace: "pre-wrap", marginBottom: 12 }}>
@@ -1379,22 +1508,22 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                       {sc.selectedEvent?.effect}
                     </div>
                     <button onClick={() => {
-                       const event = sc.selectedEvent;
-                       const actions =[];
-                       if (event.onAlways) actions.push(...event.onAlways);
-                       if (isSuccess && event.onSuccess) actions.push(...event.onSuccess);
-                       if (!isSuccess && event.onFailure) actions.push(...event.onFailure);
-                       
-                       upd(p => ({
-                         ...p,
-                         currentScene: {
-                           ...p.currentScene,
-                           phase: "explore_apply_effect",
-                           eventActions: actions,
-                           currentActionIndex: 0,
+                      const event = sc.selectedEvent;
+                      const actions =[];
+                      if (event.onAlways) actions.push(...event.onAlways);
+                      if (isSuccess && event.onSuccess) actions.push(...event.onSuccess);
+                      if (!isSuccess && event.onFailure) actions.push(...event.onFailure);
+                      
+                      upd(p => ({
+                        ...p,
+                        currentScene: {
+                          ...p.currentScene,
+                          phase: "explore_apply_effect",
+                          eventActions: actions,
+                          currentActionIndex: 0,
                            isSuccess // 手がかり処理のために残す
-                         }
-                       }));
+                        }
+                      }));
                     }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>イベント効果を適用する</button>
                   </div>
                 )}
@@ -1438,11 +1567,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               );
             }
           })()}
- 
+
           {sc.phase === "action_done" && (
             <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
-              <button onClick={} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
+              <button onClick={endScene} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
             </div>
           )}
         </div>
@@ -1450,7 +1579,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
     </div>
   );
 }
- 
+
 // ─── RightPanel ───────────────────────────────────────────────────
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab]             = useState("progress");
@@ -1459,12 +1588,12 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [paperModal, setPaperModal] = useState(null);
   const[sceneSelect, setSceneSelect] = useState("");
   const timerRef = useRef(null);
- 
+
   const cycleIdx   = gs.cycleIdx || 0;
   const isIntro    = gs.sessionPhase === "intro" || gs.sessionPhase === "intro_main";
   const isMorning  = cycleIdx === 0;
   const cycleColor = CYCLE_COLORS[cycleIdx];
- 
+
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
   const animateDice = (count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -1482,7 +1611,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
       }
     }, 80);
   };
- 
+
   const handleNewspaper = () => {
     animateDice(2, "文々。新聞表", res => {
       const val   = Math.min(res[0], res[1]) * 10 + Math.max(res[0], res[1]);
@@ -1491,7 +1620,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
       setTimeout(() => setPaperModal({ roll: val, dice: res, ...paper }), 300);
     });
   };
- 
+
   const startScene = () => {
     if (!sceneSelect) return;
     const targetPc = gs.pcs.find(p => p.uid === sceneSelect);
@@ -1503,9 +1632,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     }));
     setSceneSelect("");
   };
- 
+
   const unactedPcs = (gs.pcs || []).filter(pc => !(gs.actedPcs ||[]).includes(pc.uid));
- 
+
   const getMainAction = () => {
     if (gs.currentScene) return null;
     if (isIntro) return { label: "🎬 探索フェイズへ移行する", fn: () => setPendingAction("toExplore"), color: "#1976d2" };
@@ -1529,24 +1658,24 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     return null;
   };
   const ma = isGm ? getMainAction() : null;
- 
+
   const TABS = isGm
     ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["log", "ログ"]]
     : [["progress", "進行"],["pcs", "PC一覧"], ["log", "ログ"]];
- 
+
   return (
     <div style={{ width: 300, display: "flex", flexDirection: "column", background: "#0b0d14", borderLeft: `1px solid ${C.border}`, flexShrink: 0, overflow: "hidden", fontFamily: "serif" }}>
       <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } } @keyframes rollSpin { 50% { transform: scale(1.15) } }`}</style>
- 
+
       <div style={{ padding: "8px 12px", borderBottom: `1px solid ${C.border}`, background: "#08090f", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <span style={{ fontSize: 11, color: C.gold, letterSpacing: 2 }}>{isIntro ? "✦ 導入フェイズ" : "✦ 探索フェイズ"}</span>
           {!isIntro && <div style={{ padding: "2px 10px", background: `${cycleColor}18`, border: `1px solid ${cycleColor}40`, borderRadius: 10, fontSize: 10, color: cycleColor }}>{gs.day}日目・{CYCLES[cycleIdx]}</div>}
         </div>
       </div>
- 
+
       {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
- 
+
       {!gs.currentScene && isGm && (
         <div style={{ padding: "8px", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.01)" }}>
           {ma ? (
@@ -1565,13 +1694,13 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
           )}
         </div>
       )}
- 
+
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         {TABS.map(([id, label]) => (
           <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : "#1e2535", borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
         ))}
       </div>
- 
+
       <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
         {tab === "progress" && (
           <div>
@@ -1640,7 +1769,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             )}
           </div>
         )}
- 
+
         {tab === "pcs" && (
           <div>
             {(gs.pcs ||[]).length === 0
@@ -1658,7 +1787,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             }
           </div>
         )}
- 
+
         {tab === "scene" && isGm && (
           <div>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
@@ -1667,7 +1796,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             </button>
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>テキスト（PLに表示）</div>
             <textarea value={gs.sceneText || ""} onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))} placeholder="PLに見せたいテキスト…" style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }} />
- 
+
             <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>背景画像</div>
             {sceneData.bg ? (
               <div style={{ position: "relative", marginBottom: 6 }}>
@@ -1697,7 +1826,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 }} />
               </label>
             )}
- 
+
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
             {(sceneData.portraits ||[]).map((p, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
@@ -1731,7 +1860,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             )}
           </div>
         )}
- 
+
         {tab === "log" && (
           <div>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
@@ -1740,15 +1869,16 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
           </div>
         )}
       </div>
- 
+
       {paperModal && (() => { 
         const r = paperModal.roll;
-        const needsSpot =[14, 35, 46].includes(r);
+        const isZoro = [11, 22, 33, 44, 55, 66].includes(r);
+        const needsSpot = [14, 35, 46].includes(r);
         const is25 = r === 25;
         const is36 = r === 36;
         const is23 = r === 23;
         const is56 = r === 56;
-        const needsApply = needsSpot || is25 || is36 || is23 || is56;
+        const needsApply = isZoro || needsSpot || is25 || is36 || is23 || is56;
 
         const applyEffect = () => {
           if (is23) {
@@ -1764,59 +1894,66 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             setPaperModal(null);
           } else if (is56) {
             upd(p => ({
-               ...p,
-               pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
-               newspaper: paperModal,
-               log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log]
-             }));
-             setPaperModal(null);
-           } else if (needsSpot) {
-             animateDice(2, "対象スポットの決定", res => {
-               const spotId = getSpotByD66(res[0], res[1], SPOTS);
-               upd(p => ({
-                 ...p,
-                 newspaper: { ...paperModal, targetSpot: spotId },
-                 log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log]
-               }));
-               setPaperModal(null);
-             });
-           } else if (is25) {
-             animateDice(4, "手がかり2箇所配置", res => {
-               const s1 = getSpotByD66(res[0], res[1], SPOTS);
-               const s2 = getSpotByD66(res[2], res[3], SPOTS);
-               upd(p => ({
-                 ...p,
-                 clues:[...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
-                 newspaper: paperModal,
-                 log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log]
-               }));
-               setPaperModal(null);
-             });
-           } else if (is36) {
-             const count = (gs.clues ||[]).length;
-             if (count > 0) {
-               animateDice(count * 2, "手がかり再配置", res => {
-                 const newClues =[];
-                 for (let i = 0; i < count; i++) {
-                   const s = getSpotByD66(res[i*2], res[i*2+1], SPOTS);
-                   if (s) newClues.push(s);
-                 }
-                 upd(p => ({
-                   ...p,
-                   clues: [...new Set(newClues)],
-                   newspaper: paperModal,
-                   log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log]
-                 }));
-                 setPaperModal(null);
-               });
-             } else {
-               upd(p => ({ ...p, newspaper: paperModal }));
-               setPaperModal(null);
-             }
-           }
-         };
-     
-         return (
+              ...p,
+              pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
+              newspaper: paperModal,
+              log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log]
+            }));
+            setPaperModal(null);
+          } else if (isZoro) {
+            upd(p => ({
+              ...p,
+              newspaper: { ...paperModal, targetSpot: "66" },
+              log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log]
+            }));
+            setPaperModal(null);
+          } else if (needsSpot) {
+            animateDice(2, "対象スポットの決定", res => {
+              const spotId = getSpotByD66(res[0], res[1], SPOTS);
+              upd(p => ({
+                ...p,
+                newspaper: { ...paperModal, targetSpot: spotId },
+                log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log]
+              }));
+              setPaperModal(null);
+            });
+          } else if (is25) {
+            animateDice(4, "手がかり2箇所配置", res => {
+              const s1 = getSpotByD66(res[0], res[1], SPOTS);
+              const s2 = getSpotByD66(res[2], res[3], SPOTS);
+              upd(p => ({
+                ...p,
+                clues:[...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
+                newspaper: paperModal,
+                log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log]
+              }));
+              setPaperModal(null);
+            });
+          } else if (is36) {
+            const count = (gs.clues ||[]).length;
+            if (count > 0) {
+              animateDice(count * 2, "手がかり再配置", res => {
+                const newClues =[];
+                for (let i = 0; i < count; i++) {
+                  const s = getSpotByD66(res[i*2], res[i*2+1], SPOTS);
+                  if (s) newClues.push(s);
+                }
+                upd(p => ({
+                  ...p,
+                  clues: [...new Set(newClues)],
+                  newspaper: paperModal,
+                  log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log]
+                }));
+                setPaperModal(null);
+              });
+            } else {
+              upd(p => ({ ...p, newspaper: paperModal }));
+              setPaperModal(null);
+            }
+          }
+        };
+
+        return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => !needsApply && setPaperModal(null)}>
             <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontSize: 9, letterSpacing: 3, color: "#2a3a50", textAlign: "center", marginBottom: 4 }}>— 文々。新聞 —</div>
