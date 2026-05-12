@@ -163,13 +163,13 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
           if (gs.newspaper?.roll === 16 && isYoukai && spot.id === "11") {
             isReachable = false;
           }
-
-          const sx       = mapBounds.left + (spot.x / 100) * mapBounds.width;
-          const sy       = mapBounds.top  + (spot.y / 100) * mapBounds.height;
-          const isHov    = hov === spot.id;
-          const borderCol = isReachable ? "#64b5f6" : (hasClue ? "#00e5ff" : areaColor(spot.area).border);
-          const canClick  = isGm || (isMovePhase && isMyTurn && isReachable);
         }
+
+        const sx       = mapBounds.left + (spot.x / 100) * mapBounds.width;
+        const sy       = mapBounds.top  + (spot.y / 100) * mapBounds.height;
+        const isHov    = hov === spot.id;
+        const borderCol = isReachable ? "#64b5f6" : (hasClue ? "#00e5ff" : areaColor(spot.area).border);
+        const canClick  = isGm || (isMovePhase && isMyTurn && isReachable);
 
         return (
           <div key={spot.id}
