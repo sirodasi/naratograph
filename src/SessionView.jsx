@@ -1899,25 +1899,22 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         const is23 = r === 23;
         const is56 = r === 56;
 
+        const saveApplied = (extra = {}) => {
+          upd(p => ({ ...p, newspaper: { ...p.newspaper, applied: true, ...extra } }));
+          setPaperModal(prev => ({ ...prev, applied: true, ...extra }));
+        };
+
         const applyZoro = () => {
           const target = "66";
-          upd(p => ({
-            ...p,
-            newspaper: { ...p.newspaper, targetSpot: target },
-            log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log]
-          }));
-          setPaperModal(prev => ({ ...prev, targetSpot: target, applied: true }));
+          saveApplied({ targetSpot: target });
+          upd(p => ({ ...p, log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log] }));
         };
 
         const rollTargetSpot = () => {
           animateDice(2, "対象スポットの決定", res => {
             const spotId = getSpotByD66(res[0], res[1], SPOTS);
-            upd(p => ({
-              ...p,
-              newspaper: { ...p.newspaper, targetSpot: spotId },
-              log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log]
-            }));
-            setPaperModal(prev => ({ ...prev, targetSpot: spotId, applied: true }));
+            saveApplied({ targetSpot: spotId });
+            upd(p => ({ ...p, log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log] }));
           });
         };
 
@@ -1927,42 +1924,45 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             const s2 = getSpotByD66(res[2], res[3], SPOTS);
             upd(p => ({
               ...p,
-              clues:[...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
-              log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log]
+              newspaper: { ...p.newspaper, applied: true },
+              clues: [...new Set([...(p.clues || []), s1, s2].filter(Boolean))],
+              log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log],
             }));
             setPaperModal(prev => ({ ...prev, applied: true }));
           });
         };
 
         const apply36 = () => {
-          const count = (gs.clues ||[]).length;
+          const count = (gs.clues || []).length;
           if (count > 0) {
             animateDice(count * 2, "手がかり再配置", res => {
-              const newClues =[];
+              const newClues = [];
               for (let i = 0; i < count; i++) {
-                const s = getSpotByD66(res[i*2], res[i*2+1], SPOTS);
+                const s = getSpotByD66(res[i * 2], res[i * 2 + 1], SPOTS);
                 if (s) newClues.push(s);
               }
               upd(p => ({
                 ...p,
+                newspaper: { ...p.newspaper, applied: true },
                 clues: [...new Set(newClues)],
-                log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log]
+                log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log],
               }));
               setPaperModal(prev => ({ ...prev, applied: true }));
             });
           } else {
-            setPaperModal(prev => ({ ...prev, applied: true }));
+            saveApplied();
           }
         };
 
         const apply23 = () => {
           upd(p => ({
             ...p,
+            newspaper: { ...p.newspaper, applied: true },
             pcs: p.pcs.map(pc => ({
               ...pc,
-              resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } }
+              resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } },
             })),
-            log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log]
+            log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log],
           }));
           setPaperModal(prev => ({ ...prev, applied: true }));
         };
@@ -1970,8 +1970,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         const apply56 = () => {
           upd(p => ({
             ...p,
+            newspaper: { ...p.newspaper, applied: true },
             pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
-            log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log]
+            log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log],
           }));
           setPaperModal(prev => ({ ...prev, applied: true }));
         };
