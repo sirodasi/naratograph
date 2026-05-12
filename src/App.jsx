@@ -169,44 +169,44 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
           const isHov    = hov === spot.id;
           const borderCol = isReachable ? "#64b5f6" : (hasClue ? "#00e5ff" : areaColor(spot.area).border);
           const canClick  = isGm || (isMovePhase && isMyTurn && isReachable);
-
-          return (
-            <div key={spot.id}
-              style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || pcsHere.length ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
-              onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
-              
-              {pcsHere.length > 0 && (
-                <div style={{ position: "absolute", top: -baseSize / 2 - 4, left: "50%", transform: "translate(-50%, -100%)", display: "flex", gap: 2, pointerEvents: "none", zIndex: 10 }}>
-                  {pcsHere.map(p => {
-                    const isAct = gs.currentScene?.pcUid === p.uid;
-                    return (
-                      <div key={p.uid} style={{ width: 24, height: 24, borderRadius: "50%", overflow: "hidden", border: `1.5px solid ${isAct ? "#64b5f6" : "#c8a040"}`, background: "#0b0d14", boxShadow: "0 2px 4px rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {p.customPortrait
-                          ? <img src={p.customPortrait} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          : <div style={{ transform: "translateY(-1px)" }}><CharSprite spriteRow={p.spriteRow ?? -1} spriteCol={p.spriteCol ?? -1} size={34} /></div>
-                        }
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: hasClue ? "0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)" : "none", animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none" }}>
-                {isDream ? "◇" : (spot.roll ?? "?")}
-              </div>
-
-              {hasClue && <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px #00e5ff)" }}>💡</div>}
-
-              {isHov && (
-                <div style={{ position: "absolute", background: "rgba(6,8,14,0.97)", border: "1px solid #1e2535", borderRadius: 4, padding: "4px 8px", fontSize: 10, color: "#c8b89a", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20, left: spot.x > 60 ? "auto" : "calc(100% + 6px)", right: spot.x > 60 ? "calc(100% + 6px)" : "auto", top: "50%", transform: "translateY(-50%)" }}>
-                  {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
-                  {pcsHere.length > 0 && <span style={{ color: "#ef9a9a" }}><br />{pcsHere.map(p => p.charName || p.name).join("・")}</span>}
-                  {hasClue && <span style={{ color: "#00e5ff" }}><br />💡 手がかりあり</span>}
-                </div>
-              )}
-            </div>
-          );
         }
+
+        return (
+          <div key={spot.id}
+            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || pcsHere.length ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
+            onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
+            
+            {pcsHere.length > 0 && (
+              <div style={{ position: "absolute", top: -baseSize / 2 - 4, left: "50%", transform: "translate(-50%, -100%)", display: "flex", gap: 2, pointerEvents: "none", zIndex: 10 }}>
+                {pcsHere.map(p => {
+                  const isAct = gs.currentScene?.pcUid === p.uid;
+                  return (
+                    <div key={p.uid} style={{ width: 24, height: 24, borderRadius: "50%", overflow: "hidden", border: `1.5px solid ${isAct ? "#64b5f6" : "#c8a040"}`, background: "#0b0d14", boxShadow: "0 2px 4px rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {p.customPortrait
+                        ? <img src={p.customPortrait} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <div style={{ transform: "translateY(-1px)" }}><CharSprite spriteRow={p.spriteRow ?? -1} spriteCol={p.spriteCol ?? -1} size={34} /></div>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: hasClue ? "0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)" : "none", animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none" }}>
+              {isDream ? "◇" : (spot.roll ?? "?")}
+            </div>
+
+            {hasClue && <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px #00e5ff)" }}>💡</div>}
+
+            {isHov && (
+              <div style={{ position: "absolute", background: "rgba(6,8,14,0.97)", border: "1px solid #1e2535", borderRadius: 4, padding: "4px 8px", fontSize: 10, color: "#c8b89a", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20, left: spot.x > 60 ? "auto" : "calc(100% + 6px)", right: spot.x > 60 ? "calc(100% + 6px)" : "auto", top: "50%", transform: "translateY(-50%)" }}>
+                {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
+                {pcsHere.length > 0 && <span style={{ color: "#ef9a9a" }}><br />{pcsHere.map(p => p.charName || p.name).join("・")}</span>}
+                {hasClue && <span style={{ color: "#00e5ff" }}><br />💡 手がかりあり</span>}
+              </div>
+            )}
+          </div>
+        );
       })}
 
       <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
