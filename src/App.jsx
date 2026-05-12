@@ -181,12 +181,22 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const sx       = mapBounds.left + (spot.x / 100) * mapBounds.width;
         const sy       = mapBounds.top  + (spot.y / 100) * mapBounds.height;
         const isHov    = hov === spot.id;
-        const borderCol = isReachable ? "#64b5f6" : (hasClue ? "#00e5ff" : areaColor(spot.area).border);
+
+        let borderCol = areaColor(spot.area).border;
+        if (newsMarker)  borderCol = "#ffb74d";
+        if (hasClue)     borderCol = "#00e5ff";
+        if (isReachable) borderCol = "#64b5f6";
+
+        const shadows =[];
+        if (hasClue)    shadows.push("0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)");
+        if (newsMarker) shadows.push("0 0 15px rgba(255,183,77,0.8), inset 0 0 10px rgba(255,183,77,0.4)");
+        const boxShadow = shadows.length > 0 ? shadows.join(", ") : "none";
+
         const canClick  = isGm || (isMovePhase && isMyTurn && isReachable);
 
         return (
           <div key={spot.id}
-            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || pcsHere.length ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
+            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || newsMarker || pcsHere.length ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
             onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
             
             {pcsHere.length > 0 && (
@@ -205,12 +215,15 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
               </div>
             )}
 
-            <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: hasClue ? "0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)" : "none", animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none" }}>
+            {/* スポット本体（エフェクト付き） */}
+            <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: boxShadow, animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none" }}>
               {isDream ? "◇" : (spot.roll ?? "?")}
             </div>
 
+            {/* 手がかりマーカー（右上） */}
             {hasClue && <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px #00e5ff)" }}>💡</div>}
 
+            {/* 新聞特殊効果マーカー（左下） */}
             {newsMarker && (
               <div style={{ position: "absolute", bottom: -Math.round(8 * scale * 1.4), left: -Math.round(8 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px rgba(255,183,77,0.8))", zIndex: 20 }}>
                 {newsMarker}
@@ -222,6 +235,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
                 {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
                 {pcsHere.length > 0 && <span style={{ color: "#ef9a9a" }}><br />{pcsHere.map(p => p.charName || p.name).join("・")}</span>}
                 {hasClue && <span style={{ color: "#00e5ff" }}><br />💡 手がかりあり</span>}
+                {newsMarker && <span style={{ color: "#ffb74d" }}><br />{newsMarker} 新聞の特殊効果あり</span>}
               </div>
             )}
           </div>
