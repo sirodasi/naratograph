@@ -24,7 +24,7 @@ export const ITEM_DATA = {
     timing: "いつでも",
     desc:    "自身の【やる気】が「1点」回復します。",
     canUse:  pc => (pc.items?.["お酒"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => {
+    use: (pc, gs) => {
       const resources = { ...pc.resources };
       if (!(pc.badStatus ||[]).includes("だるい")) {
         const r = resources.やる気 || { cur: 0, max: 3 };
@@ -40,19 +40,19 @@ export const ITEM_DATA = {
     timing: "行為判定直前",
     desc:    "次の行為判定の判定ダイス数が「1」増加します。",
     canUse:  pc => (pc.items?.["小銭"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, kosen: true } }),
+    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, kosen: true } }),
   },
   "お守り": {
     timing: "移動処理中",
     desc:    "移動で「6」が出たとき、ハプニングが発生せず6マス先まで移動できます。",
     canUse:  pc => (pc.items?.["お守り"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, omamori: true } }),
+    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, omamori: true } }),
   },
   "Pアイテム": {
     timing: "いつでも",
     desc:    "【霊力】を「3点」獲得します。",
     canUse:  pc => (pc.items?.["Pアイテム"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => {
+    use: (pc, gs) => {
       const resources = { ...pc.resources };
       if (!(pc.badStatus ||[]).includes("スランプ")) {
         const r = resources.霊力 || { cur: 0, max: 30 };
@@ -65,7 +65,7 @@ export const ITEM_DATA = {
     timing: "いつでも",
     desc:    "3つ消費して【残り人数】を「1点」獲得します。（3つ以上保持時のみ）",
     canUse:  pc => (pc.items?.["残機のかけら"] || 0) >= 3 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => {
+    use: (pc, gs) => {
       const resources = { ...pc.resources };
       const r = resources.残り人数 || { cur: 0, max: 5 };
       resources.残り人数 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
@@ -76,7 +76,7 @@ export const ITEM_DATA = {
     timing: "いつでも",
     desc:    "2つ消費して【スペルカード】を「1点」獲得します。（2つ以上保持時のみ）",
     canUse:  pc => (pc.items?.["スペカのかけら"] || 0) >= 2 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => {
+    use: (pc, gs) => {
       const resources = { ...pc.resources };
       const r = resources.スペカ || { cur: 0, max: 5 };
       resources.スペカ = { cur: Math.min(r.cur + 1, r.max), max: r.max };
@@ -87,7 +87,7 @@ export const ITEM_DATA = {
     timing: "弾幕ごっこ前",
     desc:    "1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）",
     canUse:  pc => (pc.items?.["妖器"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: pc => {
+    use: (pc, gs) => {
       const resources = { ...pc.resources };
       const r = resources.攻撃力 || { cur: 1, max: 5 };
       resources.攻撃力 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
