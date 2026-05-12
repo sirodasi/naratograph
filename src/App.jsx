@@ -243,7 +243,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
       })}
 
       <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
-        {gs.sessionPhase !== "explore" ? (
+        {gs.sessionPhase === "explore" ? (
           <div style={{ padding: "4px 14px", background: "rgba(10,12,20,0.92)", border: `1px solid ${CYCLE_COLORS[cycleIdx]}40`, borderRadius: 14, fontSize: 12, color: CYCLE_COLORS[cycleIdx] }}>
             {gs.day}日目・{CYCLES[cycleIdx]}
           </div>
@@ -420,7 +420,6 @@ function SessionApp({ roomCode, user }) {
         const spot = getSpot(pc.currentSpot);
         if (!spot) return pc;
 
-        // スランプのチェック
         if ((pc.badStatus ||[]).includes("スランプ")) {
           logParts.push(`${pc.charName || pc.name} (スランプ)`);
           return pc;
@@ -457,6 +456,13 @@ function SessionApp({ roomCode, user }) {
       let cycleIdx = p.cycleIdx || 0;
       const logMsgs =[];
       let nextPcs = p.pcs;
+
+      if (cycleIdx === 0) {
+        nextPcs = nextPcs.map(pc => ({
+          ...pc,
+          flags: { ...pc.flags, canCureBadStatus: false }
+        }));
+      }
 
       cycleIdx++;
       if (cycleIdx >= CYCLES.length) {
