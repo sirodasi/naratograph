@@ -40,13 +40,13 @@ export const ITEM_DATA = {
     timing: "行為判定直前",
     desc:    "次の行為判定の判定ダイス数が「1」増加します。",
     canUse:  pc => (pc.items?.["小銭"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, kosen: true } }),
+    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, money: true } }),
   },
   "お守り": {
     timing: "移動処理中",
     desc:    "移動で「6」が出たとき、ハプニングが発生せず6マス先まで移動できます。",
     canUse:  pc => (pc.items?.["お守り"] || 0) > 0 && !(pc.badStatus ||[]).includes("二日酔い"),
-    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, omamori: true } }),
+    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, amulet: true } }),
   },
   "Pアイテム": {
     timing: "いつでも",
@@ -1100,6 +1100,17 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
   const selectMoveDie = val => {
     upd(p => {
       let logAdd = `${pc.charName} は移動ダイスで「${val}」を選んだ`;
+
+      if (val === 6 && pc.flags?.amulet) {
+        const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, flags: { ...x.flags, amulet: false } } : x);
+        return {
+          ...p,
+          pcs: newPcs,
+          currentScene: { ...p.currentScene, phase: "move_dest", selectedMoveDie: 6 },
+          log: [logAdd + "（【お守り】の効果でハプニングを回避！6マス移動できる）", ...p.log],
+        };
+      }
+
       if (val === 6) {
         return { ...p, currentScene: { ...p.currentScene, phase: "happening_roll" }, log: [logAdd + "（ハプニング発生！）", ...p.log] };
       }
@@ -1160,7 +1171,17 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
     const hasTag    = spotDetail.tags.some(t => (pc.tags ||[]).includes(t) || pc.charName === t || pc.skillName === t);
     let diceCount   = 2 + (hasTag ? 1 : 0);
     if ((pc.badStatus ||[]).includes("怪我")) diceCount = Math.min(2, diceCount);
-    upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag } }));
+    
+    const moneyUsed = !!pc.flags?.money;
+    if (moneyUsed) diceCount += 1;
+    upd(p => ({
+      ...p,
+      pcs: moneyUsed
+        ? p.pcs.map(x => x.uid === pc.uid ? { ...x, flags: { ...x.flags, money: false } } : x)
+        : p.pcs,
+      currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag, moneyUsed },
+      log: moneyUsed ? [`${pc.charName} は【小銭】を使用し、判定ダイスが1個増加した（計${diceCount}個）`, ...p.log] : p.log,
+    }));
   };
 
   const selectEvent  = ev  => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_roll", selectedEvent: ev } }));
@@ -1240,7 +1261,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   <button key={i} onClick={() => selectMoveDie(d)} style={{ width: 40, height: 40, background: "rgba(14,20,36,0.95)", border: `2px solid ${d === 6 ? C.redBorder : C.border}`, borderRadius: 5, fontSize: 18, color: d === 6 ? C.red : C.blue, cursor: "pointer" }}>{d}</button>
                 ))}
               </div>
-              {sc.moveDice.includes(6) && <div style={{ fontSize: 10, color: C.red, textAlign: "center", marginTop: 4 }}>※6を選ぶとハプニングが発生します</div>}
+              {sc.moveDice.includes(6) && (
+                pc.flags?.amulet
+                  ? <div style={{ fontSize: 10, color: "#81c784", textAlign: "center", marginTop: 4 }}>🧧 【お守り】が有効：6を選んでもハプニングは発生しません</div>
+                  : <div style={{ fontSize: 10, color: C.red, textAlign: "center", marginTop: 4 }}>※6を選ぶとハプニングが発生します</div>
+              )}
             </div>
           )}
 
@@ -1449,6 +1474,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   upd(p => ({ ...p, currentScene: { ...p.currentScene, actionDiceCount: next } }));
                 }} style={btnSmall}>+</button>
               </div>
+              {sc.moneyUsed && (
+                <div style={{ fontSize: 10, color: "#81c784", textAlign: "center", marginBottom: 8 }}>💰 【小銭】の効果で判定ダイス+1</div>
+              )}
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
           )}
