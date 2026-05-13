@@ -368,6 +368,65 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const applyPcHit = (pcUid) => {
+    upd(p => {
+      const currentPc = p.pcs.find(x => x.uid === pcUid);
+      const newLives = Math.max(0, (currentPc.resources.残り人数?.cur || 0) - 1);
+      
+      let nextRei = currentPc.resources.霊力?.cur || 0;
+      let nextSpe = currentPc.resources.スペルカード?.cur || 0;
+
+      if (newLives === 1) {
+        nextRei = 20;
+        nextSpe = Math.min(9, nextSpe + 1);
+      }
+
+      const nextPcs = p.pcs.map(pc => {
+        if (pc.uid !== pcUid) return pc;
+        return {
+          ...pc,
+          resources: {
+            ...pc.resources,
+            残り人数: { ...pc.resources.残り人数, cur: newLives },
+            霊力: { ...pc.resources.霊力, cur: nextRei },
+            スペルカード: { ...pc.resources.スペルカード, cur: nextSpe },
+            攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) }
+          }
+        };
+      });
+
+      const clearedGrid = [0, 0, 0, 0, 0, 0];
+
+      return {
+        ...p,
+        pcs: nextPcs,
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [pcUid]: clearedGrid },
+          phase: newLives > 0 ? "pc_hit_recovery" : "pc_dropout" 
+        },
+        log: [
+          `💥 ${currentPc.charName} は被弾した！ 残り人数: ${newLives}`,
+          newLives === 1 ? `🔥 霊力とスペルカードが増加した！` : null,
+          ...p.log
+        ].filter(Boolean)
+      };
+    });
+  };
+
+  const handleRecovery = (pcUid, targetCellNum) => {
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        positions: { ...p.battle.positions, [pcUid]: targetCellNum },
+        phase: "pc_shot_intro", 
+        currentEvadeDice: 3
+      },
+      log: [`✨ ${pcs.find(x => x.uid === pcUid)?.charName} は ${targetCellNum}番マスに復帰した。`, ...p.log]
+    }));
+  };
+
   if (b.phase === "setup" && isGm) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
@@ -633,16 +692,58 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             )}
           </div>
         )}
+
+        {b.phase === "pc_hit_check" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${danmakuAtPos > 0 ? C.red : C.green}`, textAlign: "center" }}>
+            <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>当たり判定ステップ</div>
+            {danmakuAtPos > 0 ? (
+              <div>
+                <div style={{ color: C.red, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>被弾（HIT!!）</div>
+                {(user.uid === b.pcCombatant || isGm) && (
+                  <button onClick={() => applyPcHit(b.pcCombatant)} style={btnFull(C.redBg, C.redBorder, C.red)}>ダメージを適用</button>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
+                <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_intro", currentEvadeDice: 3 } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>PC攻撃ステップへ</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {b.phase === "pc_hit_recovery" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
+            <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>復帰位置を選択</div>
+            <div style={{ color: "#fff", fontSize: 10 }}>好きなマスをクリックして復帰してください</div>
+          </div>
+        )}
+
+        {b.phase === "pc_dropout" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 20, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
+            <div style={{ color: C.red, fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>脱落</div>
+            <div style={{ color: "#fff", fontSize: 11, marginBottom: 15 }}>{combatantPc?.charName} は戦線から離脱しました...</div>
+            {isGm && (
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "cleanup" } }))} style={btnFull(C.border, C.border, C.textFaint)}>ラウンド終了処理へ</button>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, display: "flex", justifyContent: "center", gap: 20 }}>
         {pcs.map(p => {
           const isCombatant = b.pcCombatant === p.uid;
           const isMyTurn = p.uid === user.uid || isGm;
-          const isMovePhase = b.phase === "pc_evade_move" && isCombatant;
+
+          const isRecovery = b.phase === "pc_hit_recovery" && isCombatant;
+          const isEvadeMove = b.phase === "pc_evade_move" && isCombatant;
           
           const currentPos = b.positions?.[p.uid];
           const neighbors = ADJACENT_MAP[currentPos] || [];
+
+          let highlights = [];
+          if (isRecovery) highlights = [1, 2, 3, 4, 5, 6];
+          else if (isEvadeMove) highlights = ADJACENT_MAP[b.positions[p.uid]] || [];
 
           return (
             <BattleGrid 
@@ -651,8 +752,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
               isCombatant={isCombatant}
               grid={b.grids?.[p.uid]}
               pos={currentPos}
-              highlightCells={isMovePhase && isMyTurn ? neighbors : []}
-              onCellClick={(num) => handleEvadeMove(num)}
+              highlightCells={isMyTurn ? highlights : []}
+              onCellClick={(num) => {
+                if (isRecovery) handleRecovery(p.uid, num);
+                else if (isEvadeMove) handleEvadeMove(num);
+              }}
               sprite={
                 p.customPortrait 
                   ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
