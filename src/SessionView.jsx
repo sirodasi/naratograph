@@ -149,50 +149,54 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
   );
 }
 
-function BattleGrid({ charId, name, grid, pos, isCombatant, isNpc, sprite, isDead }) {
+function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick }) {
   const cells = [1, 2, 3, 4, 5, 6];
   const campColor = isNpc ? C.red : C.blue;
   
   return (
     <div style={{ 
-      width: 180, 
-      opacity: isDead ? 0.4 : 1, 
+      width: 180, opacity: isDead ? 0.4 : 1, 
       border: `2px solid ${isCombatant ? campColor : C.border}`, 
-      borderRadius: 8, 
-      background: "rgba(10,12,20,0.8)", 
-      padding: 6,
-      filter: isDead ? "grayscale(1)" : "none"
+      borderRadius: 8, background: "rgba(10,12,20,0.8)", padding: 6 
     }}>
-      <div style={{ fontSize: 10, color: isCombatant ? campColor : C.textDim, textAlign: "center", marginBottom: 4, fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden" }}>
-        {isCombatant && (isNpc ? "⚔️ ATTACKER" : "🛡️ DEFENDER")} {name}
+      <style>{`
+        @keyframes pulseHighlight {
+          0% { box-shadow: inset 0 0 2px ${C.blue}; background: rgba(100, 181, 246, 0.1); }
+          50% { box-shadow: inset 0 0 15px ${C.blue}; background: rgba(100, 181, 246, 0.3); }
+          100% { box-shadow: inset 0 0 2px ${C.blue}; background: rgba(100, 181, 246, 0.1); }
+        }
+      `}</style>
+      <div style={{ fontSize: 10, color: isCombatant ? campColor : C.textDim, textAlign: "center", marginBottom: 4, fontWeight: "bold" }}>
+        {name}
       </div>
       
-      <div style={{ 
-        display: "grid", 
-        gridTemplateColumns: "repeat(3, 1fr)", 
-        gridTemplateRows: "repeat(2, 50px)", 
-        gap: 4 
-      }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(2, 50px)", gap: 4 }}>
         {cells.map(num => {
           const danmakuCount = grid ? grid[num - 1] : 0;
           const hasChar = pos === num;
+          const isHighlighted = highlightCells.includes(num);
           
           return (
-            <div key={num} style={{ 
-              position: "relative",
-              background: "rgba(255,255,255,0.03)", 
-              border: `1px solid ${hasChar ? campColor : "rgba(255,255,255,0.1)"}`,
-              borderRadius: 4,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}>
+            <div 
+              key={num} 
+              onClick={() => isHighlighted && onCellClick && onCellClick(num)}
+              style={{ 
+                position: "relative",
+                background: "rgba(255,255,255,0.03)", 
+                border: `1px solid ${hasChar ? campColor : isHighlighted ? C.blue : "rgba(255,255,255,0.1)"}`,
+                borderRadius: 4,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: isHighlighted ? "pointer" : "default",
+                animation: isHighlighted ? "pulseHighlight 1.5s infinite" : "none",
+                transition: "all 0.2s"
+              }}
+            >
               <div style={{ position: "absolute", top: 2, left: 3, fontSize: 8, color: "rgba(255,255,255,0.2)" }}>{num}</div>
               
               {danmakuCount > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center", padding: 2 }}>
                   {[...Array(danmakuCount)].map((_, i) => (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: isNpc ? "#fff" : C.red, boxShadow: `0 0 4px ${isNpc ? "#fff" : C.red}` }} />
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: isNpc ? "#fff" : C.red }} />
                   ))}
                 </div>
               )}
@@ -319,27 +323,26 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   };
 
   const handleEvadeMove = (targetCellNum) => {
-    upd(p => {
-      const oldPos = p.battle.positions[b.pcCombatant];
-      const bulletsCleared = p.battle.grids[b.pcCombatant][oldPos - 1];
+    const pcUid = b.pcCombatant;
+    const oldPos = b.positions[pcUid];
+    const bulletsCleared = b.grids[pcUid][oldPos - 1];
 
-      const newGrid = [...p.battle.grids[b.pcCombatant]];
+    upd(p => {
+      const newGrid = [...p.battle.grids[pcUid]];
       newGrid[oldPos - 1] = 0;
 
+      const currentPc = p.pcs.find(x => x.uid === pcUid);
+      let nextGraze = (currentPc.resources.グレイズ?.cur || 0) + bulletsCleared;
+      let nextSpell = currentPc.resources.スペルカード?.cur || 0;
+
       const nextPcs = p.pcs.map(pc => {
-        if (pc.uid !== b.pcCombatant) return pc;
-        let nextGraze = (pc.resources.グレイズ?.cur || 0) + bulletsCleared;
-        let nextSpe = pc.resources.スペカ?.cur || 0;
-        if (nextGraze >= 5) {
-          nextGraze -= 5;
-          nextSpe += 1;
-        }
+        if (pc.uid !== pcUid) return pc;
         return {
           ...pc,
-          resources: { 
-            ...pc.resources, 
-            グレイズ: { ...pc.resources.グレイズ, cur: Math.min(5, nextGraze) },
-            スペカ: { ...pc.resources.スペカ, cur: Math.min(9, nextSpe) }
+          resources: {
+            ...pc.resources,
+            グレイズ: { ...pc.resources.グレイズ, cur: nextGraze },
+            スペルカード: { ...pc.resources.スペルカード, cur: nextSpell }
           }
         };
       });
@@ -351,12 +354,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         pcs: nextPcs,
         battle: {
           ...p.battle,
-          positions: { ...p.battle.positions, [b.pcCombatant]: targetCellNum },
-          grids: { ...p.battle.grids, [b.pcCombatant]: newGrid },
+          positions: { ...p.battle.positions, [pcUid]: targetCellNum },
+          grids: { ...p.battle.grids, [pcUid]: newGrid },
           currentEvadeDice: nextEvadeDice,
           phase: nextEvadeDice > 0 ? "pc_evade_ask_next" : "pc_hit_check"
         },
-        log: [`🏃 ${combatantPc.charName} は ${targetCellNum}番マスへ移動。${bulletsCleared}点のグレイズを獲得！`, ...p.log]
+        log: [
+          `🏃 ${currentPc.charName} は ${targetCellNum}番マスへ移動。`,
+          `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}/5)`,
+          ...p.log
+        ]
       };
     });
   };
@@ -616,36 +623,42 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             </div>
           </div>
         )}
+
+        {b.phase === "pc_evade_move" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: "12px 20px", borderRadius: 8, border: `1px solid ${C.blue}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+            <div style={{ color: C.blue, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>移動先を選択</div>
+            <div style={{ color: "#fff", fontSize: 10 }}>ハイライトされた隣接マスをクリックしてください</div>
+            {isGm && (
+              <div style={{ marginTop: 8, fontSize: 9, color: C.textFaint }}>※GMはPLの代わりに操作可能です</div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 20, paddingTop: 20 }}>
+      <div style={{ flex: 1, display: "flex", justifyContent: "center", gap: 20 }}>
         {pcs.map(p => {
           const isCombatant = b.pcCombatant === p.uid;
+          const isMyTurn = p.uid === user.uid || isGm;
           const isMovePhase = b.phase === "pc_evade_move" && isCombatant;
-          const currentPos = b.positions[p.uid];
+          
+          const currentPos = b.positions?.[p.uid];
           const neighbors = ADJACENT_MAP[currentPos] || [];
 
           return (
-            <div key={p.uid} style={{ position: "relative" }}>
-              <BattleGrid 
-                name={p.charName}
-                grid={b.grids?.[p.uid]}
-                pos={currentPos}
-                isCombatant={isCombatant}
-                highlightCells={isMovePhase ? neighbors : []}
-                onCellClick={(num) => {
-                  if (isMovePhase && neighbors.includes(num)) {
-                    handleEvadeMove(num);
-                  }
-                }}
-                isDead={(p.resources?.残り人数?.cur || 0) <= 0}
-                sprite={
-                  p.customPortrait 
-                    ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
-                    : <CharSprite spriteRow={p.spriteRow} spriteCol={p.spriteCol} size={40} />
-                }
-              />
-            </div>
+            <BattleGrid 
+              key={p.uid}
+              name={p.charName}
+              isCombatant={isCombatant}
+              grid={b.grids?.[p.uid]}
+              pos={currentPos}
+              highlightCells={isMovePhase && isMyTurn ? neighbors : []}
+              onCellClick={(num) => handleEvadeMove(num)}
+              sprite={
+                p.customPortrait 
+                  ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
+                  : <CharSprite spriteRow={p.spriteRow} spriteCol={p.spriteCol} size={40} />
+              }
+            />
           );
         })}
       </div>
