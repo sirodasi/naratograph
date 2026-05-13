@@ -218,6 +218,12 @@ export function BattleView({ gs, upd, user, isGm }) {
   const pcs = gs.pcs || [];
   const npcs = b.participants?.npcs || [];
 
+  const alivePcs = pcs.filter(p => (p.resources?.残り人数?.cur || 0) > 0);
+  const aliveNpcs = npcs.filter(n => (n.resources?.残り人数?.cur || 0) > 0);
+
+  let unactedPcs = alivePcs.filter(p => !(b.actedPcs || []).includes(p.uid));
+  let unactedNpcs = aliveNpcs.filter(n => !(b.actedNpcs || []).includes(n.id));
+
   if (b.phase === "setup" && isGm) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
@@ -266,6 +272,129 @@ export function BattleView({ gs, upd, user, isGm }) {
     );
   }
 
+  if (b.phase === "round_start") {
+    const checkReset = () => {
+      let nextActedPcs = b.actedPcs || [];
+      let nextActedNpcs = b.actedNpcs || [];
+      let logs = [];
+
+      if (unactedPcs.length === 0 && alivePcs.length > 0) {
+        nextActedPcs = [];
+        logs.push("🔄 PC陣営が全員行動したため、全員未行動に戻ります。");
+      }
+      if (unactedNpcs.length === 0 && aliveNpcs.length > 0) {
+        nextActedNpcs = [];
+        logs.push("🔄 NPC陣営が全員行動したため、全員未行動に戻ります。");
+      }
+      
+      if (logs.length > 0) {
+        upd(p => ({
+          ...p,
+          battle: { ...p.battle, actedPcs: nextActedPcs, actedNpcs: nextActedNpcs },
+          log: [...logs.reverse(), ...p.log]
+        }));
+      }
+    };
+
+    const startRound = (pcUid, npcId) => {
+      const pcChar = pcs.find(p => p.uid === pcUid);
+      const npcChar = npcs.find(n => n.id === npcId);
+
+      upd(p => ({
+        ...p,
+        battle: {
+          ...p.battle,
+          phase: "npc_shot_intro",
+          pcCombatant: pcUid,
+          npcCombatant: npcId,
+          usedIntervention: {},
+          log: [`⚔️ ラウンド開始：${npcChar.name} vs ${pcChar.charName}`, ...p.log]
+        }
+      }));
+    };
+
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+        <div style={{ background: "#0c1020", border: `1px solid ${C.goldDim}`, padding: 30, borderRadius: 8, maxWidth: 500, width: "90%" }}>
+          <div style={{ fontSize: 16, color: C.gold, marginBottom: 20, textAlign: "center" }}>ラウンド {b.round}：対戦者選出</div>
+          
+          {!isGm ? (
+             <div style={{ textAlign: "center", color: C.textDim }}>GMが対戦者を選出しています...</div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>1. 出撃するPCを選択（未行動優先）</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                {alivePcs.map(p => {
+                  const isActed = (b.actedPcs || []).includes(p.uid);
+                  const isSelected = b.tempSelectedPc === p.uid;
+                  return (
+                    <button 
+                      key={p.uid}
+                      onClick={() => upd(pState => ({ ...pState, battle: { ...pState.battle, tempSelectedPc: p.uid } }))}
+                      style={btnFull(isSelected ? C.blueBg : "rgba(255,255,255,0.05)", isSelected ? C.blue : C.border, isSelected ? C.blue : (isActed ? C.textFaint : C.text))}
+                    >
+                      {p.charName} {isActed ? "(行動済)" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>2. 迎え撃つNPCを選択</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 24 }}>
+                {aliveNpcs.map(n => {
+                  const isActed = (b.actedNpcs || []).includes(n.id);
+                  const isSelected = b.tempSelectedNpc === n.id;
+                  return (
+                    <button 
+                      key={n.id}
+                      onClick={() => upd(pState => ({ ...pState, battle: { ...pState.battle, tempSelectedNpc: n.id } }))}
+                      style={btnFull(isSelected ? C.redBg : "rgba(255,255,255,0.05)", isSelected ? C.red : C.border, isSelected ? C.red : (isActed ? C.textFaint : C.text))}
+                    >
+                      {n.name} {isActed ? "(行動済)" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button 
+                disabled={!b.tempSelectedPc || !b.tempSelectedNpc}
+                onClick={() => startRound(b.tempSelectedPc, b.tempSelectedNpc)}
+                style={btnFull(C.goldBg, C.goldDim, C.gold, { opacity: (b.tempSelectedPc && b.tempSelectedNpc) ? 1 : 0.3 })}
+              >
+                この対戦で開始する
+              </button>
+              
+              {unactedPcs.length === 0 && (
+                <button onClick={checkReset} style={{...btnFull("none", "none", C.textFaint), marginTop: 10}}>全員の未行動状態をリセットする</button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (b.phase === "npc_shot_intro") {
+    const npc = npcs.find(n => n.id === b.npcCombatant);
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+        <div style={{ textAlign: "center", animation: "fadeUp 0.8s ease" }}>
+          <div style={{ fontSize: 12, color: C.red, letterSpacing: 4, marginBottom: 10 }}>NPC ATTACK TURN</div>
+          <div style={{ fontSize: 32, color: "#fff", fontWeight: "bold", textShadow: "0 0 20px rgba(255,0,0,0.5)" }}>{npc?.name}</div>
+          <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
+          {isGm && (
+            <button 
+              onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "npc_shot_roll" } }))}
+              style={{ ...btnFull(C.redBg, C.redBorder, C.red), marginTop: 30, width: 200 }}
+            >
+              ショット開始 🎲
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
       
@@ -286,10 +415,37 @@ export function BattleView({ gs, upd, user, isGm }) {
         ))}
       </div>
 
-      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
+      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
         <div style={{ background: "#080a14", border: `1px solid ${C.goldDim}`, color: C.gold, padding: "4px 20px", borderRadius: 20, fontSize: 12, fontWeight: "bold", boxShadow: "0 0 20px rgba(0,0,0,0.8)" }}>
-          ROUND {b.round} - {b.phase}
+          {b.phase.toUpperCase()}
         </div>
+
+        {/* NPCショット実行ボタンと介入UI */}
+        {b.phase === "npc_shot_roll" && (
+          <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center" }}>
+              <div style={{ color: C.red, fontSize: 11, marginBottom: 8 }}>ショット判定（攻撃力: {npcs.find(n => n.id === b.npcCombatant)?.resources.攻撃力.cur}）</div>
+              
+              {/* 観戦者の介入（援護射撃・かばう） */}
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                 {/* 観戦者（対戦者以外のPL）の画面にのみボタンを出すロジックが後ほど必要 */}
+                 {/* 今はGMが一旦代行操作できる形式にします */}
+              </div>
+
+              {isGm && (
+                <button 
+                  onClick={() => {
+                    const attacker = npcs.find(n => n.id === b.npcCombatant);
+                    const atkCount = attacker.resources.攻撃力.cur;
+                    // ダイスアニメーションを実行
+                    // ... animateDiceを呼び出す ...
+                  }}
+                  style={btnFull(C.redBg, C.redBorder, C.red)}
+                >
+                  🎲 攻撃ダイスを振る ({npcs.find(n => n.id === b.npcCombatant)?.resources.攻撃力.cur}D)
+                </button>
+              )}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 20, paddingTop: 20 }}>
