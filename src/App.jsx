@@ -11,6 +11,7 @@ import {
   SPOTS, EDGES, NEWSPAPER,
   AREA_COLORS, CYCLES, CYCLE_COLORS,
 } from "./data/gameData";
+import { log } from "firebase/firestore/pipelines";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
 
@@ -41,6 +42,23 @@ function getDistances(startSpotId) {
 function getSpot(id) {
   return SPOTS.find(s => s.id === id) ?? SPOTS.find(s => s.roll == id) ?? null;
 }
+
+export const animateDice = (count, label, cb) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setDiceAnim(true);
+    let f = 0;
+    timerRef.current = setInterval(() => {
+      f++;
+      setDiceResult(Array(count).fill(0).map(rollD6));
+      if (f >= 14) {
+        clearInterval(timerRef.current);
+        const res = Array(count).fill(0).map(rollD6);
+        setDiceResult(res);
+        setDiceAnim(false);
+        if (cb) cb(res);
+      }
+    }, 80);
+  };
 
 // ─── 定数 ────────────────────────────────────────────────────────
 
@@ -353,8 +371,8 @@ function SessionApp({ roomCode, user }) {
           customPortrait: p.customPortrait ?? null,
           skillId:   p.skillId   ?? null,
           skillName: p.skillName ?? "",
-          abilitySkill: charData?.abilitySkill ?? (p.charId?.startsWith("custom_") ? (p.abilitySkill ?? null) : null),
-          danmakuSkill: charData?.danmakuSkill ?? null,
+          as: charData?.as ?? (p.charId?.startsWith("custom_") ? (p.as ?? null) : null),
+          ds: charData?.ds ?? null,
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
           baseSpotId,
@@ -424,11 +442,11 @@ function SessionApp({ roomCode, user }) {
             id: "enemy_" + Date.now(),
             name: enemy.name,
             resources: {
-              残り人数: { cur: enemy.ninzu, max: enemy.ninzu },
+              残り人数: { cur: enemy.life, max: enemy.life },
               スペカ: { cur: enemy.spellcard, max: 9 },
               攻撃力: { cur: enemy.attack, max: 99 }
             },
-            danmakuSkill: { name: enemy.danmakuSkillName || enemy.danmakuSkillCustomName, desc: enemy.danmakuSkillDesc },
+            ds: { name: enemy.dsName || enemy.dsCustomName, desc: enemy.dsDesc },
             spellCards: [
               { name: enemy.sc1name, desc: enemy.sc1effect },
               { name: enemy.sc2name, desc: enemy.sc2effect }
@@ -575,9 +593,40 @@ function SessionApp({ roomCode, user }) {
     const currentDay = gs.day;
     const currentCycleIdx = gs.cycleIdx;
 
+    const scenarioEnemies = gs.scenarioData?.finalBattleEnemies || [];
+    const battleEnemies = scenarioEnemies.map((en, idx) => ({
+      id: `npc_final_${idx}`,
+      name: en.name || `強敵${idx + 1}`,
+      resources: {
+        残り人数: { cur: en.life, max: en.life },
+        スペカ: { cur: en.spellcard, max: 9 },
+        攻撃力: { cur: en.attack, max: 99 },
+        回避力: { cur: 3, max: 3 }
+      },
+      ds: { 
+        name: en.dsName || en.dsCustomName, 
+        desc: en.dsDesc 
+      },
+      spellCards: [
+        { name: en.sc1name, desc: en.sc1effect },
+        { name: en.sc2name, desc: en.sc2effect }
+      ].filter(s => s.name)
+    }));
+
+    const initialBattle = {
+      active: true,
+      type: "mass",
+      phase: "setup",
+      round: 1,
+      participants: { npcs: battleEnemies },
+      actedPcs: [],
+      actedNpcs: [],
+      log: ["⚔️ 最終決戦の準備が整いました。"]
+    };
+
     upd(p => {
-      let logAdd = [];
       let nextPcs = [...p.pcs];
+      let logAdd = [];
 
       if (room.config?.useAdditionalActions) {
         if (currentDay < limitDay) {
@@ -589,11 +638,14 @@ function SessionApp({ roomCode, user }) {
           logAdd.push(`早期解決ボーナス：全員がスペルカードを ${bonus} 点獲得した！`);
         } else if (currentDay === limitDay && currentCycleIdx < limitCycleIdx) {
           const bonusActions = limitCycleIdx - currentCycleIdx;
+          const bonusStatus = {};
+          p.pcs.forEach(pc => { bonusStatus[pc.uid] = bonusActions; });
+
           return {
             ...p,
             sessionPhase: "battle_bonus",
-            bonusCount: bonusActions,
-            bonusPcs: p.pcs.map(pc => pc.uid),
+            bonusStatus,
+            initialBattle: initialBattle,
             log: [`解決ボーナス：残り ${bonusActions} サイクル分の追加行動を獲得！`, ...p.log]
           };
         }
@@ -603,10 +655,11 @@ function SessionApp({ roomCode, user }) {
         ...p,
         sessionPhase: "battle",
         pcs: nextPcs,
+        battle: initialBattle,
         actedPcs: [],
         currentScene: null,
-        log: ["⚔️ 決戦フェイズへと移行した！", ...logAdd, ...p.log]
-      };
+        log: [...logAdd, "⚔️ 決戦フェイズへ移行します。",...p.log],
+      }
     });
     setPendingAction(null);
   };
@@ -645,12 +698,20 @@ function SessionApp({ roomCode, user }) {
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        {gs.battle?.active ? (
-          <BattleView 
-            gs={gs} 
-            upd={upd} 
-            user={user} 
-            isGm={mode === "gm"} 
+        {gs.sessionPhase === "battle_bonus" ? (
+          <BonusPhaseView
+            gs={gs}
+            upd={upd}
+            user={user}
+            isGm={mode === "gm"}
+            animateDice={animateDice}
+          />
+        ) : gs.battle?.active ? (
+          <BattleView
+            gs={gs}
+            upd={upd}
+            user={user}
+            isGm={mode === "gm"}
           />
         ) : (
           <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />

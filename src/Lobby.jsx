@@ -217,8 +217,8 @@ function Lobby({ user, displayName, onProfile }) {
 // カスタムキャラクターの初期フォーム状態
 const CUSTOM_INIT = {
   name: "", tags: "", base: "",
-  abilitySkillName: "", abilitySkillType: "アクション", abilitySkillDesc: "",
-  danmakuSkillName: "", danmakuSkillDesc: "",
+  asName: "", asType: "アクション", asDesc: "",
+  dsName: "", dsDesc: "",
   sc1name: "", sc1desc: "", sc2name: "", sc2desc: "",
   portrait: null,
 };
@@ -291,8 +291,8 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       base:          selectedChar.base || "人間の里",
       customPortrait: selectedChar.customPortrait || null,
       tags:          selectedChar.tags ||[],
-      abilitySkill:  selectedChar.abilitySkill || null,
-      danmakuSkill:  selectedChar.danmakuSkill || null,
+      as:  selectedChar.as || null,
+      ds:  selectedChar.ds || null,
     });
     setStep("skillSelect");
   };
@@ -317,8 +317,8 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       customPortrait: custom.portrait || null,
       tags:          custom.tags.split(/[、,]/).map(t => t.trim()).filter(Boolean),
       base:          custom.base,
-      abilitySkill:  { name: custom.abilitySkillName, type: custom.abilitySkillType, desc: custom.abilitySkillDesc },
-      danmakuSkill:  { name: custom.danmakuSkillName, desc: custom.danmakuSkillDesc },
+      as:  { name: custom.asName, type: custom.asType, desc: custom.asDesc },
+      ds:  { name: custom.dsName, desc: custom.dsDesc },
       spellCards:    [
         custom.sc1name && `${custom.sc1name}${custom.sc1desc ? " " + custom.sc1desc : ""}`,
         custom.sc2name && `${custom.sc2name}${custom.sc2desc ? " " + custom.sc2desc : ""}`,
@@ -494,10 +494,10 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                       <div style={{ fontSize: 10, color: C.textDim }}>拠点: {selectedChar.base}</div>
                     </div>
                   </div>
-                  <div style={S.sec}>【能力スキル】{selectedChar.abilitySkill?.name} ({selectedChar.abilitySkill?.type})</div>
-                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{selectedChar.abilitySkill?.desc}</div>
-                  <div style={S.sec}>【弾幕スキル】{selectedChar.danmakuSkill?.name}</div>
-                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{selectedChar.danmakuSkill?.desc}</div>
+                  <div style={S.sec}>【能力スキル】{selectedChar.as?.name} ({selectedChar.as?.type})</div>
+                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{selectedChar.as?.desc}</div>
+                  <div style={S.sec}>【弾幕スキル】{selectedChar.ds?.name}</div>
+                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{selectedChar.ds?.desc}</div>
                   <div style={S.sec}>【スペルカード】</div>
                   {selectedChar.spellCards?.map((sc, i) => (
                     <div key={i} style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>・{sc}</div>
@@ -640,10 +640,10 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
             ))}
 
             {[
-              ["abilitySkillName", "【能力スキル】名前"],
-              ["abilitySkillDesc", "【能力スキル】説明（複数行可）"],
-              ["danmakuSkillName", "【弾幕スキル】名前"],
-              ["danmakuSkillDesc", "【弾幕スキル】説明"],
+              ["asName", "【能力スキル】名前"],
+              ["asDesc", "【能力スキル】説明（複数行可）"],
+              ["dsName", "【弾幕スキル】名前"],
+              ["dsDesc", "【弾幕スキル】説明"],
               ["sc1name", "スペルカード①名前"], ["sc1desc", "スペルカード①効果"],
               ["sc2name", "スペルカード②名前"], ["sc2desc", "スペルカード②効果"],
             ].map(([k, label]) => (

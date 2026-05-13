@@ -1,6 +1,7 @@
 // src/SessionView.jsx
 import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
+import { animateDice } from "./App";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP } from "./data/gameData";
 import { C } from "./styles/colors";
@@ -268,7 +269,7 @@ export function BattleView({ gs, upd, user, isGm }) {
   return (
     <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
       
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 20, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
+      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 15, flexWrap: "wrap", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
         {npcs.map(n => (
           <BattleGrid 
             key={n.id}
@@ -308,6 +309,138 @@ export function BattleView({ gs, upd, user, isGm }) {
             }
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
+  const bonusStatus = gs.bonusStatus || {};
+  const myRemaining = bonusStatus[user?.uid] || 0;
+  const myPc = gs.pcs.find(p => p.uid === user?.uid);
+
+  const [mode, setMode] = useState("select"); // select | bond_target
+  
+  const finishAction = (logMsg, pcUpdate = {}) => {
+    upd(p => {
+      const nextPcs = p.pcs.map(x => x.uid === user.uid ? { ...x, ...pcUpdate } : x);
+      return {
+        ...p,
+        pcs: nextPcs,
+        bonusStatus: { ...p.bonusStatus, [user.uid]: Math.max(0, p.bonusStatus[user.uid] - 1) },
+        log: [logMsg, ...p.log]
+      };
+    });
+    setMode("select");
+  };
+
+  const handleSpirit = () => {
+    animateDice(1, "ボーナス霊力", res => {
+      const gain = res[0];
+      let nextRei = myPc.resources.霊力.cur;
+      if (!(myPc.badStatus || []).includes("スランプ")) {
+        nextRei = Math.min(myPc.resources.霊力.max, nextRei + gain);
+      }
+      const nextAtk = 1 + Math.floor(nextRei / 5);
+      finishAction(`✨ ${myPc.charName} はボーナスで霊力を ${gain} 点獲得した`, {
+        resources: { 
+          ...myPc.resources, 
+          霊力: { ...myPc.resources.霊力, cur: nextRei },
+          攻撃力: { ...myPc.resources.攻撃力, cur: nextAtk }
+        }
+      });
+    });
+  };
+
+  const handleItem = () => {
+    animateDice(1, "ボーナスアイテム", res => {
+      const items = ["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
+      const itemName = items[res[0] - 1];
+      finishAction(`✨ ${myPc.charName} はボーナスで【${itemName}】を獲得した`, {
+        items: { ...myPc.items, [itemName]: (myPc.items[itemName] || 0) + 1 }
+      });
+    });
+  };
+
+  const handleBond = (targetName, isClearCheck = false) => {
+    let nextBonds = [...(myPc.bonds || [])];
+    let logMsg = "";
+    if (isClearCheck) {
+      logMsg = `✨ ${myPc.charName} は《${targetName}への絆》の応援欄をリフレッシュした`;
+    } else {
+      if (!nextBonds.includes(targetName)) nextBonds.push(targetName);
+      logMsg = `✨ ${myPc.charName} はボーナスで《${targetName}への絆》を獲得した`;
+    }
+    finishAction(logMsg, { bonds: nextBonds });
+  };
+
+  const startFinalBattle = () => {
+    upd(p => ({
+      ...p,
+      sessionPhase: "battle",
+      battle: p.initialBattle || p.battle,
+      bonusStatus: null,
+      initialBattle: null,
+      log: ["⚔️ 全員の準備が整いました。最終決戦を開始します！", ...p.log]
+    }));
+  };
+
+  return (
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#040608", padding: 20 }}>
+      <div style={{ background: "#0c1020", border: `1px solid ${C.goldDim}`, padding: 30, borderRadius: 8, maxWidth: 500, width: "90%", textAlign: "center" }}>
+        <div style={{ fontSize: 18, color: C.gold, marginBottom: 10, letterSpacing: 4 }}>解決ボーナス</div>
+        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 20 }}>リミットまで余裕があったため、追加行動が可能です。</div>
+
+        {/* 全員の進捗 */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginBottom: 24 }}>
+          {gs.pcs.map(p => (
+            <div key={p.uid} style={{ padding: "4px 10px", background: "rgba(255,255,255,0.03)", border: `1px solid ${bonusStatus[p.uid] > 0 ? C.gold : C.border}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 10, color: bonusStatus[p.uid] > 0 ? C.gold : C.textFaint }}>{p.charName}</div>
+              <div style={{ fontSize: 9, color: C.textDim }}>残り: {bonusStatus[p.uid] || 0}回</div>
+            </div>
+          ))}
+        </div>
+
+        {myRemaining > 0 ? (
+          <div style={{ animation: "fadeUp 0.3s ease" }}>
+            <div style={{ fontSize: 12, color: C.text, marginBottom: 16 }}>行動を選択してください（残り {myRemaining} 回）</div>
+            
+            {mode === "select" && (
+              <div style={{ display: "grid", gap: 10 }}>
+                <button onClick={handleSpirit} style={btnFull(C.purpleBg, C.purpleBorder, C.purple)}>① 霊力を獲得（1D6）</button>
+                <button onClick={handleItem} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>② アイテム表を振る（1D6）</button>
+                <button onClick={() => setMode("bond_target")} style={btnFull(C.goldBg, C.goldDim, C.gold)}>③ 絆の獲得 / 回復</button>
+              </div>
+            )}
+
+            {mode === "bond_target" && (
+              <div style={{ animation: "fadeUp 0.2s ease" }}>
+                <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>対象となるPCを選択してください</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {gs.pcs.filter(p => p.uid !== user.uid).map(p => (
+                    <button key={p.uid} onClick={() => handleBond(p.charName)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>
+                      {p.charName} への絆
+                    </button>
+                  ))}
+                  <button onClick={() => setMode("select")} style={{ ...btnFull("none", "none", C.textFaint), marginTop: 10 }}>戻る</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ padding: "20px 0" }}>
+            <div style={{ fontSize: 13, color: C.green }}>✓ あなたのボーナス処理は完了しました</div>
+            <div style={{ fontSize: 10, color: C.textFaint, marginTop: 4 }}>他のプレイヤーを待っています...</div>
+          </div>
+        )}
+
+        {isGm && (
+          <div style={{ marginTop: 40, borderTop: `1px solid ${C.border}`, paddingTop: 20 }}>
+            <button onClick={startFinalBattle} style={btnFull(C.redBg, C.redBorder, C.red)}>
+              全員の処理を終了して決戦へ移行する
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -531,14 +664,14 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
               {skillCanActivate && !isCustomChar && <button onClick={() => setSkillModal(true)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold }}>発動する</button>}
             </div>
           )}
-          {pc.abilitySkill && (
+          {pc.as && (
             <div style={{ marginTop: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[pc.abilitySkill.type] || "#90caf9"}18`, border: `1px solid ${SKILL_TYPE_COLOR[pc.abilitySkill.type] || "#90caf9"}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[pc.abilitySkill.type] || "#90caf9" }}>{pc.abilitySkill.type}</span>
-                <span style={{ fontSize: 11, color: "#90caf9" }}>《{pc.abilitySkill.name}》</span>
+                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[pc.as.type] || "#90caf9"}18`, border: `1px solid ${SKILL_TYPE_COLOR[pc.as.type] || "#90caf9"}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[pc.as.type] || "#90caf9" }}>{pc.as.type}</span>
+                <span style={{ fontSize: 11, color: "#90caf9" }}>《{pc.as.name}》</span>
               </div>
-              <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{pc.abilitySkill.desc}</div>
-              {pc.abilitySkill.type !== "オート" && !isCustomChar && <button onClick={() => setSkillModal({ name: pc.abilitySkill.name, type: pc.abilitySkill.type, desc: pc.abilitySkill.desc, key: "ability" })} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>}
+              <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{pc.as.desc}</div>
+              {pc.as.type !== "オート" && !isCustomChar && <button onClick={() => setSkillModal({ name: pc.as.name, type: pc.as.type, desc: pc.as.desc, key: "ability" })} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>}
             </div>
           )}
 
@@ -2313,22 +2446,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const cycleColor = CYCLE_COLORS[cycleIdx];
 
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
-  const animateDice = (count, label, cb) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setDiceAnim(true);
-    let f = 0;
-    timerRef.current = setInterval(() => {
-      f++;
-      setDiceResult(Array(count).fill(0).map(rollD6));
-      if (f >= 14) {
-        clearInterval(timerRef.current);
-        const res = Array(count).fill(0).map(rollD6);
-        setDiceResult(res);
-        setDiceAnim(false);
-        if (cb) cb(res);
-      }
-    }, 80);
-  };
 
   const handleNewspaper = () => {
     animateDice(2, "文々。新聞表", res => {
@@ -2362,10 +2479,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     const isAllSolved = allScenarioQuests.length > 0 && currentSolvedCount >= allScenarioQuests.length;
 
     if (isAllSolved && gs.sessionPhase === "explore") {
-      return { 
-        label: "⚔️ 決戦フェイズへ移行する", 
-        fn: () => setPendingAction("toBattle"), 
-        color: C.red 
+      return {
+        label: "⚔️ 決戦フェイズへ移行する",
+        fn: () => setPendingAction("toBattle"),
+        color: C.red
       };
     }
 
