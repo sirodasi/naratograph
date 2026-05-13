@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
-import { BackstoryScreen, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, getSpotByD66 } from "./SessionView";
+import { BackstoryScreen, BattleView, BonusPhaseView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, getSpotByD66 } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 
