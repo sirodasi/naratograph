@@ -5,6 +5,7 @@ import { signOut, onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
 import { BackstoryScreen, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, getSpotByD66 } from "./SessionView";
 import mapImg from "./assets/map.png";
+import { C } from "./styles/colors";
 
 import {
   SPOTS, EDGES, NEWSPAPER,
@@ -415,7 +416,7 @@ function SessionApp({ roomCode, user }) {
       ...p,
       battle: {
         active: true,
-        type: "normal", // 通常戦
+        type: "normal",
         phase: "setup",
         questId: quest.id,
         participants: {
