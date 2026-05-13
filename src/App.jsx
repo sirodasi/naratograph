@@ -409,6 +409,35 @@ function SessionApp({ roomCode, user }) {
     }
   };
 
+  const startGambleBattle = (quest) => {
+    const enemy = quest.enemy;
+    upd(p => ({
+      ...p,
+      battle: {
+        active: true,
+        type: "normal", // 通常戦
+        phase: "setup",
+        questId: quest.id,
+        participants: {
+          npcs: [{
+            id: "enemy_" + Date.now(),
+            name: enemy.name,
+            resources: {
+              残り人数: { cur: enemy.ninzu, max: enemy.ninzu },
+              スペカ: { cur: enemy.spellcard, max: 9 },
+              攻撃力: { cur: enemy.attack, max: 99 }
+            },
+            danmakuSkill: { name: enemy.danmakuSkillName || enemy.danmakuSkillCustomName, desc: enemy.danmakuSkillDesc },
+            spellCards: [
+              { name: enemy.sc1name, desc: enemy.sc1effect },
+              { name: enemy.sc2name, desc: enemy.sc2effect }
+            ].filter(s => s.name)
+          }]
+        }
+      }
+    }));
+  };
+
   const doNewspaper = (paper) => {
     upd(p => ({ ...p, newspaper: paper, log: [`新聞[${paper.roll}]「${paper.title}」`, ...p.log] }));
   };
@@ -615,7 +644,16 @@ function SessionApp({ roomCode, user }) {
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
+        {gs.battle?.active ? (
+          <BattleView 
+            gs={gs} 
+            upd={upd} 
+            user={user} 
+            isGm={mode === "gm"} 
+          />
+        ) : (
+          <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
+        )}
       </div>
 
       <RightPanel

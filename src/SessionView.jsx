@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
-import { EDGES } from "./data/gameData";
+import { EDGES, ADJACENT_MAP } from "./data/gameData";
 import { C } from "./styles/colors";
 
 // ─── ユーティリティ ───────────────────────────────────────────────
@@ -144,6 +144,170 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
           ? <div style={{ textAlign: "center", marginTop: 40, animation: "pulse 2s ease infinite" }}><span style={{ fontSize: 11, color: "#3a5070", letterSpacing: 3 }}>▼ クリックして探索フェイズへ ▼</span></div>
           : <div style={{ textAlign: "center", marginTop: 40 }}><span style={{ fontSize: 10, color: "#2a3545", letterSpacing: 2 }}>GMがフェイズを進めるまでお待ちください…</span></div>
         }
+      </div>
+    </div>
+  );
+}
+
+function BattleGrid({ charId, name, grid, pos, isCombatant, isNpc, sprite, isDead }) {
+  const cells = [1, 2, 3, 4, 5, 6];
+  const campColor = isNpc ? C.red : C.blue;
+  
+  return (
+    <div style={{ 
+      width: 180, 
+      opacity: isDead ? 0.4 : 1, 
+      border: `2px solid ${isCombatant ? campColor : C.border}`, 
+      borderRadius: 8, 
+      background: "rgba(10,12,20,0.8)", 
+      padding: 6,
+      filter: isDead ? "grayscale(1)" : "none"
+    }}>
+      <div style={{ fontSize: 10, color: isCombatant ? campColor : C.textDim, textAlign: "center", marginBottom: 4, fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden" }}>
+        {isCombatant && (isNpc ? "⚔️ ATTACKER" : "🛡️ DEFENDER")} {name}
+      </div>
+      
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "repeat(3, 1fr)", 
+        gridTemplateRows: "repeat(2, 50px)", 
+        gap: 4 
+      }}>
+        {cells.map(num => {
+          const danmakuCount = grid ? grid[num - 1] : 0;
+          const hasChar = pos === num;
+          
+          return (
+            <div key={num} style={{ 
+              position: "relative",
+              background: "rgba(255,255,255,0.03)", 
+              border: `1px solid ${hasChar ? campColor : "rgba(255,255,255,0.1)"}`,
+              borderRadius: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
+              <div style={{ position: "absolute", top: 2, left: 3, fontSize: 8, color: "rgba(255,255,255,0.2)" }}>{num}</div>
+              
+              {danmakuCount > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center", padding: 2 }}>
+                  {[...Array(danmakuCount)].map((_, i) => (
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: isNpc ? "#fff" : C.red, boxShadow: `0 0 4px ${isNpc ? "#fff" : C.red}` }} />
+                  ))}
+                </div>
+              )}
+              
+              {hasChar && (
+                <div style={{ position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+                  {sprite}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function BattleView({ gs, upd, user, isGm }) {
+  const b = gs.battle;
+  if (!b) return null;
+
+  const pcs = gs.pcs || [];
+  const npcs = b.participants?.npcs || [];
+
+  if (b.phase === "setup" && isGm) {
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+        <div style={{ background: "#0c1020", border: `1px solid ${C.border}`, padding: 30, borderRadius: 8, maxWidth: 500, width: "90%" }}>
+          <div style={{ fontSize: 18, color: C.gold, marginBottom: 20, textAlign: "center", letterSpacing: 4 }}>弾幕ごっこ準備</div>
+          
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>対戦形式: {b.type === "mass" ? "集団戦" : "通常戦"}</div>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>参加PC: {pcs.map(p => p.charName).join(", ")}</div>
+            <div style={{ fontSize: 11, color: C.textDim }}>相手: {npcs.map(n => n.name).join(", ")}</div>
+          </div>
+
+          <button 
+            onClick={() => {
+              const positions = {};
+              const grids = {};
+              pcs.forEach(p => { 
+                positions[p.uid] = Math.floor(Math.random() * 6) + 1;
+                grids[p.uid] = [0,0,0,0,0,0];
+              });
+              npcs.forEach(n => { 
+                positions[n.id] = Math.floor(Math.random() * 6) + 1;
+                grids[n.id] = [0,0,0,0,0,0];
+              });
+
+              upd(p => ({
+                ...p,
+                battle: {
+                  ...p.battle,
+                  phase: "round_start",
+                  positions,
+                  grids,
+                  round: 1,
+                  actedPcs: [],
+                  actedNpcs: [],
+                  log: ["⚖️ 弾幕ごっこ開始！規約に従い、正々堂々と戦いましょう。"]
+                }
+              }));
+            }}
+            style={btnFull(C.redBg, C.redBorder, C.red, { padding: "12px" })}
+          >
+            対戦を開始する
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
+      
+      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 20, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
+        {npcs.map(n => (
+          <BattleGrid 
+            key={n.id}
+            name={n.name}
+            isNpc={true}
+            isCombatant={b.npcCombatant === n.id}
+            grid={b.grids?.[n.id]}
+            pos={b.positions?.[n.id]}
+            isDead={n.resources?.残り人数?.cur <= 0}
+            sprite={
+              <div style={{ fontSize: 24 }}>😈</div>
+            }
+          />
+        ))}
+      </div>
+
+      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
+        <div style={{ background: "#080a14", border: `1px solid ${C.goldDim}`, color: C.gold, padding: "4px 20px", borderRadius: 20, fontSize: 12, fontWeight: "bold", boxShadow: "0 0 20px rgba(0,0,0,0.8)" }}>
+          ROUND {b.round} - {b.phase}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 20, paddingTop: 20 }}>
+        {pcs.map(p => (
+          <BattleGrid 
+            key={p.uid}
+            name={p.charName}
+            isNpc={false}
+            isCombatant={b.pcCombatant === p.uid}
+            grid={b.grids?.[p.uid]}
+            pos={b.positions?.[p.uid]}
+            isDead={(p.resources?.残り人数?.cur || 0) <= 0}
+            sprite={
+              p.customPortrait 
+                ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
+                : <CharSprite spriteRow={p.spriteRow} spriteCol={p.spriteCol} size={40} />
+            }
+          />
+        ))}
       </div>
     </div>
   );
