@@ -74,7 +74,7 @@ const DEFAULT_GS = {
   newspaperDone: false,
   cluePlaced: false,
   reiryokuDone: false,
-  resources: { やる気:[1, 3], 残り人数: [2, 5], スペカ: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力:[1, 5] },
+  resources: { やる気:[1, 3], 残り人数: [2, 5], スペルカード: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力:[1, 5] },
   items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残魔のかけら: 0, スペカのかけら: 0 },
   quests: [],
   log: [],
@@ -443,7 +443,7 @@ function SessionApp({ roomCode, user }) {
             name: enemy.name,
             resources: {
               残り人数: { cur: enemy.life, max: enemy.life },
-              スペカ: { cur: enemy.spellcard, max: 9 },
+              スペルカード: { cur: enemy.spellcard, max: 9 },
               攻撃力: { cur: enemy.attack, max: 99 }
             },
             ds: { name: enemy.dsName || enemy.dsCustomName, desc: enemy.dsDesc },
@@ -599,7 +599,7 @@ function SessionApp({ roomCode, user }) {
       name: en.name || `強敵${idx + 1}`,
       resources: {
         残り人数: { cur: en.life, max: en.life },
-        スペカ: { cur: en.spellcard, max: 9 },
+        スペルカード: { cur: en.spellcard, max: 9 },
         攻撃力: { cur: en.attack, max: 99 },
         回避力: { cur: 3, max: 3 }
       },
@@ -633,7 +633,7 @@ function SessionApp({ roomCode, user }) {
           const bonus = limitDay - currentDay;
           nextPcs = nextPcs.map(pc => ({
             ...pc,
-            resources: { ...pc.resources, スペカ: { ...pc.resources.スペカ, cur: Math.min(pc.resources.スペカ.max, (pc.resources.スペカ.cur || 0) + bonus) } }
+            resources: { ...pc.resources, スペルカード: { ...pc.resources.スペルカード, cur: Math.min(pc.resources.スペルカード.max, (pc.resources.スペルカード.cur || 0) + bonus) } }
           }));
           logAdd.push(`早期解決ボーナス：全員がスペルカードを ${bonus} 点獲得した！`);
         } else if (currentDay === limitDay && currentCycleIdx < limitCycleIdx) {

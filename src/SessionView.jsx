@@ -79,8 +79,8 @@ export const ITEM_DATA = {
     canUse:  pc => (pc.items?.["スペカのかけら"] || 0) >= 2 && !(pc.badStatus ||[]).includes("二日酔い"),
     use: (pc, gs) => {
       const resources = { ...pc.resources };
-      const r = resources.スペカ || { cur: 0, max: 5 };
-      resources.スペカ = { cur: Math.min(r.cur + 1, r.max), max: r.max };
+      const r = resources.スペルカード || { cur: 0, max: 5 };
+      resources.スペルカード = { cur: Math.min(r.cur + 1, r.max), max: r.max };
       return { ...pc, items: { ...pc.items, "スペカのかけら": Math.max(0, (pc.items["スペカのかけら"] || 0) - 2) }, resources };
     },
   },
@@ -100,7 +100,7 @@ export const ITEM_DATA = {
 export const INIT_RESOURCES = () => ({
   やる気:     { cur: 1, max: 3  },
   残り人数:   { cur: 2, max: 5  },
-  スペカ:     { cur: 1, max: 5  },
+  スペルカード:     { cur: 1, max: 5  },
   グレイズ:   { cur: 0, max: 5  },
   霊力:       { cur: 0, max: 20 },
   攻撃力:     { cur: 1, max: 5  },
@@ -696,7 +696,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
     onUpdatePc({ ...pc, resources: updated });
   };
 
-  const resKeys  =["やる気", "残り人数", "スペカ", "グレイズ", "霊力", "攻撃力"];
+  const resKeys  =["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
   const itemKeys = Object.keys(INIT_ITEMS());
 
   return (
@@ -1457,10 +1457,10 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     return (
       <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
         <button onClick={() => {
-          let nextCur = pc.resources.スペカ?.cur || 0;
-          nextCur = Math.min(pc.resources.スペカ?.max || 5, nextCur + gain);
+          let nextCur = pc.resources.スペルカード?.cur || 0;
+          nextCur = Math.min(pc.resources.スペルカード?.max || 5, nextCur + gain);
           proceed([`${pc.charName} はスペルカードを ${gain} 点獲得した`], {
-            pc: { resources: { ...pc.resources, スペカ: { ...pc.resources.スペカ, cur: nextCur } } }
+            pc: { resources: { ...pc.resources, スペルカード: { ...pc.resources.スペルカード, cur: nextCur } } }
           });
         }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>スペルカードを {gain} 点獲得する</button>
       </div>
@@ -2684,401 +2684,524 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
       <div style={{ padding: "8px 12px", borderBottom: `1px solid ${C.border}`, background: "#08090f", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: C.gold, letterSpacing: 2 }}>{isIntro ? "✦ 導入フェイズ" : "✦ 探索フェイズ"}</span>
-          {!isIntro && <div style={{ padding: "2px 10px", background: `${cycleColor}18`, border: `1px solid ${cycleColor}40`, borderRadius: 10, fontSize: 10, color: cycleColor }}>{gs.day}日目・{CYCLES[cycleIdx]}</div>}
+          <span style={{ fontSize: 11, color: C.gold, letterSpacing: 2 }}>
+            {gs.battle?.active ? "⚖️ 弾幕ごっこ" : (gs.sessionPhase === "intro" ? "✦ 導入フェイズ" : "✦ 探索フェイズ")}
+          </span>
+          {gs.battle?.active ? (
+            <div style={{ padding: "2px 10px", background: "rgba(224,112,96,0.18)", border: `1px solid ${C.redBorder}`, borderRadius: 10, fontSize: 10, color: C.red }}>
+              ROUND {gs.battle.round}
+            </div>
+          ) : (
+            !isIntro && <div style={{ padding: "2px 10px", background: `${cycleColor}18`, border: `1px solid ${cycleColor}40`, borderRadius: 10, fontSize: 10, color: cycleColor }}>{gs.day}日目・{CYCLES[cycleIdx]}</div>
+          )}
         </div>
       </div>
 
-      {gs.currentScene?.phase === "quest_setup" && gs.currentScene?.pcUid !== user.uid && !isGm && (
-        <div style={{ padding: "10px", background: "rgba(200,160,64,0.15)", borderBottom: `1px solid ${C.goldDim}`, animation: "fadeUp 0.3s ease" }}>
-          <div style={{ fontSize: 10, color: C.gold, marginBottom: 6, textAlign: "center" }}>
-            🌟 クエストシーンが開始されました
-          </div>
-          <button 
-            onClick={joinQuest}
-            disabled={gs.pcs.find(p => p.uid === user.uid)?.currentSpot === gs.currentScene.questLocation}
-            style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}
-          >
-            {gs.pcs.find(p => p.uid === user.uid)?.currentSpot === gs.currentScene.questLocation 
-              ? "合流済み" 
-              : "このクエストに合流する（移動）"}
-          </button>
-        </div>
-      )}
-
-      {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
-
-      {!gs.currentScene && isGm && (
-        <div style={{ padding: "8px", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.01)" }}>
-          {ma ? (
-            <button onClick={ma.fn} style={{ width: "100%", padding: "9px", borderRadius: 4, cursor: "pointer", background: `${ma.color}20`, border: `1px solid ${ma.color}50`, color: ma.color, fontSize: 12, letterSpacing: 1 }}>{ma.label}</button>
-          ) : (
-            <div>
-              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>▶ シーンプレイヤーの選択</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <select value={sceneSelect} onChange={e => setSceneSelect(e.target.value)} style={{ flex: 1, padding: "6px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3 }}>
-                  <option value="">未行動のPCを選択...</option>
-                  {unactedPcs.map(pc => <option key={pc.uid} value={pc.uid}>{pc.charName}</option>)}
-                </select>
-                <button onClick={startScene} disabled={!sceneSelect} style={{ padding: "0 12px", background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, borderRadius: 3, cursor: sceneSelect ? "pointer" : "not-allowed", fontSize: 11 }}>開始</button>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
+        {gs.battle?.active ? (
+          <BattleRightPanel 
+            gs={gs} 
+            upd={upd} 
+            user={props.user} 
+            isGm={props.isGm} 
+            getSpot={props.getSpot} 
+          />
+        ) : (
+          <>
+            {gs.currentScene?.phase === "quest_setup" && gs.currentScene?.pcUid !== user.uid && !isGm && (
+              <div style={{ padding: "10px", background: "rgba(200,160,64,0.15)", borderBottom: `1px solid ${C.goldDim}`, animation: "fadeUp 0.3s ease" }}>
+                <div style={{ fontSize: 10, color: C.gold, marginBottom: 6, textAlign: "center" }}>
+                  🌟 クエストシーンが開始されました
+                </div>
+                <button 
+                  onClick={joinQuest}
+                  disabled={gs.pcs.find(p => p.uid === user.uid)?.currentSpot === gs.currentScene.questLocation}
+                  style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}
+                >
+                  {gs.pcs.find(p => p.uid === user.uid)?.currentSpot === gs.currentScene.questLocation 
+                    ? "合流済み" 
+                    : "このクエストに合流する（移動）"}
+                </button>
               </div>
+            )}
+
+            {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
+
+            {!gs.currentScene && isGm && (
+              <div style={{ padding: "8px", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.01)" }}>
+                {ma ? (
+                  <button onClick={ma.fn} style={{ width: "100%", padding: "9px", borderRadius: 4, cursor: "pointer", background: `${ma.color}20`, border: `1px solid ${ma.color}50`, color: ma.color, fontSize: 12, letterSpacing: 1 }}>{ma.label}</button>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>▶ シーンプレイヤーの選択</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <select value={sceneSelect} onChange={e => setSceneSelect(e.target.value)} style={{ flex: 1, padding: "6px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3 }}>
+                        <option value="">未行動のPCを選択...</option>
+                        {unactedPcs.map(pc => <option key={pc.uid} value={pc.uid}>{pc.charName}</option>)}
+                      </select>
+                      <button onClick={startScene} disabled={!sceneSelect} style={{ padding: "0 12px", background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, borderRadius: 3, cursor: sceneSelect ? "pointer" : "not-allowed", fontSize: 11 }}>開始</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              {TABS.map(([id, label]) => (
+                <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : "#1e2535", borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
+              ))}
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
+              {tab === "progress" && (
+                <div>
+                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>クエスト</div>
+                  {(gs.quests ||[]).length === 0 ? (
+                    <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
+                  ) : (
+                    (gs.quests ||[]).map(q => {
+                      const isExpanded = expandedQuests[q.id];
+                      const isReadyToSolve = !q.solved && (q.clues || 0) >= q.level;
+                      
+                      const toggleExpand = () => {
+                        setExpandedQuests(prev => ({ ...prev, [q.id]: !prev[q.id] }));
+                      };
+
+                      return (
+                        <div key={q.id || q.name} style={{ marginBottom: 4, background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${q.solved ? "#1b5e20" : isReadyToSolve ? C.goldDim : C.border}`, borderRadius: 3, overflow: "hidden" }}>
+                          
+                          <div 
+                            onClick={toggleExpand}
+                            style={{ padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "background 0.2s" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                          >
+                            <div style={{ fontSize: 8, color: C.textFaint }}>{isExpanded ? "▼" : "▶"}</div>
+                            
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : isReadyToSolve ? C.gold : C.text, textDecoration: q.solved ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  【Lv.{q.level}】{q.name}
+                                </span>
+                                {isReadyToSolve && <span style={{ fontSize: 8, color: C.gold, animation: "fadeUp 0.5s ease infinite alternate" }}>✨</span>}
+                              </div>
+                              
+                              {!q.solved && (
+                                <div style={{ fontSize: 8, color: isReadyToSolve ? C.gold : "#00bcd4", marginTop: 1 }}>
+                                  {isReadyToSolve ? "調査完了：解決可能" : `💡 手がかり: ${q.clues || 0}/${q.level}`}
+                                </div>
+                              )}
+                            </div>
+
+                            {isGm && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  upd(p => {
+                                    const isNowSolved = !q.solved;
+                                    let nextQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
+                                    if (isNowSolved) {
+                                      const allScenarioQuests = p.scenarioData?.quests || [];
+                                      allScenarioQuests.forEach(scQ => {
+                                        if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(q.id)) {
+                                          if (!nextQuests.find(nq => String(nq.id) === String(scQ.id))) {
+                                            nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
+                                          }
+                                        }
+                                      });
+                                    }
+                                    return { ...p, quests: nextQuests };
+                                  });
+                                }}
+                                style={{ width: 20, height: 20, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: q.solved ? C.red : "#4caf50", cursor: "pointer", borderRadius: 2, fontSize: 12, padding: 0 }}
+                                >
+                                {q.solved ? "↩" : "✓"}
+                              </button>
+                            )}
+                          </div>
+
+                          {isExpanded && (
+                            <div style={{ padding: "0 8px 8px 22px", borderTop: "1px solid rgba(255,255,255,0.03)", animation: "fadeUp 0.2s ease" }}>
+                              <div style={{ fontSize: 9, color: C.textDim, marginTop: 6, lineHeight: 1.4 }}>{q.summary}</div>
+                              
+                              {(isReadyToSolve || q.solved || isGm) && (
+                                <div style={{ marginTop: 6, padding: "4px 6px", background: "rgba(200,160,64,0.05)", borderRadius: 2, borderLeft: `2px solid ${C.goldDim}` }}>
+                                  <div style={{ fontSize: 8, color: C.goldDim, letterSpacing: 1, fontWeight: "bold" }}>真相 / 解決場所</div>
+                                  <div style={{ fontSize: 9, color: C.text, marginTop: 2, whiteSpace: "pre-wrap" }}>{q.truth || "（真相なし）"}</div>
+                                  {q.location && (
+                                    <div style={{ fontSize: 9, color: "#90caf9", marginTop: 2 }}>📍 解決場所: {getSpot(q.location)?.name || `スポット[${q.location}]`}</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {!isIntro && (gs.clues ||[]).length > 0 && (
+                    <>
+                      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
+                      {gs.clues.map(id => (
+                        <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, padding: "2px 0" }}>
+                          <span style={{ color: "#00bcd4" }}>💡[{getSpot(id)?.roll}] {getSpot(id)?.name}</span>
+                          {isGm && <button onClick={() => upd(p => ({ ...p, clues: p.clues.filter(c => c !== id) }))} style={{ width: 16, height: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {gs.newspaper && !isIntro && (
+                    <>
+                      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>本日の新聞</div>
+                      <div style={{ padding: "6px 8px", background: "rgba(25,50,90,0.15)", border: "1px solid #1e3a5a", borderRadius: 4, cursor: "pointer" }} onClick={() => setPaperModal(gs.newspaper)}>
+                        <div style={{ fontSize: 9, color: "#3a5070" }}>[{gs.newspaper.roll}]</div>
+                        <div style={{ fontSize: 11, color: "#60c0f0" }}>{gs.newspaper.title}</div>
+                      </div>
+                    </>
+                  )}
+                  {diceResult && (
+                    <div style={{ marginTop: 12, textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 4 }}>
+                        {diceResult.map((d, i) => (
+                          <div key={i} style={{ width: 40, height: 40, border: "2px solid #1e3a5a", borderRadius: 5, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#60c0f0", fontWeight: "bold", animation: diceAnim ? "rollSpin 0.25s ease infinite" : "none" }}>{d}</div>
+                        ))}
+                      </div>
+                      {!diceAnim && <div style={{ fontSize: 16, color: C.gold }}>{diceResult.join("")}</div>}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === "pcs" && (
+                <div>
+                  {(gs.pcs ||[]).length === 0
+                    ? <div style={{ fontSize: 10, color: "#2a3545" }}>PCなし</div>
+                    : (gs.pcs ||[]).map(pc => (
+                        <PCCard
+                          key={pc.uid}
+                          pc={pc}
+                          gs={gs}
+                          isGm={isGm}
+                          onUpdatePc={updPc => upd(p => ({ ...p, pcs: p.pcs.map(x => x.uid === pc.uid ? updPc : x) }))}
+                          getSpot={getSpot}
+                        />
+                      ))
+                  }
+                </div>
+              )}
+
+              {tab === "scene" && isGm && (
+                <div>
+                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
+                  <button onClick={() => upd(p => ({ ...p, sceneMode: !p.sceneMode }))} style={{ width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer", marginBottom: 8, background: gs.sceneMode ? "rgba(121,134,203,0.2)" : "rgba(255,255,255,0.03)", border: gs.sceneMode ? "1px solid #7986cb60" : `1px solid ${C.border}`, color: gs.sceneMode ? "#9fa8da" : C.textFaint, fontSize: 12 }}>
+                    {gs.sceneMode ? "🎭 描写モード ON（クリックで解除）" : "🎭 描写モードを開始"}
+                  </button>
+                  <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>テキスト（PLに表示）</div>
+                  <textarea value={gs.sceneText || ""} onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))} placeholder="PLに見せたいテキスト…" style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }} />
+
+                  <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>背景画像</div>
+                  {sceneData.bg ? (
+                    <div style={{ position: "relative", marginBottom: 6 }}>
+                      <img src={sceneData.bg} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 3, border: `1px solid ${C.border}` }} />
+                      <button onClick={() => setSceneData(d => ({ ...d, bg: null }))} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(8,8,12,0.9)", border: "1px solid #3a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 11, padding: 0 }}>✕</button>
+                    </div>
+                  ) : (
+                    <label style={{ display: "block", padding: "8px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint, marginBottom: 6 }}>
+                      ＋ 背景画像
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                        const f = e.target.files[0];
+                        if (!f) return;
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                          const img = new Image();
+                          img.onload = () => {
+                            const scale  = Math.min(1, 1280 / img.width);
+                            const canvas = document.createElement("canvas");
+                            canvas.width  = img.width  * scale;
+                            canvas.height = img.height * scale;
+                            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                            setSceneData(d => ({ ...d, bg: canvas.toDataURL("image/jpeg", 0.8) }));
+                          };
+                          img.src = ev.target.result;
+                        };
+                        reader.readAsDataURL(f);
+                      }} />
+                    </label>
+                  )}
+
+                  <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
+                  {(sceneData.portraits ||[]).map((p, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                      <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
+                      <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
+                      <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
+                    </div>
+                  ))}
+                  {(sceneData.portraits ||[]).length < 4 && (
+                    <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
+                      ＋ 立ち絵を追加
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                        const f = e.target.files[0];
+                        if (!f) return;
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                          const img = new Image();
+                          img.onload = () => {
+                            const scale  = Math.min(1, 600 / img.width);
+                            const canvas = document.createElement("canvas");
+                            canvas.width  = img.width  * scale;
+                            canvas.height = img.height * scale;
+                            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                            setSceneData(d => ({ ...d, portraits:[...(d.portraits || []), { img: canvas.toDataURL("image/jpeg", 0.85), name: "" }] }));
+                          };
+                          img.src = ev.target.result;
+                        };
+                        reader.readAsDataURL(f);
+                      }} />
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {tab === "log" && (
+                <div>
+                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
+                  {(gs.log ||[]).length === 0 && <div style={{ fontSize: 10, color: "#2a3545" }}>なし</div>}
+                  {(gs.log ||[]).map((e, i) => <div key={i} style={{ fontSize: 10, color: "#6a7a8a", padding: "3px 0", borderBottom: "1px solid #0c0f18" }}>{e}</div>)}
+                </div>
+              )}
+            </div>
+
+            {paperModal && (() => { 
+              const r = paperModal.roll;
+              const isZoro = [11, 22, 33, 44, 55, 66].includes(r);
+              const needsSpot = [14, 35, 46].includes(r);
+              const is25 = r === 25;
+              const is36 = r === 36;
+              const is23 = r === 23;
+              const is56 = r === 56;
+
+              const saveApplied = (extra = {}) => {
+                upd(p => ({ ...p, newspaper: { ...p.newspaper, applied: true, ...extra } }));
+                setPaperModal(prev => ({ ...prev, applied: true, ...extra }));
+              };
+
+              const applyZoro = () => {
+                const target = "66";
+                saveApplied({ targetSpot: target });
+                upd(p => ({ ...p, log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log] }));
+              };
+
+              const rollTargetSpot = () => {
+                animateDice(2, "対象スポットの決定", res => {
+                  const spotId = getSpotByD66(res[0], res[1], SPOTS);
+                  saveApplied({ targetSpot: spotId });
+                  upd(p => ({ ...p, log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log] }));
+                });
+              };
+
+              const apply25 = () => {
+                animateDice(4, "手がかり2箇所配置", res => {
+                  const s1 = getSpotByD66(res[0], res[1], SPOTS);
+                  const s2 = getSpotByD66(res[2], res[3], SPOTS);
+                  upd(p => ({
+                    ...p,
+                    newspaper: { ...p.newspaper, applied: true },
+                    clues: [...new Set([...(p.clues || []), s1, s2].filter(Boolean))],
+                    log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log],
+                  }));
+                  setPaperModal(prev => ({ ...prev, applied: true }));
+                });
+              };
+
+              const apply36 = () => {
+                const count = (gs.clues || []).length;
+                if (count > 0) {
+                  animateDice(count * 2, "手がかり再配置", res => {
+                    const newClues = [];
+                    for (let i = 0; i < count; i++) {
+                      const s = getSpotByD66(res[i * 2], res[i * 2 + 1], SPOTS);
+                      if (s) newClues.push(s);
+                    }
+                    upd(p => ({
+                      ...p,
+                      newspaper: { ...p.newspaper, applied: true },
+                      clues: [...new Set(newClues)],
+                      log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log],
+                    }));
+                    setPaperModal(prev => ({ ...prev, applied: true }));
+                  });
+                } else {
+                  saveApplied();
+                }
+              };
+
+              const apply23 = () => {
+                upd(p => ({
+                  ...p,
+                  newspaper: { ...p.newspaper, applied: true },
+                  pcs: p.pcs.map(pc => ({
+                    ...pc,
+                    resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } },
+                  })),
+                  log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log],
+                }));
+                setPaperModal(prev => ({ ...prev, applied: true }));
+              };
+
+              const apply56 = () => {
+                upd(p => ({
+                  ...p,
+                  newspaper: { ...p.newspaper, applied: true },
+                  pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
+                  log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log],
+                }));
+                setPaperModal(prev => ({ ...prev, applied: true }));
+              };
+
+              const isActionNeeded = isZoro || needsSpot || is25 || is36 || is23 || is56;
+              const canClose = !isActionNeeded || paperModal.applied;
+
+              return (
+                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => canClose && setPaperModal(null)}>
+                  <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
+                    <div style={{ fontSize: 9, letterSpacing: 3, color: "#2a3a50", textAlign: "center", marginBottom: 4 }}>— 文々。新聞 —</div>
+                    {paperModal.dice && (
+                      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 8 }}>
+                        {paperModal.dice.map((d, i) => (
+                          <div key={i} style={{ width: 44, height: 44, border: "2px solid #1e3a5a", borderRadius: 6, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#60c0f0", fontWeight: "bold" }}>{d}</div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 18, color: "#1976d2", textAlign: "center", marginBottom: 6 }}>[{paperModal.roll}]</div>
+                    <div style={{ fontSize: 13, color: "#60c0f0", marginBottom: 8, textAlign: "center" }}>{paperModal.title}</div>
+                    <div style={{ fontSize: 11, color: "#4a6070", lineHeight: 1.8, marginBottom: 8 }}>{paperModal.effect}</div>
+                    
+                    {paperModal.targetSpot && (
+                      <div style={{ padding: 6, background: "rgba(255,255,255,0.05)", borderRadius: 4, textAlign: "center", fontSize: 11, color: C.gold, animation: "fadeUp 0.3s ease" }}>
+                        対象スポット: {getSpot(paperModal.targetSpot)?.name}
+                      </div>
+                    )}
+
+                    {isGm && !paperModal.applied && isZoro && <button onClick={applyZoro} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
+                    {isGm && !paperModal.applied && needsSpot && <button onClick={rollTargetSpot} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 対象スポットを決定する</button>}
+                    {isGm && !paperModal.applied && is25 && <button onClick={apply25} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを配置する</button>}
+                    {isGm && !paperModal.applied && is36 && <button onClick={apply36} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを再配置する</button>}
+                    {isGm && !paperModal.applied && is23 && <button onClick={apply23} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
+                    {isGm && !paperModal.applied && is56 && <button onClick={apply56} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
+
+                    {(!isGm || canClose) && (
+                      <button onClick={() => setPaperModal(null)} style={{ ...btnFull("transparent", C.border, C.textFaint), marginTop: 12 }}>閉じる</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
+  const b = gs.battle;
+  const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
+  const npcCombatant = b.participants.npcs.find(n => n.id === b.npcCombatant);
+
+  const spectators = gs.pcs.filter(p =>
+    p.uid !== b.pcCombatant &&
+    (p.resources?.残り人数?.cur || 0) > 0
+  );
+
+  const isSpectator = spectators.some(p => p.uid === user.uid);
+  const isCombatant = b.pcCombatant === user.uid;
+  const interventionUsed = b.useIntervention?.[user.uid];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
+      <div style={{ padding: 10, background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
+        <div style={{ fontSize: 9, color: C.red, letterSpacing: 2, marginBottom: 4 }}>ENEMY COMBATANT</div>
+        <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur || 3}</span></div>
+        </div>
+      </div>
+
+      <div style={{ padding: 10, background: "rgba(25,118,210,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
+        <div style={{ fontSize: 9, color: C.blue, letterSpacing: 2, marginBottom: 4 }}>PLAYER COMBATANT</div>
+        <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{pcCombatant?.charName || "???"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ.cur}/5</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur || 3}</span></div>
+        </div>
+      </div>
+
+      {isSpectator && (
+        <div style={{ padding: 10, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
+          <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>観戦者アクション</div>
+          {interventionUsed ? (
+            <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center" }}>
+              今ラウンドは介入済みです ({interventionUsed === "support" ? "援護射撃" : "かばう"})
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <button 
+                onClick={() => {/* 援護射撃ロジック */}}
+                disabled={b.phase !== "npc_shot_roll" && b.phase !== "pc_shot_roll"}
+                style={btnFull(C.redBg, C.redBorder, C.red, {fontSize: 10})}
+              >
+                💥 援護射撃 (ショット前)
+              </button>
+              <button 
+                onClick={() => {/* かばうロジック */}}
+                disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
+                style={btnFull(C.greenBg, C.greenBorder, C.green, {fontSize: 10})}
+              >
+                🛡️ かばう (ショット後)
+              </button>
             </div>
           )}
         </div>
       )}
 
-      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        {TABS.map(([id, label]) => (
-          <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : "#1e2535", borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
-        ))}
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
-        {tab === "progress" && (
-          <div>
-            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>クエスト</div>
-            {(gs.quests ||[]).length === 0 ? (
-              <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
-            ) : (
-              (gs.quests ||[]).map(q => {
-                const isExpanded = expandedQuests[q.id];
-                const isReadyToSolve = !q.solved && (q.clues || 0) >= q.level;
-                
-                const toggleExpand = () => {
-                  setExpandedQuests(prev => ({ ...prev, [q.id]: !prev[q.id] }));
-                };
-
-                return (
-                  <div key={q.id || q.name} style={{ marginBottom: 4, background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${q.solved ? "#1b5e20" : isReadyToSolve ? C.goldDim : C.border}`, borderRadius: 3, overflow: "hidden" }}>
-                    
-                    <div 
-                      onClick={toggleExpand}
-                      style={{ padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "background 0.2s" }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-                      onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                    >
-                      <div style={{ fontSize: 8, color: C.textFaint }}>{isExpanded ? "▼" : "▶"}</div>
-                      
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : isReadyToSolve ? C.gold : C.text, textDecoration: q.solved ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            【Lv.{q.level}】{q.name}
-                          </span>
-                          {isReadyToSolve && <span style={{ fontSize: 8, color: C.gold, animation: "fadeUp 0.5s ease infinite alternate" }}>✨</span>}
-                        </div>
-                        
-                        {!q.solved && (
-                          <div style={{ fontSize: 8, color: isReadyToSolve ? C.gold : "#00bcd4", marginTop: 1 }}>
-                            {isReadyToSolve ? "調査完了：解決可能" : `💡 手がかり: ${q.clues || 0}/${q.level}`}
-                          </div>
-                        )}
-                      </div>
-
-                      {isGm && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            upd(p => {
-                              const isNowSolved = !q.solved;
-                              let nextQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
-                              if (isNowSolved) {
-                                const allScenarioQuests = p.scenarioData?.quests || [];
-                                allScenarioQuests.forEach(scQ => {
-                                  if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(q.id)) {
-                                    if (!nextQuests.find(nq => String(nq.id) === String(scQ.id))) {
-                                      nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
-                                    }
-                                  }
-                                });
-                              }
-                              return { ...p, quests: nextQuests };
-                            });
-                          }}
-                          style={{ width: 20, height: 20, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: q.solved ? C.red : "#4caf50", cursor: "pointer", borderRadius: 2, fontSize: 12, padding: 0 }}
-                          >
-                          {q.solved ? "↩" : "✓"}
-                        </button>
-                      )}
-                    </div>
-
-                    {isExpanded && (
-                      <div style={{ padding: "0 8px 8px 22px", borderTop: "1px solid rgba(255,255,255,0.03)", animation: "fadeUp 0.2s ease" }}>
-                        <div style={{ fontSize: 9, color: C.textDim, marginTop: 6, lineHeight: 1.4 }}>{q.summary}</div>
-                        
-                        {(isReadyToSolve || q.solved || isGm) && (
-                          <div style={{ marginTop: 6, padding: "4px 6px", background: "rgba(200,160,64,0.05)", borderRadius: 2, borderLeft: `2px solid ${C.goldDim}` }}>
-                            <div style={{ fontSize: 8, color: C.goldDim, letterSpacing: 1, fontWeight: "bold" }}>真相 / 解決場所</div>
-                            <div style={{ fontSize: 9, color: C.text, marginTop: 2, whiteSpace: "pre-wrap" }}>{q.truth || "（真相なし）"}</div>
-                            {q.location && (
-                              <div style={{ fontSize: 9, color: "#90caf9", marginTop: 2 }}>📍 解決場所: {getSpot(q.location)?.name || `スポット[${q.location}]`}</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-
-            {!isIntro && (gs.clues ||[]).length > 0 && (
-              <>
-                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
-                {gs.clues.map(id => (
-                  <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, padding: "2px 0" }}>
-                    <span style={{ color: "#00bcd4" }}>💡[{getSpot(id)?.roll}] {getSpot(id)?.name}</span>
-                    {isGm && <button onClick={() => upd(p => ({ ...p, clues: p.clues.filter(c => c !== id) }))} style={{ width: 16, height: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>}
-                  </div>
-                ))}
-              </>
-            )}
-            {gs.newspaper && !isIntro && (
-              <>
-                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>本日の新聞</div>
-                <div style={{ padding: "6px 8px", background: "rgba(25,50,90,0.15)", border: "1px solid #1e3a5a", borderRadius: 4, cursor: "pointer" }} onClick={() => setPaperModal(gs.newspaper)}>
-                  <div style={{ fontSize: 9, color: "#3a5070" }}>[{gs.newspaper.roll}]</div>
-                  <div style={{ fontSize: 11, color: "#60c0f0" }}>{gs.newspaper.title}</div>
-                </div>
-              </>
-            )}
-            {diceResult && (
-              <div style={{ marginTop: 12, textAlign: "center" }}>
-                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 4 }}>
-                  {diceResult.map((d, i) => (
-                    <div key={i} style={{ width: 40, height: 40, border: "2px solid #1e3a5a", borderRadius: 5, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#60c0f0", fontWeight: "bold", animation: diceAnim ? "rollSpin 0.25s ease infinite" : "none" }}>{d}</div>
-                  ))}
-                </div>
-                {!diceAnim && <div style={{ fontSize: 16, color: C.gold }}>{diceResult.join("")}</div>}
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "pcs" && (
-          <div>
-            {(gs.pcs ||[]).length === 0
-              ? <div style={{ fontSize: 10, color: "#2a3545" }}>PCなし</div>
-              : (gs.pcs ||[]).map(pc => (
-                  <PCCard
-                    key={pc.uid}
-                    pc={pc}
-                    gs={gs}
-                    isGm={isGm}
-                    onUpdatePc={updPc => upd(p => ({ ...p, pcs: p.pcs.map(x => x.uid === pc.uid ? updPc : x) }))}
-                    getSpot={getSpot}
-                  />
-                ))
-            }
-          </div>
-        )}
-
-        {tab === "scene" && isGm && (
-          <div>
-            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
-            <button onClick={() => upd(p => ({ ...p, sceneMode: !p.sceneMode }))} style={{ width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer", marginBottom: 8, background: gs.sceneMode ? "rgba(121,134,203,0.2)" : "rgba(255,255,255,0.03)", border: gs.sceneMode ? "1px solid #7986cb60" : `1px solid ${C.border}`, color: gs.sceneMode ? "#9fa8da" : C.textFaint, fontSize: 12 }}>
-              {gs.sceneMode ? "🎭 描写モード ON（クリックで解除）" : "🎭 描写モードを開始"}
-            </button>
-            <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>テキスト（PLに表示）</div>
-            <textarea value={gs.sceneText || ""} onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))} placeholder="PLに見せたいテキスト…" style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }} />
-
-            <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>背景画像</div>
-            {sceneData.bg ? (
-              <div style={{ position: "relative", marginBottom: 6 }}>
-                <img src={sceneData.bg} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 3, border: `1px solid ${C.border}` }} />
-                <button onClick={() => setSceneData(d => ({ ...d, bg: null }))} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(8,8,12,0.9)", border: "1px solid #3a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 11, padding: 0 }}>✕</button>
-              </div>
-            ) : (
-              <label style={{ display: "block", padding: "8px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint, marginBottom: 6 }}>
-                ＋ 背景画像
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
-                  const f = e.target.files[0];
-                  if (!f) return;
-                  const reader = new FileReader();
-                  reader.onload = ev => {
-                    const img = new Image();
-                    img.onload = () => {
-                      const scale  = Math.min(1, 1280 / img.width);
-                      const canvas = document.createElement("canvas");
-                      canvas.width  = img.width  * scale;
-                      canvas.height = img.height * scale;
-                      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                      setSceneData(d => ({ ...d, bg: canvas.toDataURL("image/jpeg", 0.8) }));
-                    };
-                    img.src = ev.target.result;
-                  };
-                  reader.readAsDataURL(f);
-                }} />
-              </label>
-            )}
-
-            <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
-            {(sceneData.portraits ||[]).map((p, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-                <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
-                <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
-                <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
-              </div>
-            ))}
-            {(sceneData.portraits ||[]).length < 4 && (
-              <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
-                ＋ 立ち絵を追加
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
-                  const f = e.target.files[0];
-                  if (!f) return;
-                  const reader = new FileReader();
-                  reader.onload = ev => {
-                    const img = new Image();
-                    img.onload = () => {
-                      const scale  = Math.min(1, 600 / img.width);
-                      const canvas = document.createElement("canvas");
-                      canvas.width  = img.width  * scale;
-                      canvas.height = img.height * scale;
-                      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                      setSceneData(d => ({ ...d, portraits:[...(d.portraits || []), { img: canvas.toDataURL("image/jpeg", 0.85), name: "" }] }));
-                    };
-                    img.src = ev.target.result;
-                  };
-                  reader.readAsDataURL(f);
-                }} />
-              </label>
-            )}
-          </div>
-        )}
-
-        {tab === "log" && (
-          <div>
-            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
-            {(gs.log ||[]).length === 0 && <div style={{ fontSize: 10, color: "#2a3545" }}>なし</div>}
-            {(gs.log ||[]).map((e, i) => <div key={i} style={{ fontSize: 10, color: "#6a7a8a", padding: "3px 0", borderBottom: "1px solid #0c0f18" }}>{e}</div>)}
-          </div>
-        )}
-      </div>
-
-      {paperModal && (() => { 
-        const r = paperModal.roll;
-        const isZoro = [11, 22, 33, 44, 55, 66].includes(r);
-        const needsSpot = [14, 35, 46].includes(r);
-        const is25 = r === 25;
-        const is36 = r === 36;
-        const is23 = r === 23;
-        const is56 = r === 56;
-
-        const saveApplied = (extra = {}) => {
-          upd(p => ({ ...p, newspaper: { ...p.newspaper, applied: true, ...extra } }));
-          setPaperModal(prev => ({ ...prev, applied: true, ...extra }));
-        };
-
-        const applyZoro = () => {
-          const target = "66";
-          saveApplied({ targetSpot: target });
-          upd(p => ({ ...p, log: [`新聞[${r}]の効果が適用された（帰還先に博麗神社を指定可能）`, ...p.log] }));
-        };
-
-        const rollTargetSpot = () => {
-          animateDice(2, "対象スポットの決定", res => {
-            const spotId = getSpotByD66(res[0], res[1], SPOTS);
-            saveApplied({ targetSpot: spotId });
-            upd(p => ({ ...p, log: [`新聞[${r}]の対象スポットが [${getSpot(spotId)?.name}] に決定した`, ...p.log] }));
-          });
-        };
-
-        const apply25 = () => {
-          animateDice(4, "手がかり2箇所配置", res => {
-            const s1 = getSpotByD66(res[0], res[1], SPOTS);
-            const s2 = getSpotByD66(res[2], res[3], SPOTS);
-            upd(p => ({
-              ...p,
-              newspaper: { ...p.newspaper, applied: true },
-              clues: [...new Set([...(p.clues || []), s1, s2].filter(Boolean))],
-              log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log],
-            }));
-            setPaperModal(prev => ({ ...prev, applied: true }));
-          });
-        };
-
-        const apply36 = () => {
-          const count = (gs.clues || []).length;
-          if (count > 0) {
-            animateDice(count * 2, "手がかり再配置", res => {
-              const newClues = [];
-              for (let i = 0; i < count; i++) {
-                const s = getSpotByD66(res[i * 2], res[i * 2 + 1], SPOTS);
-                if (s) newClues.push(s);
-              }
-              upd(p => ({
-                ...p,
-                newspaper: { ...p.newspaper, applied: true },
-                clues: [...new Set(newClues)],
-                log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log],
-              }));
-              setPaperModal(prev => ({ ...prev, applied: true }));
-            });
-          } else {
-            saveApplied();
-          }
-        };
-
-        const apply23 = () => {
-          upd(p => ({
-            ...p,
-            newspaper: { ...p.newspaper, applied: true },
-            pcs: p.pcs.map(pc => ({
-              ...pc,
-              resources: { ...pc.resources, やる気: { ...pc.resources.やる気, cur: Math.min(pc.resources.やる気.max, (pc.resources.やる気.cur || 0) + 1) } },
-            })),
-            log: [`新聞[23]の効果で、全員のやる気が1回復した！`, ...p.log],
-          }));
-          setPaperModal(prev => ({ ...prev, applied: true }));
-        };
-
-        const apply56 = () => {
-          upd(p => ({
-            ...p,
-            newspaper: { ...p.newspaper, applied: true },
-            pcs: p.pcs.map(pc => ({ ...pc, flags: { ...pc.flags, canCureBadStatus: true } })),
-            log: [`新聞[56]の効果で、全員が任意の変調を1つ解除できるようになった！`, ...p.log],
-          }));
-          setPaperModal(prev => ({ ...prev, applied: true }));
-        };
-
-        const isActionNeeded = isZoro || needsSpot || is25 || is36 || is23 || is56;
-        const canClose = !isActionNeeded || paperModal.applied;
-
-        return (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => canClose && setPaperModal(null)}>
-            <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 380, width: "90%", animation: "fadeUp 0.2s ease" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontSize: 9, letterSpacing: 3, color: "#2a3a50", textAlign: "center", marginBottom: 4 }}>— 文々。新聞 —</div>
-              {paperModal.dice && (
-                <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 8 }}>
-                  {paperModal.dice.map((d, i) => (
-                    <div key={i} style={{ width: 44, height: 44, border: "2px solid #1e3a5a", borderRadius: 6, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#60c0f0", fontWeight: "bold" }}>{d}</div>
-                  ))}
-                </div>
-              )}
-              <div style={{ fontSize: 18, color: "#1976d2", textAlign: "center", marginBottom: 6 }}>[{paperModal.roll}]</div>
-              <div style={{ fontSize: 13, color: "#60c0f0", marginBottom: 8, textAlign: "center" }}>{paperModal.title}</div>
-              <div style={{ fontSize: 11, color: "#4a6070", lineHeight: 1.8, marginBottom: 8 }}>{paperModal.effect}</div>
-              
-              {paperModal.targetSpot && (
-                <div style={{ padding: 6, background: "rgba(255,255,255,0.05)", borderRadius: 4, textAlign: "center", fontSize: 11, color: C.gold, animation: "fadeUp 0.3s ease" }}>
-                  対象スポット: {getSpot(paperModal.targetSpot)?.name}
-                </div>
-              )}
-
-              {isGm && !paperModal.applied && isZoro && <button onClick={applyZoro} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
-              {isGm && !paperModal.applied && needsSpot && <button onClick={rollTargetSpot} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 対象スポットを決定する</button>}
-              {isGm && !paperModal.applied && is25 && <button onClick={apply25} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを配置する</button>}
-              {isGm && !paperModal.applied && is36 && <button onClick={apply36} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを再配置する</button>}
-              {isGm && !paperModal.applied && is23 && <button onClick={apply23} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
-              {isGm && !paperModal.applied && is56 && <button onClick={apply56} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
-
-              {(!isGm || canClose) && (
-                <button onClick={() => setPaperModal(null)} style={{ ...btnFull("transparent", C.border, C.textFaint), marginTop: 12 }}>閉じる</button>
-              )}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>陣営状況</div>
+        {gs.pcs.map(p => {
+          const isDead = (p.resources?.残り人数?.cur || 0) <= 0;
+          const isCombatant = p.uid === b.pcCombatant;
+          const isActed = b.actedPcs?.includes(p.uid);
+          return (
+            <div key={p.uid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", opacity: isDead ? 0.4 : 1 }}>
+              <span style={{ fontSize: 11, color: isCombatant ? C.blue : C.text }}>
+                {isCombatant && "▶"} {p.charName}
+              </span>
+              <span style={{ fontSize: 9, color: isDead ? C.red : (isActed ? C.textFaint : C.gold) }}>
+                {isDead ? "脱落" : (isActed ? "行動済" : "未行動")}
+              </span>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })}
+      </div>
+
+      {isGm && (
+        <button 
+          onClick={() => {
+            if(window.confirm("弾幕ごっこを強制終了しますか？")) {
+              upd(p => ({ ...p, battle: { ...p.battle, active: false }, log: ["⚖️ 弾幕ごっこが終了しました。", ...p.log] }));
+            }
+          }}
+          style={{ ...btnFull("none", C.redBorder, C.red), marginTop: "auto" }}
+        >
+          対戦を強制終了する
+        </button>
+      )}
     </div>
   );
 }
