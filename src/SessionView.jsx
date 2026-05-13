@@ -196,7 +196,7 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
               {danmakuCount > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center", padding: 2 }}>
                   {[...Array(danmakuCount)].map((_, i) => (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: isNpc ? "#fff" : C.red }} />
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: isNpc ? C.blue : C.red }} />
                   ))}
                 </div>
               )}
