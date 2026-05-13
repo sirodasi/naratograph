@@ -210,7 +210,7 @@ function BattleGrid({ charId, name, grid, pos, isCombatant, isNpc, sprite, isDea
   );
 }
 
-export function BattleView({ gs, upd, user, isGm }) {
+export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceAnim }) {
   const b = gs.battle;
   if (!b) return null;
 
@@ -536,7 +536,7 @@ export function BattleView({ gs, upd, user, isGm }) {
   );
 }
 
-export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
+export function BonusPhaseView({ gs, upd, user, isGm, animateDice, diceResult, diceAnim }) {
   const bonusStatus = gs.bonusStatus || {};
   const myRemaining = bonusStatus[user?.uid] || 0;
   const myPc = gs.pcs.find(p => p.uid === user?.uid);
@@ -2653,7 +2653,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 }
 
 // ─── RightPanel ───────────────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, diceResult, diceAnim, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
