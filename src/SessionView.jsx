@@ -2064,10 +2064,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 // ─── RightPanel ───────────────────────────────────────────────────
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab]             = useState("progress");
-  const[diceResult, setDiceResult] = useState(null);
+  const [expandedQuests, setExpandedQuests] = useState({});
+  const [diceResult, setDiceResult] = useState(null);
   const [diceAnim, setDiceAnim]   = useState(false);
   const [paperModal, setPaperModal] = useState(null);
-  const[sceneSelect, setSceneSelect] = useState("");
+  const [sceneSelect, setSceneSelect] = useState("");
   const timerRef = useRef(null);
 
   const cycleIdx   = gs.cycleIdx || 0;
@@ -2166,7 +2167,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
         </div>
       </div>
 
-      {gs.currentScene?.phase === "quest_setup" && gs.currentScene?.pcUid !== user.uid && (
+      {gs.currentScene?.phase === "quest_setup" && gs.currentScene?.pcUid !== user.uid && !isGm && (
         <div style={{ padding: "10px", background: "rgba(200,160,64,0.15)", borderBottom: `1px solid ${C.goldDim}`, animation: "fadeUp 0.3s ease" }}>
           <div style={{ fontSize: 10, color: C.gold, marginBottom: 6, textAlign: "center" }}>
             🌟 クエストシーンが開始されました
@@ -2218,42 +2219,68 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
             ) : (
               (gs.quests ||[]).map(q => {
-                const isReadyToSolve = (q.clues || 0) >= (q.level || 1);
+                const isExpanded = expandedQuests[q.id];
+                const isReadyToSolve = !q.solved && (q.clues || 0) >= q.level;
+                
+                const toggleExpand = () => {
+                  setExpandedQuests(prev => ({ ...prev, [q.id]: !prev[q.id] }));
+                };
 
                 return (
-                  <div key={q.id || q.name} style={{ 
-                    padding: "6px 8px", marginBottom: 4, 
-                    background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", 
-                    border: `1px solid ${q.solved ? "#1b5e20" : isReadyToSolve ? C.gold : C.border}`, 
-                    borderRadius: 3 
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : C.gold, textDecoration: q.solved ? "line-through" : "none" }}>
-                        【Lv.{q.level}】{q.name}
-                      </span>
+                  <div key={q.id || q.name} style={{ marginBottom: 4, background: q.solved ? "rgba(27,94,32,0.08)" : "rgba(255,255,255,0.02)", border: `1px solid ${q.solved ? "#1b5e20" : isReadyToSolve ? C.goldDim : C.border}`, borderRadius: 3, overflow: "hidden" }}>
+                    
+                    <div 
+                      onClick={toggleExpand}
+                      style={{ padding: "6px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "background 0.2s" }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    >
+                      <div style={{ fontSize: 8, color: C.textFaint }}>{isExpanded ? "▼" : "▶"}</div>
+                      
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 11, color: q.solved ? "#4caf50" : isReadyToSolve ? C.gold : C.text, textDecoration: q.solved ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            【Lv.{q.level}】{q.name}
+                          </span>
+                          {isReadyToSolve && <span style={{ fontSize: 8, color: C.gold, animation: "fadeUp 0.5s ease infinite alternate" }}>✨</span>}
+                        </div>
+                        
+                        {!q.solved && (
+                          <div style={{ fontSize: 8, color: isReadyToSolve ? C.gold : "#00bcd4", marginTop: 1 }}>
+                            {isReadyToSolve ? "調査完了：解決可能" : `💡 手がかり: ${q.clues || 0}/${q.level}`}
+                          </div>
+                        )}
+                      </div>
+
                       {isGm && (
-                        <button onClick={() => upd(p => {
-                          const isNowSolved = !q.solved;
-                          const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
-                          return { ...p, quests: newQuests };
-                        })} style={btnSmall}> {q.solved ? "↩" : "✓"} </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            upd(p => {
+                              const isNowSolved = !q.solved;
+                              const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
+                              return { ...p, quests: newQuests };
+                            });
+                          }} 
+                          style={{ width: 18, height: 18, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0, flexShrink: 0 }}
+                        >
+                          {q.solved ? "↩" : "✓"}
+                        </button>
                       )}
                     </div>
-                    
-                    <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>{q.summary}</div>
 
-                    {!q.solved && (
-                      <div style={{ fontSize: 9, color: isReadyToSolve ? C.gold : "#00bcd4", marginTop: 4, fontWeight: isReadyToSolve ? "bold" : "normal" }}>
-                        {isReadyToSolve ? "✨ 調査完了：解決可能です" : `💡 手がかり: ${q.clues || 0} / ${q.level}`}
-                      </div>
-                    )}
-
-                    {(isReadyToSolve || q.solved || isGm) && (
-                      <div style={{ marginTop: 6, padding: "4px 6px", background: "rgba(200,160,64,0.05)", borderRadius: 2, borderLeft: `2px solid ${C.goldDim}` }}>
-                        <div style={{ fontSize: 8, color: C.goldDim, letterSpacing: 1 }}>真相 / 解決場所</div>
-                        <div style={{ fontSize: 9, color: C.text, marginTop: 2, whiteSpace: "pre-wrap" }}>{q.truth || "（真相なし）"}</div>
-                        {q.location && (
-                          <div style={{ fontSize: 9, color: "#90caf9", marginTop: 2 }}>📍 解決場所: {getSpot(q.location)?.name || `スポット[${q.location}]`}</div>
+                    {isExpanded && (
+                      <div style={{ padding: "0 8px 8px 22px", borderTop: "1px solid rgba(255,255,255,0.03)", animation: "fadeUp 0.2s ease" }}>
+                        <div style={{ fontSize: 9, color: C.textDim, marginTop: 6, lineHeight: 1.4 }}>{q.summary}</div>
+                        
+                        {(isReadyToSolve || q.solved || isGm) && (
+                          <div style={{ marginTop: 6, padding: "4px 6px", background: "rgba(200,160,64,0.05)", borderRadius: 2, borderLeft: `2px solid ${C.goldDim}` }}>
+                            <div style={{ fontSize: 8, color: C.goldDim, letterSpacing: 1, fontWeight: "bold" }}>真相 / 解決場所</div>
+                            <div style={{ fontSize: 9, color: C.text, marginTop: 2, whiteSpace: "pre-wrap" }}>{q.truth || "（真相なし）"}</div>
+                            {q.location && (
+                              <div style={{ fontSize: 9, color: "#90caf9", marginTop: 2 }}>📍 解決場所: {getSpot(q.location)?.name || `スポット[${q.location}]`}</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
@@ -2261,6 +2288,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 );
               })
             )}
+
             {!isIntro && (gs.clues ||[]).length > 0 && (
               <>
                 <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
