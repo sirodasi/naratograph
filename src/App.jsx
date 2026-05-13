@@ -449,7 +449,8 @@ function SessionApp({ roomCode, user }) {
             resources: {
               残り人数: { cur: enemy.life, max: enemy.life },
               スペルカード: { cur: enemy.spellcard, max: 9 },
-              攻撃力: { cur: enemy.attack, max: 99 }
+              攻撃力: { cur: enemy.attack, max: 99 },
+              グレイズ: { cur: 0, max: 5 }
             },
             ds: { name: enemy.dsName || enemy.dsCustomName, desc: enemy.dsDesc },
             spellCards: [

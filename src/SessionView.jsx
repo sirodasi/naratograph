@@ -397,6 +397,22 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const handleRecovery = (isPc, targetCellNum) => {
+    const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
+    const nextPhase = isPc ? "pc_shot_intro" : "round_end_check";
+
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        positions: { ...p.battle.positions, [combatantId]: targetCellNum },
+        phase: nextPhase,
+        currentEvadeDice: isPc ? 3 : p.battle.currentEvadeDice
+      },
+      log: [`✨ ${isPc ? pcs.find(x => x.uid === combatantId)?.charName : npcs.find(n => n.id === combatantId)?.name} は ${targetCellNum}番マスに復帰した。`, ...p.log]
+    }));
+  };
+
   const applyHit = (isPc, targetId) => {
     upd(p => {
       const target = isPc ? p.pcs.find(x => x.uid === targetId) : p.battle.participants.npcs.find(n => n.id === targetId);
@@ -455,19 +471,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
   const applyPcHit = (pcUid) => applyHit(true, pcUid);
   const applyNpcHit = (npcId) => applyHit(false, npcId);
-
-  const handleRecovery = (pcUid, targetCellNum) => {
-    upd(p => ({
-      ...p,
-      battle: {
-        ...p.battle,
-        positions: { ...p.battle.positions, [pcUid]: targetCellNum },
-        phase: "pc_shot_intro", 
-        currentEvadeDice: 3
-      },
-      log: [`✨ ${pcs.find(x => x.uid === pcUid)?.charName} は ${targetCellNum}番マスに復帰した。`, ...p.log]
-    }));
-  };
 
   const handleCleanup = () => {
     upd(p => {
@@ -702,7 +705,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
               highlightCells={highlights}
               onCellClick={(num) => {
                 if (isRecovery) {
-                  upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [n.id]: num }, phase: "round_end_check" } }));
+                  handleRecovery(false, num);
                 } else if (isEvadeMove) {
                   handleEvadeMove(false, num);
                 }
@@ -807,7 +810,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           </div>
         )}
 
-        {b.phase === "pc_hit_recovery" && (
+        {(b.phase === "pc_hit_recovery" || b.phase === "npc_hit_recovery") && (
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
             <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>復帰位置を選択</div>
             <div style={{ color: "#fff", fontSize: 10 }}>好きなマスをクリックして復帰してください</div>
@@ -890,9 +893,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           </div>
         )}
 
-        {(b.phase === "npc_hit_check_safe" || b.phase === "npc_evade_done" || b.phase === "npc_dropout_done") && (
+        {b.phase === "round_end_check" && (
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
-            <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 12 }}>ラウンド終了</div>
+            <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了確認</div>
+            <div style={{ color: "#fff", fontSize: 11, marginBottom: 12 }}>敵の回避に成功しました。このラウンドを終了して次に進みます。</div>
             {isGm && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
