@@ -282,6 +282,36 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const executePcShot = () => {
+    const attacker = pcs.find(p => p.uid === b.pcCombatant);
+    const bonus = b.supportDice || 0;
+    const totalDice = attacker.resources.攻撃力.cur + bonus;
+
+    animateDice(totalDice, "PCショット", (results) => {
+      upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
+      applyShot(b.npcCombatant, results);
+    });
+  };
+
+  const handleUseSpell = (spellName) => {
+    upd(p => {
+      const pc = p.pcs.find(x => x.uid === b.pcCombatant);
+      if (pc.resources.スペルカード?.cur <= 0) return p;
+
+      const nextPcs = p.pcs.map(x => x.uid === b.pcCombatant 
+        ? { ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: x.resources.スペルカード?.cur - 1 } } }
+        : x
+      );
+
+      return {
+        ...p,
+        pcs: nextPcs,
+        battle: { ...p.battle, lastSpellUsed: spellName },
+        log: [`🔮 ${pc.charName} のスペルカード：${spellName}！！`, ...p.log]
+      };
+    });
+  };
+
   const executeNpcShot = () => {
     const attacker = npcs.find(n => n.id === b.npcCombatant);
     const bonus = b.supportDice || 0;
@@ -725,6 +755,52 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             <div style={{ color: "#fff", fontSize: 11, marginBottom: 15 }}>{combatantPc?.charName} は戦線から離脱しました...</div>
             {isGm && (
               <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "cleanup" } }))} style={btnFull(C.border, C.border, C.textFaint)}>ラウンド終了処理へ</button>
+            )}
+          </div>
+        )}
+
+        {b.phase === "pc_shot_intro" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 20, borderRadius: 8, border: `2px solid ${C.blue}`, textAlign: "center", animation: "fadeUp 0.8s ease" }}>
+            <div style={{ fontSize: 12, color: C.blue, letterSpacing: 4, marginBottom: 10 }}>PLAYER ATTACK TURN</div>
+            <div style={{ fontSize: 24, color: "#fff", fontWeight: "bold" }}>{combatantPc?.charName}</div>
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
+            {(user.uid === b.pcCombatant || isGm) && (
+              <button 
+                onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_roll" } }))}
+                style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 20 }}
+              >
+                準備完了 🎲
+              </button>
+            )}
+          </div>
+        )}
+
+        {b.phase === "pc_shot_roll" && (
+          <div style={{ background: "rgba(0,0,0,0.9)", padding: 15, borderRadius: 8, border: `1px solid ${C.blueBorder}`, textAlign: "center", width: 260 }}>
+            <div style={{ color: C.blue, fontSize: 11, marginBottom: 4 }}>PC攻撃ステップ</div>
+            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{pcs.find(p => p.uid === b.pcCombatant)?.name} の攻撃</div>
+            
+            {b.supportDice > 0 && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>援護射撃ボーナス: +{b.supportDice}D</div>}
+
+            {(user.uid === b.pcCombatant || isGm) && (
+              <button onClick={executePcShot} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                🎲 ショットを放つ ({combatantPc.resources.攻撃力.cur + (b.supportDice || 0)}D)
+              </button>
+            )}
+          </div>
+        )}
+
+        {b.phase === "pc_shot_after" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center" }}>
+            <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
+            <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>（相手は「かばう」を使用できます）</div>
+            {isGm && (
+              <button 
+                onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "npc_evade_intro", lastSpellUsed: null } }))} 
+                style={btnFull(C.redBg, C.redBorder, C.red)}
+              >
+                NPCの回避ステップへ進む
+              </button>
             )}
           </div>
         )}
@@ -3519,6 +3595,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
                       disabled={b.phase !== "npc_shot_roll" && b.phase !== "pc_shot_roll"}
                       style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
                     >💥 援護射撃</button>
+
                     <button 
                       onClick={() => handleCover(user.uid, b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
                       disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
