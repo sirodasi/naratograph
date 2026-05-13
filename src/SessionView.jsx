@@ -293,6 +293,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const executeNpcShot = () => {
+    const attacker = npcs.find(n => n.id === b.npcCombatant);
+    const bonus = b.supportDice || 0;
+    const totalDice = attacker.resources.攻撃力.cur + bonus;
+
+    animateDice(totalDice, "NPCショット", (results) => {
+      upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
+      applyShot(b.pcCombatant, results);
+    });
+  };
+
   const handleUseSpell = (spellName) => {
     upd(p => {
       const pc = p.pcs.find(x => x.uid === b.pcCombatant);
@@ -309,17 +320,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         battle: { ...p.battle, lastSpellUsed: spellName },
         log: [`🔮 ${pc.charName} のスペルカード：${spellName}！！`, ...p.log]
       };
-    });
-  };
-
-  const executeNpcShot = () => {
-    const attacker = npcs.find(n => n.id === b.npcCombatant);
-    const bonus = b.supportDice || 0;
-    const totalDice = attacker.resources.攻撃力.cur + bonus;
-
-    animateDice(totalDice, "NPCショット", (results) => {
-      upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
-      applyShot(b.pcCombatant, results);
     });
   };
 
@@ -347,6 +347,32 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           ...p,
           battle: { ...p.battle, phase: "pc_hit_check" },
           log: [`💀 ${combatantPc.charName} は回避に失敗... (出目:${res.join(",")})`, ...p.log]
+        }));
+      }
+    });
+  };
+
+  const handleNpcEvadeRoll = () => {
+    const npc = npcs.find(n => n.id === b.npcCombatant);
+    const npcPos = b.positions[b.npcCombatant];
+    const bulletCount = b.grids[b.npcCombatant][npcPos - 1];
+    const targetValue = bulletCount + 3;
+
+    animateDice(3, "NPC回避判定", (res) => {
+      const maxDie = Math.max(...res);
+      const isSuccess = maxDie >= targetValue;
+
+      if (isSuccess) {
+        upd(p => ({
+          ...p,
+          battle: { ...p.battle, phase: "npc_evade_move" },
+          log: [`✨ ${npc.name} は回避に成功！(出目:${res.join(",")})`, ...p.log]
+        }));
+      } else {
+        upd(p => ({
+          ...p,
+          battle: { ...p.battle, phase: "npc_hit_check" },
+          log: [`💀 ${npc.name} は回避に失敗！(出目:${res.join(",")})`, ...p.log]
         }));
       }
     });
@@ -444,6 +470,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const applyNpcHit = (npcId) => {
+    upd(p => {
+      const targetNpc = p.battle.participants.npcs.find(n => n.id === npcId);
+      const newLives = Math.max(0, targetNpc.resources.残り人数.cur - 1);
+      
+      const nextNpcs = p.battle.participants.npcs.map(n => 
+        n.id === npcId ? { ...n, resources: { ...n.resources, 残り人数: { ...n.resources.残り人数, cur: newLives } } } : n
+      );
+
+      return {
+        ...p,
+        battle: {
+          ...p.battle,
+          participants: { ...p.battle.participants, npcs: nextNpcs },
+          grids: { ...p.battle.grids, [npcId]: [0,0,0,0,0,0] }, // 弾幕リセット
+          phase: newLives > 0 ? "npc_hit_recovery" : "npc_dropout"
+        },
+        log: [`💥 ${targetNpc.name} に被弾！ 残り人数: ${newLives}`, ...p.log]
+      };
+    });
+  };
+
   const handleRecovery = (pcUid, targetCellNum) => {
     upd(p => ({
       ...p,
@@ -455,6 +503,40 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
       },
       log: [`✨ ${pcs.find(x => x.uid === pcUid)?.charName} は ${targetCellNum}番マスに復帰した。`, ...p.log]
     }));
+  };
+
+  const handleCleanup = () => {
+    upd(p => {
+      const currentB = p.battle;
+      const nextGrids = {};
+      
+      Object.keys(currentB.grids).forEach(id => {
+        nextGrids[id] = currentB.grids[id].map(val => val >= 3 ? 2 : val === 2 ? 1 : val);
+      });
+
+      const nextActedPcs = [...new Set([...(currentB.actedPcs || []), currentB.pcCombatant])];
+      const nextActedNpcs = [...new Set([...(currentB.actedNpcs || []), currentB.npcCombatant])];
+      
+      return {
+        ...p,
+        battle: {
+          ...currentB,
+          phase: "round_start",
+          round: currentB.round + 1,
+          grids: nextGrids,
+          actedPcs: nextActedPcs,
+          actedNpcs: nextActedNpcs,
+          pcCombatant: null,
+          npcCombatant: null,
+          currentEvadeDice: 3,
+          supportDice: 0,
+          usedIntervention: {},
+          tempSelectedPc: null,
+          tempSelectedNpc: null
+        },
+        log: [`📋 ラウンド ${currentB.round} 終了。弾幕が減衰しました。`, ...p.log]
+      };
+    });
   };
 
   if (b.phase === "setup" && isGm) {
@@ -632,20 +714,39 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
       
       <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 15, flexWrap: "wrap", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
-        {npcs.map(n => (
-          <BattleGrid 
-            key={n.id}
-            name={n.name}
-            isNpc={true}
-            isCombatant={b.npcCombatant === n.id}
-            grid={b.grids?.[n.id]}
-            pos={b.positions?.[n.id]}
-            isDead={n.resources?.残り人数?.cur <= 0}
-            sprite={
-              <div style={{ fontSize: 24 }}>😈</div>
-            }
-          />
-        ))}
+        {npcs.map(n => {
+          const isCombatant = b.npcCombatant === n.id;
+          
+          const isRecovery = b.phase === "npc_hit_recovery" && isCombatant;
+          const isEvadeMove = b.phase === "npc_evade_move" && isCombatant;
+
+          let highlights = [];
+          if (isGm) {
+            if (isRecovery) highlights = [1, 2, 3, 4, 5, 6];
+            else if (isEvadeMove) highlights = ADJACENT_MAP[b.positions[n.id]] || [];
+          }
+
+          return (
+            <BattleGrid 
+              key={n.id}
+              name={n.name}
+              isNpc={true}
+              isCombatant={isCombatant}
+              grid={b.grids?.[n.id]}
+              pos={b.positions?.[n.id]}
+              isDead={n.resources.残り人数?.cur <= 0}
+              highlightCells={highlights}
+              onCellClick={(num) => {
+                if (isRecovery) {
+                  upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [n.id]: num }, phase: "round_end_check" } }));
+                } else if (isEvadeMove) {
+                  upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [n.id]: num }, phase: "round_end_check" } }));
+                }
+              }}
+              sprite={<div style={{ fontSize: 24 }}>👿</div>}
+            />
+          );
+        })}
       </div>
 
       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -801,6 +902,35 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
               >
                 NPCの回避ステップへ進む
               </button>
+            )}
+          </div>
+        )}
+
+        {b.phase === "npc_evade_intro" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center" }}>
+            <div style={{ color: C.red, fontSize: 11, marginBottom: 4 }}>回避ステップ(NPC)</div>
+            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{npcs.find(n => n.id === b.npcCombatant)?.name} の回避</div>
+            <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {b.grids[b.npcCombatant][b.positions[b.npcCombatant]-1] + 3}</div>
+            {isGm && (
+              <button onClick={handleNpcEvadeRoll} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 回避判定 (3D)</button>
+            )}
+          </div>
+        )}
+
+        {b.phase === "npc_hit_check" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
+            <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>当たり判定ステップ(NPC)</div>
+            {isGm && (
+              <button onClick={() => applyNpcHit(b.npcCombatant)} style={btnFull(C.redBg, C.redBorder, C.red)}>ダメージ適用</button>
+            )}
+          </div>
+        )}
+
+        {(b.phase === "npc_hit_check_safe" || b.phase === "npc_evade_done" || b.phase === "npc_dropout_done") && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
+            <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 12 }}>ラウンド終了</div>
+            {isGm && (
+              <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
           </div>
         )}
