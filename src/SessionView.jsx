@@ -2004,10 +2004,19 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   const s1 = getSpotByD66(res[0], res[1], SPOTS);
                   const s2 = getSpotByD66(res[2], res[3], SPOTS);
                   upd(p => {
-                    const newQuests = p.quests.map(x => x.id === sc.questId ? { ...x, solved: true } : x);
+                    let nextQuests = p.quests.map(x => x.id === sc.questId ? { ...x, solved: true } : x);
+
+                    (p.scenarioData?.quests || []).forEach(scQ => {
+                      if (scQ.unlockType === "quest" && scQ.unlockQuestId === sc.questId) {
+                        if (!nextQuests.find(nq => nq.id === scQ.id)) {
+                          nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
+                        }
+                      }
+                    });
+
                     return {
                       ...p,
-                      quests: newQuests,
+                      quests: nextQuests,
                       clues: [...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
                       actedPcs: [...(p.actedPcs || []), pc.uid],
                       currentScene: null,
@@ -2258,12 +2267,21 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                             e.stopPropagation();
                             upd(p => {
                               const isNowSolved = !q.solved;
-                              const newQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
-                              return { ...p, quests: newQuests };
+                              let nextQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
+                              if (isNowSolved) {
+                                (p.scenarioData?.quests || []).forEach(scQ => {
+                                  if (scQ.unlockType === "quest" && scQ.unlockQuestId === q.id) {
+                                    if (!nextQuests.find(nq => nq.id === scQ.id)) {
+                                      nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
+                                    }
+                                  }
+                                });
+                              }
+                              return { ...p, quests: nextQuests };
                             });
-                          }} 
-                          style={{ width: 18, height: 18, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0, flexShrink: 0 }}
-                        >
+                          }}
+                          style={{ width: 20, height: 20, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: q.solved ? C.red : "#4caf50", cursor: "pointer", borderRadius: 2, fontSize: 12, padding: 0 }}
+                          >
                           {q.solved ? "↩" : "✓"}
                         </button>
                       )}
