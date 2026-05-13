@@ -897,7 +897,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
             <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了確認</div>
             <div style={{ color: "#fff", fontSize: 11, marginBottom: 12 }}>敵の回避に成功しました。このラウンドを終了して次に進みます。</div>
-            {isGm && (
+            {(isGm || user.uid === b.pcCombatant) && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
           </div>
