@@ -338,8 +338,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {(pc.bonds ||[]).length > 0
-                ? pc.bonds.map(b => <span key={b} style={{ padding: "2px 8px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}50`, borderRadius: 10, fontSize: 10, color: C.gold }}>《{b}》</span>)
+              {(pc.bonds || []).length > 0
+                ? pc.bonds.map(b => <span key={b} style={{ padding: "2px 8px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}50`, borderRadius: 10, fontSize: 10, color: C.gold }}>《{b}への絆》</span>)
                 : <span style={{ fontSize: 9, color: "#2a3545" }}>なし</span>
               }
             </div>
@@ -1708,12 +1708,346 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             </div>
           )}
 
-          {sc.phase === "quest_resolve" && (
-            <div style={{ textAlign: "center", color: C.textDim, fontSize: 11 }}>
-              解決処理の実装待ちです...
-              <button onClick={endScene} style={{...btnFull(C.redBg, C.redBorder, C.red), marginTop: 10}}>シーンを強制終了</button>
-            </div>
-          )}
+          {sc.phase === "quest_resolve" && (() => {
+            const q = gs.quests?.find(x => x.id === sc.questId);
+            return (
+              <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+                <div style={{ fontSize: 13, color: C.gold, marginBottom: 8 }}>クエスト「{q?.name}」の解決</div>
+                
+                {isGm && (
+                  <div style={{ marginTop: 16 }}>
+                    {q?.solutionType === "自動解決" && (
+                      <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>
+                        自動解決でクリア！
+                      </button>
+                    )}
+                    {q?.solutionType === "行為判定" && (
+                      <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_roll", rolls: {} } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                        行為判定を開始する
+                      </button>
+                    )}
+                    {q?.solutionType === "弾幕ごっこ" && (
+                      <div style={{ fontSize: 11, color: C.red }}>弾幕ごっこは未実装です</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {sc.phase === "quest_roll" && (() => {
+            const q = gs.quests?.find(x => x.id === sc.questId);
+            const pcsHere = gs.pcs.filter(p => p.currentSpot === sc.questLocation);
+            const myPc = pcsHere.find(p => p.uid === user?.uid);
+            
+            const myRoll = sc.rolls?.[user?.uid];
+            const anySuccess = Object.values(sc.rolls || {}).some(r => r.success);
+            const allRolled = pcsHere.every(p => sc.rolls?.[p.uid]);
+            
+            const hasTag = myPc && q?.specifiedTag && q.specifiedTag.split(/[、,]/).some(t => (myPc.tags ||[]).includes(t.trim()) || myPc.charName === t.trim() || myPc.skillName === t.trim());
+            const baseDice = 2 + (hasTag ? 1 : 0);
+            const myDiceCount = sc.diceCounts?.[user?.uid] || baseDice;
+
+            return (
+              <div style={{ animation: "fadeUp 0.3s ease" }}>
+                <div style={{ textAlign: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: C.gold }}>クエスト判定（目標値: 4）</div>
+                  {q?.specifiedTag && <div style={{ fontSize: 10, color: C.textDim }}>指定タグ: {q.specifiedTag} {hasTag && <span style={{color: C.green}}>ボーナス適用！</span>}</div>}
+                </div>
+
+                <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
+                  {pcsHere.map(p => {
+                    const r = sc.rolls?.[p.uid];
+                    return (
+                      <div key={p.uid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
+                        <div style={{ fontSize: 11, color: C.text }}>{p.charName}</div>
+                        <div style={{ fontSize: 11, color: r ? (r.success ? C.green : C.red) : C.textFaint }}>
+                          {r ? (r.success ? `成功 (${r.dice.join(", ")})` : `失敗 (${r.dice.join(", ")})`) : "待機中..."}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {!myRoll && myPc && !anySuccess && (
+                  <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 6, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 11, color: C.text, marginBottom: 8 }}>あなたの判定ダイス: <span style={{color:C.gold, fontSize:14}}>{myDiceCount}</span> 個</div>
+                    
+                    <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 12 }}>
+                      <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts||{}), [user.uid]: Math.max(1, myDiceCount - 1) } } }))} style={btnSmall}>-</button>
+                      <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts||{}), [user.uid]: myDiceCount + 1 } } }))} style={btnSmall}>+</button>
+                    </div>
+
+                    {myPc.items?.["小銭"] > 0 && !(myPc.badStatus ||[]).includes("二日酔い") && (
+                      <button onClick={() => {
+                        upd(p => {
+                          const nextCount = myDiceCount + 1;
+                          const nextPc = { ...myPc, items: { ...myPc.items, 小銭: myPc.items["小銭"] - 1 } };
+                          return {
+                            ...p,
+                            pcs: p.pcs.map(x => x.uid === myPc.uid ? nextPc : x),
+                            currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts||{}), [user.uid]: nextCount } },
+                            log: [`${myPc.charName} は小銭を使用し、クエスト判定のダイスを増やした！`, ...p.log]
+                          };
+                        });
+                      }} style={{ ...btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold, { marginBottom: 10 }) }}>
+                        💰 小銭を使用する（残り: {myPc.items["小銭"]}）
+                      </button>
+                    )}
+
+                    <button onClick={() => animateDice(myDiceCount, "クエスト判定", res => {
+                      const max = Math.max(...res);
+                      const isFumble = res.every(d => d === 1);
+                      const success = max >= 4 && !isFumble;
+                      upd(p => ({
+                        ...p,
+                        currentScene: { ...p.currentScene, rolls: { ...(p.currentScene.rolls||{}), [user.uid]: { dice: res, success } } },
+                        log: [`${myPc.charName} はクエスト「${q?.name}」の判定で ${res.join(", ")} を出し、${success ? "成功" : "失敗"}した！`, ...p.log]
+                      }));
+                    })} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                      🎲 行為判定を行う
+                    </button>
+                  </div>
+                )}
+
+                {anySuccess && (isGm || pc.uid === user?.uid) && (
+                  <div style={{ textAlign: "center", marginTop: 16 }}>
+                    <div style={{ fontSize: 13, color: C.green, marginBottom: 8 }}>✨ 判定成功！</div>
+                    <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>
+                      解決処理へ進む
+                    </button>
+                  </div>
+                )}
+
+                {allRolled && !anySuccess && (
+                  <div style={{ textAlign: "center", marginTop: 16 }}>
+                    <div style={{ fontSize: 13, color: C.red, marginBottom: 8 }}>💀 全員失敗...</div>
+                    {(pc.uid === user?.uid) && (
+                      <button onClick={() => animateDice(1, "ペナルティ表", res => {
+                        upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_penalty", penaltyDice: res[0] } }));
+                      })} style={btnFull(C.redBg, C.redBorder, C.red)}>
+                        🎲 ペナルティ表を振る
+                      </button>
+                    )}
+                    {pc.uid !== user?.uid && <div style={{ fontSize: 10, color: C.textDim }}>シーンプレイヤーがペナルティ表を振ります...</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {sc.phase === "quest_penalty" && (() => {
+            const pcsHere = gs.pcs.filter(p => p.currentSpot === sc.questLocation);
+            const myPc = pcsHere.find(p => p.uid === user?.uid);
+            const d = sc.penaltyDice;
+            const decisions = sc.penaltyDecisions || {};
+
+            const allDecided = pcsHere.every(p => decisions[p.uid] !== undefined);
+            const anyPaid = Object.values(decisions).some(v => v === true);
+
+            const [selectedTarget, setSelectedTarget] = useState("");
+
+            const makeDecision = (paid, updatedPc = null) => {
+              upd(p => {
+                const nextPcs = updatedPc ? p.pcs.map(x => x.uid === user.uid ? updatedPc : x) : p.pcs;
+                return {
+                  ...p,
+                  pcs: nextPcs,
+                  currentScene: { 
+                    ...p.currentScene, 
+                    penaltyDecisions: { ...(p.currentScene.penaltyDecisions || {}), [user.uid]: paid } 
+                  }
+                };
+              });
+            };
+            
+            const pData = {
+              1: { title: "うぷ。頑張りすぎてしまったかも。", desc: "シーンプレイヤーのPCはランダムな【変調】1つを獲得する。\nその後、クエストは解決する。" },
+              2: { title: "うっかりパワーを使いすぎてしまった。", desc: "シーンプレイヤーのPCは【霊力】を「D6点」消費する。\nその後、クエストは解決する。" },
+              3: { title: "なかなかうまくいかない時って、一気に気分が萎えてしまうよね。", desc: "このシーンに登場しているPC全員の【やる気】が「1点」になる。\nその後、クエストは解決する。" },
+              4: { title: "協力プレイでなんとか解決。", desc: "このシーンに登場しているPCは、自身の獲得している絆を1つ選んで消費できる。誰か一人が支払えばクエストは解決する。" },
+              5: { title: "誰か、アレを持ってない！？", desc: "このシーンに登場しているPCは、所持している任意のアイテム1つを失うことができる。誰か一人が支払えばクエストは解決する。" },
+              6: { title: "どうあがいても無理だった...", desc: "このクエストは解決されない。" }
+            }[d];
+
+            const applyAutoPenalty = () => {
+              if (d === 1) {
+                animateDice(1, "変調決定", res => {
+                  const bsName = BAD_STATUS_TABLE[res[0]].name;
+                  upd(p => {
+                    const newBs = Array.from(new Set([...(pc.badStatus || []), bsName]));
+                    const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: bsName === "だるい" ? 1 : x.resources.やる気.cur } } } : x);
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true }, log: [`${pc.charName} はペナルティで変調《${bsName}》を獲得した。`, ...p.log] };
+                  });
+                });
+              } else if (d === 2) {
+                animateDice(1, "霊力減少", res => {
+                  const dmg = res[0];
+                  upd(p => {
+                    const r = pc.resources.霊力 || { cur: 0, max: 20 };
+                    const nextRei = Math.max(0, r.cur - dmg);
+                    const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, resources: { ...x.resources, 霊力: { ...r, cur: nextRei }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) } } } : x);
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true }, log: [`${pc.charName} はペナルティで霊力を ${dmg} 消費した。`, ...p.log] };
+                  });
+                });
+              } else if (d === 3) {
+                upd(p => {
+                  const uidsHere = pcsHere.map(x => x.uid);
+                  const newPcs = p.pcs.map(x => uidsHere.includes(x.uid) ? { ...x, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: 1 } } } : x);
+                  return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true }, log: [`ペナルティにより全員のやる気が 1 になった。`, ...p.log] };
+                });
+              }
+            };
+
+            return (
+              <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>ペナルティ表: [{d}]</div>
+                <div style={{ fontSize: 13, color: C.red, marginBottom: 8, fontWeight: "bold" }}>{pData.title}</div>
+                <div style={{ fontSize: 10, color: C.text, whiteSpace: "pre-wrap", background: "rgba(192,57,43,0.15)", border: `1px solid ${C.redBorder}`, padding: 10, borderRadius: 4, marginBottom: 16 }}>
+                  {pData.desc}
+                </div>
+
+                {isMyTurn && [1, 2, 3].includes(d) && (
+                  <button onClick={applyAutoPenalty} style={btnFull(C.goldBg, C.goldDim, C.gold)}>ペナルティを受けて解決する</button>
+                )}
+
+                {[4, 5].includes(d) && !allDecided && (
+                  <div style={{ background: "rgba(0,0,0,0.2)", padding: 10, borderRadius: 6, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 10, color: C.gold, marginBottom: 10, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>
+                      全員の回答を待っています...
+                    </div>
+                    
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginBottom: 12 }}>
+                      {pcsHere.map(p => (
+                        <div key={p.uid} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 10, background: decisions[p.uid] === undefined ? "rgba(255,255,255,0.05)" : decisions[p.uid] ? C.greenBg : C.redBg, color: decisions[p.uid] === undefined ? C.textFaint : decisions[p.uid] ? C.green : C.red, border: `1px solid ${decisions[p.uid] === undefined ? C.border : decisions[p.uid] ? C.greenBorder : C.redBorder}` }}>
+                          {p.charName}: {decisions[p.uid] === undefined ? "考え中" : decisions[p.uid] ? "支払う" : "パス"}
+                        </div>
+                      ))}
+                    </div>
+
+                    {myPc && decisions[user.uid] === undefined && (
+                      <div style={{ animation: "fadeUp 0.2s ease" }}>
+                        {d === 4 && (
+                          <>
+                            <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} style={{ ...iStyle, marginBottom: 8, fontSize: 11 }}>
+                              <option value="">消費する絆を選択...</option>
+                              {(myPc.bonds || []).map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                            <button 
+                              disabled={!selectedTarget} 
+                              onClick={() => {
+                                const nextPc = { ...myPc, bonds: myPc.bonds.filter(b => b !== selectedTarget) };
+                                makeDecision(true, nextPc);
+                                upd(p => ({ ...p, log: [`${myPc.charName} は《${selectedTarget}への絆》を捧げて協力した！`, ...p.log] }));
+                              }}
+                              style={btnFull(selectedTarget ? C.greenBg : "rgba(255,255,255,0.05)", C.greenBorder, selectedTarget ? C.green : C.textFaint, { marginBottom: 6 })}
+                            >
+                              絆を消費して協力する
+                            </button>
+                          </>
+                        )}
+                        {d === 5 && (
+                          <>
+                            <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} style={{ ...iStyle, marginBottom: 8, fontSize: 11 }}>
+                              <option value="">消費するアイテムを選択...</option>
+                              {Object.entries(myPc.items || {}).filter(([_, count]) => count > 0).map(([name]) => <option key={name} value={name}>{name}</option>)}
+                            </select>
+                            <button 
+                              disabled={!selectedTarget} 
+                              onClick={() => {
+                                const nextPc = { ...myPc, items: { ...myPc.items, [selectedTarget]: myPc.items[selectedTarget] - 1 } };
+                                makeDecision(true, nextPc);
+                                upd(p => ({ ...p, log: [`${myPc.charName} は【${selectedTarget}】を差し出して協力した！`, ...p.log] }));
+                              }}
+                              style={btnFull(selectedTarget ? C.greenBg : "rgba(255,255,255,0.05)", C.greenBorder, selectedTarget ? C.green : C.textFaint, { marginBottom: 6 })}
+                            >
+                              アイテムを消費して協力する
+                            </button>
+                          </>
+                        )}
+                        <button onClick={() => makeDecision(false)} style={btnFull(C.redBg, C.redBorder, C.red)}>パスする</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {[4, 5].includes(d) && allDecided && (
+                  <div style={{ animation: "fadeUp 0.3s ease" }}>
+                    <div style={{ fontSize: 16, color: anyPaid ? C.green : C.red, fontWeight: "bold", marginBottom: 12 }}>
+                      {anyPaid ? "✨ 協力により解決！" : "💀 誰も協力できず解決失敗..."}
+                    </div>
+                    {isMyTurn && (
+                      <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: anyPaid } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                        結果を確定して進む
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {isMyTurn && d === 6 && (
+                  <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: false } }))} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>クリアできずに終了する</button>
+                )}
+                
+                {(!isMyTurn && ([1, 2, 3, 6].includes(d) || allDecided)) && (
+                  <div style={{ fontSize: 10, color: C.textDim }}>シーンプレイヤーが処理を確定させています...</div>
+                )}
+              </div>
+            );
+          })()}
+
+          {sc.phase === "quest_done" && (() => {
+            const q = gs.quests?.find(x => x.id === sc.questId);
+            
+            const finishQuest = () => {
+              if (sc.isSuccess) {
+                animateDice(4, "手がかり2つ配置", res => {
+                  const s1 = getSpotByD66(res[0], res[1], SPOTS);
+                  const s2 = getSpotByD66(res[2], res[3], SPOTS);
+                  upd(p => {
+                    const newQuests = p.quests.map(x => x.id === sc.questId ? { ...x, solved: true } : x);
+                    return {
+                      ...p,
+                      quests: newQuests,
+                      clues: [...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
+                      actedPcs: [...(p.actedPcs || []), pc.uid],
+                      currentScene: null,
+                      log: [
+                        `手がかりを [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に配置した`,
+                        `✨ クエスト「${q?.name}」を解決した！`,
+                        `${pc.charName} のシーンを終了した`,
+                        ...p.log
+                      ]
+                    };
+                  });
+                });
+              } else {
+                upd(p => ({
+                  ...p,
+                  actedPcs: [...(p.actedPcs || []), pc.uid],
+                  currentScene: null,
+                  log: [`クエスト「${q?.name}」は解決できなかった...`, `${pc.charName} のシーンを終了した`, ...p.log]
+                }));
+              }
+            };
+
+            return (
+              <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+                {sc.isSuccess ? (
+                  <>
+                    <div style={{ fontSize: 16, color: C.gold, marginBottom: 8, fontWeight: "bold" }}>✨ クエスト解決！</div>
+                    <div style={{ fontSize: 11, color: C.textDim, marginBottom: 16 }}>報酬としてランダムなスポット2箇所に手がかりが配置されます。</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 16, color: C.red, marginBottom: 16, fontWeight: "bold" }}>クエスト解決ならず...</div>
+                )}
+                {(isGm || pc.uid === user?.uid) && (
+                  <button onClick={finishQuest} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                    {sc.isSuccess ? "🎲 手がかりを配置してシーン終了" : "シーンを終了する"}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           {sc.phase === "action_done" && (
             <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
