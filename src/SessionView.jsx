@@ -1191,8 +1191,43 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
     upd(p => {
       const spotId   = pc.currentSpot;
       const newClues = (p.clues ||[]).filter(c => c !== spotId);
-      const newQuests = p.quests.map(q => q.id === questId ? { ...q, clues: (q.clues || 0) + 1 } : q);
-      return { ...p, clues: newClues, quests: newQuests, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.charName} は [${spotId}] で手がかりを獲得し、クエスト「${newQuests.find(q => q.id === questId)?.name}」に配置した`, ...p.log] };
+
+      let resolvedAuto = false;
+      let nextQuests = p.quests.map(q => {
+        if (String(q.id) === String(questId)) {
+          const updatedClues = (q.clues || 0) + 1;
+          const isReady = updatedClues >= q.level;
+          if (q.solutionType === "自動解決" && isReady) {
+            resolvedAuto = true;
+            return { ...q, clues: updatedClues, solved: true };
+          }
+          return { ...q, clues: updatedClues };
+        }
+        return q;
+      });
+
+      if (resolvedAuto) {
+        const allScenarioQuests = p.scenarioData?.quests || [];
+        allScenarioQuests.forEach(scQ => {
+          if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(questId)) {
+            if (!nextQuests.find(nq => String(nq.id) === String(scQ.id))) {
+              nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
+            }
+          }
+        });
+      }
+
+      const targetQName = nextQuests.find(q => String(q.id) === String(questId))?.name;
+      const logMsg = `${pc.charName} は [${spotId}] で手がかりを獲得し、クエスト「${targetQName}」に配置した` + 
+        (resolvedAuto ? "。クエストが自動解決されました！" : "");
+
+      return { 
+        ...p, 
+        clues: newCluesOnSpots, 
+        quests: nextQuests, 
+        currentScene: { ...p.currentScene, phase: "action_done" }, 
+        log: [logMsg, ...p.log] 
+      };
     });
   };
 
