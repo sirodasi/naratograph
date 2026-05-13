@@ -274,27 +274,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
-  const executePcShot = () => {
-    const attacker = pcs.find(p => p.uid === b.pcCombatant);
+  const executeShot = (isPc) => {
+    const attacker = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
     const bonus = b.supportDice || 0;
     const totalDice = attacker.resources.攻撃力.cur + bonus;
 
-    animateDice(totalDice, "PCショット", (results) => {
+    animateDice(totalDice, `${isPc ? "PC" : "NPC"}ショット`, (results) => {
       upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
-      applyShot(b.npcCombatant, results);
+      applyShot(isPc ? b.npcCombatant : b.pcCombatant, results);
     });
   };
 
-  const executeNpcShot = () => {
-    const attacker = npcs.find(n => n.id === b.npcCombatant);
-    const bonus = b.supportDice || 0;
-    const totalDice = attacker.resources.攻撃力.cur + bonus;
-
-    animateDice(totalDice, "NPCショット", (results) => {
-      upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
-      applyShot(b.pcCombatant, results);
-    });
-  };
+  const executePcShot = () => executeShot(true);
+  const executeNpcShot = () => executeShot(false);
 
   const handleUseSpell = (spellName) => {
     upd(p => {
@@ -320,55 +312,36 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   const danmakuAtPos = b.grids?.[b.pcCombatant]?.[currentPos - 1] || 0;
   const evadeTarget = danmakuAtPos + 3;
 
-  const handleEvadeRoll = () => {
-    const diceCount = b.currentEvadeDice ?? 3;
+  const handleEvadeRoll = (isPc) => {
+    const combatant = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
+    const pos = b.positions[isPc ? b.pcCombatant : b.npcCombatant];
+    const bulletCount = b.grids[isPc ? b.pcCombatant : b.npcCombatant][pos - 1];
+    const targetValue = bulletCount + 3;
+    const diceCount = isPc ? (b.currentEvadeDice ?? 3) : 3;
     
-    animateDice(diceCount, "回避判定", (res) => {
+    animateDice(diceCount, `${isPc ? "PC" : "NPC"}回避判定`, (res) => {
       const maxDie = Math.max(...res);
-      const isSuccess = maxDie >= evadeTarget;
-      const isFumble = res.every(d => d === 1);
+      const isSuccess = maxDie >= targetValue;
+      const isFumble = isPc && res.every(d => d === 1);
 
       if (isSuccess && !isFumble) {
         upd(p => ({
           ...p,
-          battle: { ...p.battle, phase: "pc_evade_move" },
-          log: [`✨ ${combatantPc.charName} は回避判定に成功！(出目:${res.join(",")}) 移動先を選択してください。`, ...p.log]
+          battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" },
+          log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")}) ${isPc ? "移動先を選択してください。" : ""}`, ...p.log]
         }));
       } else {
         upd(p => ({
           ...p,
-          battle: { ...p.battle, phase: "pc_hit_check" },
-          log: [`💀 ${combatantPc.charName} は回避に失敗... (出目:${res.join(",")})`, ...p.log]
+          battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check" },
+          log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})`, ...p.log]
         }));
       }
     });
   };
 
-  const handleNpcEvadeRoll = () => {
-    const npc = npcs.find(n => n.id === b.npcCombatant);
-    const npcPos = b.positions[b.npcCombatant];
-    const bulletCount = b.grids[b.npcCombatant][npcPos - 1];
-    const targetValue = bulletCount + 3;
-
-    animateDice(3, "NPC回避判定", (res) => {
-      const maxDie = Math.max(...res);
-      const isSuccess = maxDie >= targetValue;
-
-      if (isSuccess) {
-        upd(p => ({
-          ...p,
-          battle: { ...p.battle, phase: "npc_evade_move" },
-          log: [`✨ ${npc.name} は回避に成功！(出目:${res.join(",")})`, ...p.log]
-        }));
-      } else {
-        upd(p => ({
-          ...p,
-          battle: { ...p.battle, phase: "npc_hit_check" },
-          log: [`💀 ${npc.name} は回避に失敗！(出目:${res.join(",")})`, ...p.log]
-        }));
-      }
-    });
-  };
+  const handlePcEvadeRoll = () => handleEvadeRoll(true);
+  const handleNpcEvadeRoll = () => handleEvadeRoll(false);
 
   const handleEvadeMove = (targetCellNum) => {
     const pcUid = b.pcCombatant;
@@ -416,73 +389,59 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
-  const applyPcHit = (pcUid) => {
+  const applyHit = (isPc, targetId) => {
     upd(p => {
-      const currentPc = p.pcs.find(x => x.uid === pcUid);
-      const newLives = Math.max(0, (currentPc.resources.残り人数?.cur || 0) - 1);
+      const target = isPc ? p.pcs.find(x => x.uid === targetId) : p.battle.participants.npcs.find(n => n.id === targetId);
+      const newLives = Math.max(0, (target.resources.残り人数?.cur || 0) - 1);
       
-      let nextRei = currentPc.resources.霊力?.cur || 0;
-      let nextSpe = currentPc.resources.スペルカード?.cur || 0;
+      let nextRei = target.resources.霊力?.cur || 0;
+      let nextSpe = target.resources.スペルカード?.cur || 0;
+      let nextAtk = target.resources.攻撃力?.cur || 1;
 
-      if (newLives === 1) {
+      if (isPc && newLives === 1) {
         nextRei = 20;
         nextSpe = Math.min(9, nextSpe + 1);
+        nextAtk = 1 + Math.floor(nextRei / 5);
       }
 
-      const nextPcs = p.pcs.map(pc => {
-        if (pc.uid !== pcUid) return pc;
-        return {
-          ...pc,
-          resources: {
-            ...pc.resources,
-            残り人数: { ...pc.resources.残り人数, cur: newLives },
-            霊力: { ...pc.resources.霊力, cur: nextRei },
-            スペルカード: { ...pc.resources.スペルカード, cur: nextSpe },
-            攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) }
-          }
-        };
-      });
+      const updatedTarget = {
+        ...target,
+        resources: {
+          ...target.resources,
+          残り人数: { ...target.resources.残り人数, cur: newLives },
+          ...(isPc ? {
+            霊力: { ...target.resources.霊力, cur: nextRei },
+            スペルカード: { ...target.resources.スペルカード, cur: nextSpe },
+            攻撃力: { ...target.resources.攻撃力, cur: nextAtk }
+          } : {})
+        }
+      };
+
+      const nextEntities = isPc 
+        ? p.pcs.map(pc => pc.uid === targetId ? updatedTarget : pc)
+        : p.battle.participants.npcs.map(n => n.id === targetId ? updatedTarget : n);
 
       const clearedGrid = [0, 0, 0, 0, 0, 0];
 
       return {
         ...p,
-        pcs: nextPcs,
+        ...(isPc ? { pcs: nextEntities } : { battle: { ...p.battle, participants: { ...p.battle.participants, npcs: nextEntities } } }),
         battle: {
           ...p.battle,
-          grids: { ...p.battle.grids, [pcUid]: clearedGrid },
-          phase: newLives > 0 ? "pc_hit_recovery" : "pc_dropout" 
+          grids: { ...p.battle.grids, [targetId]: clearedGrid },
+          phase: isPc ? (newLives > 0 ? "pc_hit_recovery" : "pc_dropout") : (newLives > 0 ? "npc_hit_recovery" : "npc_dropout")
         },
         log: [
-          `💥 ${currentPc.charName} は被弾した！ 残り人数: ${newLives}`,
-          newLives === 1 ? `🔥 霊力とスペルカードが増加した！` : null,
+          `💥 ${target.charName || target.name} は被弾した！ 残り人数: ${newLives}`,
+          isPc && newLives === 1 ? `🔥 霊力とスペルカードが増加した！` : null,
           ...p.log
         ].filter(Boolean)
       };
     });
   };
 
-  const applyNpcHit = (npcId) => {
-    upd(p => {
-      const targetNpc = p.battle.participants.npcs.find(n => n.id === npcId);
-      const newLives = Math.max(0, targetNpc.resources.残り人数.cur - 1);
-      
-      const nextNpcs = p.battle.participants.npcs.map(n => 
-        n.id === npcId ? { ...n, resources: { ...n.resources, 残り人数: { ...n.resources.残り人数, cur: newLives } } } : n
-      );
-
-      return {
-        ...p,
-        battle: {
-          ...p.battle,
-          participants: { ...p.battle.participants, npcs: nextNpcs },
-          grids: { ...p.battle.grids, [npcId]: [0,0,0,0,0,0] }, // 弾幕リセット
-          phase: newLives > 0 ? "npc_hit_recovery" : "npc_dropout"
-        },
-        log: [`💥 ${targetNpc.name} に被弾！ 残り人数: ${newLives}`, ...p.log]
-      };
-    });
-  };
+  const applyPcHit = (pcUid) => applyHit(true, pcUid);
+  const applyNpcHit = (npcId) => applyHit(false, npcId);
 
   const handleRecovery = (pcUid, targetCellNum) => {
     upd(p => ({
