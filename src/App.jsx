@@ -270,29 +270,30 @@ function SessionApp({ roomCode, user }) {
   const [questBanner, setQuestBanner]     = useState(null);
   const [diceResult, setDiceResult] = useState(null);
   const [diceAnim, setDiceAnim] = useState(false);
+  const [diceLabel, setDiceLabel] = useState("");
   const timerRef = useRef(null);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
 
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
-  const animateDice = useCallback((count, label, cb) => {
+  const animateDice = (count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
     setDiceAnim(true);
+    setDiceLabel(label);
     let f = 0;
     timerRef.current = setInterval(() => {
       f++;
-      const tempResults = Array(count).fill(0).map(rollD6);
-      setDiceResult(tempResults);
+      setDiceResult(Array(count).fill(0).map(() => Math.floor(Math.random() * 6) + 1));
       if (f >= 14) {
         clearInterval(timerRef.current);
-        const finalRes = Array(count).fill(0).map(rollD6);
-        setDiceResult(finalRes);
+        const res = Array(count).fill(0).map(() => Math.floor(Math.random() * 6) + 1);
+        setDiceResult(res);
         setDiceAnim(false);
-        if (cb) cb(finalRes);
+        if (cb) cb(res);
       }
     }, 80);
-  }, []);
+  };
 
   useEffect(() => {
     const roomRef = ref(db, `rooms/${roomCode}`);

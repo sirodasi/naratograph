@@ -3166,7 +3166,48 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   );
 }
 
-function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
+function BattleDiceTray({ diceResult, diceAnim, label }) {
+  if (!diceResult && !diceAnim) return null;
+
+  return (
+    <div style={{ 
+      margin: "10px 0", 
+      padding: "12px", 
+      background: "rgba(0,0,0,0.3)", 
+      border: `1px solid ${C.border}`, 
+      borderRadius: 8,
+      textAlign: "center",
+      animation: "fadeUp 0.3s ease"
+    }}>
+      <div style={{ fontSize: 9, color: C.gold, letterSpacing: 2, marginBottom: 8 }}>
+        {label || "DICE ROLL"}
+      </div>
+      <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+        {(diceResult || [1, 1]).map((d, i) => (
+          <div key={i} style={{ 
+            width: 32, height: 32, 
+            background: "rgba(14,20,36,0.95)", 
+            border: `2px solid ${C.blueBorder}`, 
+            borderRadius: 4, 
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 16, color: "#60c0f0", fontWeight: "bold",
+            animation: diceAnim ? "rollSpin 0.2s ease infinite" : "none",
+            boxShadow: diceAnim ? "0 0 10px rgba(96,192,240,0.3)" : "none"
+          }}>
+            {d}
+          </div>
+        ))}
+      </div>
+      {!diceAnim && diceResult && (
+        <div style={{ fontSize: 14, color: "#fff", marginTop: 8, fontWeight: "bold", letterSpacing: 1 }}>
+          TOTAL: {diceResult.reduce((a, b) => a + b, 0)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResult, diceAnim, diceLabel }) {
   const b = gs.battle;
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
   const npcCombatant = b.participants.npcs.find(n => n.id === b.npcCombatant);
@@ -3182,6 +3223,8 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
+      <BattleDiceTray diceResult={diceResult} diceAnim={diceAnim} label={diceLabel} />
+      
       <div style={{ padding: 10, background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
         <div style={{ fontSize: 9, color: C.red, letterSpacing: 2, marginBottom: 4 }}>ENEMY COMBATANT</div>
         <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
