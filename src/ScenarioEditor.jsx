@@ -582,7 +582,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
                     </div>
                     <div>
                       <Label>残り人数</Label>
-                      <input type="number" style={iBase} value={en.ninzu} onChange={e => updateFinalEnemy(i, { ...en, ninzu: parseInt(e.target.value) || 1 })} />
+                      <input type="number" style={iBase} value={en.life} onChange={e => updateFinalEnemy(i, { ...en, life: parseInt(e.target.value) || 1 })} />
                     </div>
                     <div>
                       <Label>スペルカード</Label>
