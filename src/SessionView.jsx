@@ -319,7 +319,7 @@ export function BattleView({ gs, upd, user, isGm }) {
           <div style={{ fontSize: 16, color: C.gold, marginBottom: 20, textAlign: "center" }}>ラウンド {b.round}：対戦者選出</div>
           
           {!isGm ? (
-             <div style={{ textAlign: "center", color: C.textDim }}>GMが対戦者を選出しています...</div>
+            <div style={{ textAlign: "center", color: C.textDim }}>GMが対戦者を選出しています...</div>
           ) : (
             <div>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>1. 出撃するPCを選択（未行動優先）</div>
