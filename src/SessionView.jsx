@@ -3297,19 +3297,19 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 }
 
 function BattleDiceTray({ diceResult, diceAnim, label }) {
-  if (!diceResult && !diceAnim) return null;
+  if (!diceResult && !diceAnim) return <div style={{ height: 20 }} />;
 
   return (
     <div style={{ 
-      margin: "10px 0", 
-      padding: "12px", 
-      background: "rgba(0,0,0,0.3)", 
+      margin: "0 0 10px 0", 
+      padding: "10px", 
+      background: "rgba(0,0,0,0.4)", 
       border: `1px solid ${C.border}`, 
       borderRadius: 8,
       textAlign: "center",
       animation: "fadeUp 0.3s ease"
     }}>
-      <div style={{ fontSize: 9, color: C.gold, letterSpacing: 2, marginBottom: 8 }}>
+      <div style={{ fontSize: 8, color: C.gold, letterSpacing: 2, marginBottom: 6, textTransform: "uppercase" }}>
         {label || "DICE ROLL"}
       </div>
       <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
@@ -3329,8 +3329,8 @@ function BattleDiceTray({ diceResult, diceAnim, label }) {
         ))}
       </div>
       {!diceAnim && diceResult && (
-        <div style={{ fontSize: 14, color: "#fff", marginTop: 8, fontWeight: "bold", letterSpacing: 1 }}>
-          TOTAL: {diceResult.reduce((a, b) => a + b, 0)}
+        <div style={{ fontSize: 12, color: "#fff", marginTop: 6, fontWeight: "bold" }}>
+          RESULT: {diceResult.join(", ")}
         </div>
       )}
     </div>
@@ -3338,6 +3338,7 @@ function BattleDiceTray({ diceResult, diceAnim, label }) {
 }
 
 function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResult, diceAnim, diceLabel }) {
+  const [battleTab, setBattleTab] = useState("info");
   const b = gs.battle;
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
   const npcCombatant = b.participants.npcs.find(n => n.id === b.npcCombatant);
@@ -3352,89 +3353,113 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
   const interventionUsed = b.useIntervention?.[user.uid];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <BattleDiceTray diceResult={diceResult} diceAnim={diceAnim} label={diceLabel} />
 
-      <div style={{ padding: 10, background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
-        <div style={{ fontSize: 9, color: C.red, letterSpacing: 2, marginBottom: 4 }}>ENEMY COMBATANT</div>
-        <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
-          <div style={{ fontSize: 10, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur || 3}</span></div>
-        </div>
+      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 10, flexShrink: 0 }}>
+        <button 
+          onClick={() => setBattleTab("info")}
+          style={{ 
+            flex: 1, padding: "6px", fontSize: 10, cursor: "pointer",
+            background: battleTab === "info" ? "rgba(200,160,64,0.1)" : "transparent",
+            color: battleTab === "info" ? C.gold : C.textFaint,
+            border: "none", borderBottom: battleTab === "info" ? `2px solid ${C.gold}` : "2px solid transparent"
+          }}
+        >情報</button>
+        <button 
+          onClick={() => setBattleTab("log")}
+          style={{ 
+            flex: 1, padding: "6px", fontSize: 10, cursor: "pointer",
+            background: battleTab === "log" ? "rgba(200,160,64,0.1)" : "transparent",
+            color: battleTab === "log" ? C.gold : C.textFaint,
+            border: "none", borderBottom: battleTab === "log" ? `2px solid ${C.gold}` : "2px solid transparent"
+          }}
+        >ログ</button>
       </div>
 
-      <div style={{ padding: 10, background: "rgba(25,118,210,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
-        <div style={{ fontSize: 9, color: C.blue, letterSpacing: 2, marginBottom: 4 }}>PLAYER COMBATANT</div>
-        <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{pcCombatant?.charName || "???"}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
-          <div style={{ fontSize: 10, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ.cur}/5</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur || 3}</span></div>
-        </div>
-      </div>
+      <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
+        {battleTab === "info" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ padding: "8px 10px", background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
+              <div style={{ fontSize: 8, color: C.red, letterSpacing: 2, marginBottom: 2 }}>ENEMY</div>
+              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
+                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数?.cur}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力?.cur}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant?.resources.グレイズ?.cur}/5</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur || 3}</span></div>
+              </div>
+            </div>
 
-      {isSpectator && (
-        <div style={{ padding: 10, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
-          <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>観戦者アクション</div>
-          {interventionUsed ? (
-            <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center" }}>
-              今ラウンドは介入済みです ({interventionUsed === "support" ? "援護射撃" : "かばう"})
+            <div style={{ padding: "8px 10px", background: "rgba(25,118,210,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
+              <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, marginBottom: 2 }}>PLAYER</div>
+              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pcCombatant?.charName || "???"}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
+                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数?.cur}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ?.cur}/5</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur || 3}</span></div>
+              </div>
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button 
-                onClick={() => handleSupportFire(user.uid)}
-                disabled={b.phase !== "npc_shot_roll" && b.phase !== "pc_shot_roll"}
-                style={btnFull(C.redBg, C.redBorder, C.red, {fontSize: 10})}
-              >
-                💥 援護射撃 (ショット前)
-              </button>
-              <button 
-                onClick={() => handleCover(user.uid, b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
-                disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
-                style={btnFull(C.greenBg, C.greenBorder, C.green, {fontSize: 10})}
-              >
-                🛡️ かばう (ショット後)
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>陣営状況</div>
-        {gs.pcs.map(p => {
-          const isDead = (p.resources?.残り人数?.cur || 0) <= 0;
-          const isCombatant = p.uid === b.pcCombatant;
-          const isActed = b.actedPcs?.includes(p.uid);
-          return (
-            <div key={p.uid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", opacity: isDead ? 0.4 : 1 }}>
-              <span style={{ fontSize: 11, color: isCombatant ? C.blue : C.text }}>
-                {isCombatant && "▶"} {p.charName}
-              </span>
-              <span style={{ fontSize: 9, color: isDead ? C.red : (isActed ? C.textFaint : C.gold) }}>
-                {isDead ? "脱落" : (isActed ? "行動済" : "未行動")}
-              </span>
+            {isSpectator && (
+              <div style={{ padding: 10, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>観戦者介入</div>
+                {interventionUsed ? (
+                  <div style={{ fontSize: 9, color: C.textFaint, textAlign: "center" }}>使用済み ({interventionUsed === "support" ? "援護" : "かばう"})</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <button 
+                      onClick={() => handleSupportFire(user.uid)}
+                      disabled={b.phase !== "npc_shot_roll" && b.phase !== "pc_shot_roll"}
+                      style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
+                    >💥 援護射撃</button>
+                    <button 
+                      onClick={() => handleCover(user.uid, b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
+                      disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
+                      style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
+                    >🛡️ かばう</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 2, marginBottom: 4 }}>陣営状況</div>
+              {gs.pcs.map(p => {
+                const isDead = (p.resources?.残り人数?.cur || 0) <= 0;
+                const isCombatant = p.uid === b.pcCombatant;
+                const isActed = b.actedPcs?.includes(p.uid);
+                return (
+                  <div key={p.uid} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", opacity: isDead ? 0.4 : 1 }}>
+                    <span style={{ fontSize: 10, color: isCombatant ? C.blue : C.text }}>{isCombatant ? "▶ " : ""}{p.charName}</span>
+                    <span style={{ fontSize: 8, color: isDead ? C.red : (isActed ? C.textFaint : C.gold) }}>{isDead ? "脱落" : (isActed ? "済" : "未")}</span>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {(gs.log || []).map((entry, i) => (
+              <div key={i} style={{ 
+                fontSize: 10, color: "#6a7a8a", padding: "4px 0", 
+                borderBottom: "1px solid rgba(255,255,255,0.02)",
+                lineHeight: 1.4 
+              }}>
+                {entry}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {isGm && (
         <button 
-          onClick={() => {
-            if(window.confirm("弾幕ごっこを強制終了しますか？")) {
-              upd(p => ({ ...p, battle: { ...p.battle, active: false }, log: ["⚖️ 弾幕ごっこが終了しました。", ...p.log] }));
-            }
-          }}
-          style={{ ...btnFull("none", C.redBorder, C.red), marginTop: "auto" }}
-        >
-          対戦を強制終了する
-        </button>
+          onClick={() => window.confirm("終了しますか？") && upd(p => ({ ...p, battle: { ...p.battle, active: false } }))}
+          style={{ ...btnFull("none", C.redBorder, C.red), marginTop: 10, fontSize: 9, flexShrink: 0 }}
+        >対戦を強制終了</button>
       )}
     </div>
   );
