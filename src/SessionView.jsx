@@ -3126,7 +3126,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
         <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
           <div style={{ fontSize: 10, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur}</span></div>
           <div style={{ fontSize: 10, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力.cur}</span></div>
           <div style={{ fontSize: 10, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur || 3}</span></div>
         </div>
@@ -3137,7 +3137,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
         <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{pcCombatant?.charName || "???"}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
           <div style={{ fontSize: 10, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数.cur}</span></div>
-          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード.cur}</span></div>
+          <div style={{ fontSize: 10, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur}</span></div>
           <div style={{ fontSize: 10, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ.cur}/5</span></div>
           <div style={{ fontSize: 10, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur || 3}</span></div>
         </div>
