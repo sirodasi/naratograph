@@ -338,10 +338,20 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {(pc.bonds || []).length > 0
-                ? pc.bonds.map(b => <span key={b} style={{ padding: "2px 8px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}50`, borderRadius: 10, fontSize: 10, color: C.gold }}>《{b}への絆》</span>)
-                : <span style={{ fontSize: 9, color: "#2a3545" }}>なし</span>
-              }
+              {(pc.bonds || []).map(b => {
+                const isFrom = b.endsWith("からの絆");
+                return (
+                  <span key={b} style={{ 
+                    padding: "2px 8px", 
+                    background: isFrom ? "rgba(156,39,176,0.1)" : "rgba(200,160,64,0.1)", 
+                    border: `1px solid ${isFrom ? C.purpleBorder : C.goldDim}50`, 
+                    borderRadius: 10, fontSize: 10, 
+                    color: isFrom ? C.purple : C.gold 
+                  }}>
+                    《{b}》
+                  </span>
+                );
+              })}
             </div>
           </div>
 
@@ -808,7 +818,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <button onClick={() => {
-            const bonds = Array.from(new Set([...(pc.bonds || []), pc.name]));
+            const bonds = Array.from(new Set([...(pc.bonds || []), `${pc.charName}への絆`]));
             proceed([`${pc.charName} は自身への絆を獲得した`], { pc: { bonds } });
           }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>自身への絆を獲得する</button>
         </div>
@@ -830,7 +840,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>絆を獲得するキャラクターを選んでください</div>
           {others.map(o => (
             <button key={o.uid} onClick={() => {
-              const bonds = Array.from(new Set([...(pc.bonds || []), o.charName || o.name]));
+              const bonds = Array.from(new Set([...(pc.bonds || []), `${o.charName || o.name}への絆`]));
               proceed([`${pc.charName} は《${o.charName || o.name}への絆》を獲得した`], { pc: { bonds } });
             }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
               {o.name}
@@ -858,7 +868,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
             {others.map(o => <option key={o.uid} value={o.charName || o.name}>{o.name}</option>)}
           </select>
           <button disabled={!selectedLose} onClick={() => {
-            const bonds = Array.from(new Set([...(pc.bonds || []), selectedLose]));
+            const bonds = Array.from(new Set([...(pc.bonds || []), `${selectedLose}への絆`]));
             proceed([`${pc.charName} は《${selectedLose}への絆》を獲得した`], { pc: { bonds } });
           }} style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}>獲得する</button>
         </div>
@@ -868,7 +878,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     return (
       <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
         <button onClick={() => {
-          const bonds = Array.from(new Set([...(pc.bonds || []), act.target]));
+          const bonds = Array.from(new Set([...(pc.bonds || []), `${act.target}への絆`]));
           proceed([`${pc.charName} は《${act.target}への絆》を獲得した`], { pc: { bonds } });
         }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>《{act.target}への絆》を獲得する</button>
       </div>
@@ -976,7 +986,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
             <button key={o.uid} onClick={() => {
               const extraPc = { currentSpot: o.currentSpot };
               if (act.gainBond && !(pc.badStatus ||[]).includes("不機嫌") && !(o.badStatus ||[]).includes("不機嫌")) {
-                extraPc.bonds = Array.from(new Set([...(pc.bonds || []), o.charName || o.name]));
+                extraPc.bonds = Array.from(new Set([...(pc.bonds || []), `${o.charName || o.name}への絆`]));
               }
               proceed([`${pc.charName} は ${o.name} のいるスポットへ移動した`], { pc: extraPc });
             }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
@@ -1681,7 +1691,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                           phase: "explore_apply_effect",
                           eventActions: actions,
                           currentActionIndex: 0,
-                           isSuccess // 手がかり処理のために残す
+                          isSuccess
                         }
                       }));
                     }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>イベント効果を適用する</button>
@@ -1701,15 +1711,29 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
           )}
 
           {sc.phase === "explore_clue" && (() => {
+            const unrevealedQuests = gs.quests?.filter(q => !q.solved && q.revealed);
+            const isNoAvailableQuestSlots = unrevealedQuests.length === 0 || unrevealedQuests.every(q => (q.clues || 0) >= q.level);
+            const useClueEvents = room.config?.useClueEvents;
+            
             if (sc.isSuccess) {
               if (hasClueHere) {
                 return (
                   <div style={{ padding: 8, background: "rgba(0,229,255,0.1)", border: "1px solid #00e5ff60", borderRadius: 4 }}>
-                    <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！クエストを選択してください。</div>
-                    {(gs.quests ||[]).filter(q => !q.solved && q.revealed).map(q => (
+                    <div style={{ fontSize: 10, color: "#00e5ff", marginBottom: 6 }}>💡 手がかりを獲得！</div>
+
+                    {unrevealedQuests.filter(q => (q.clues || 0) < q.level).map(q => (
                       <button key={q.id} onClick={() => acquireClue(q.id)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { fontSize: 10, marginBottom: 4 })}>「{q.name}」</button>
                     ))}
-                    <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btnFull("none", "none", C.textFaint), marginTop: 8 }}>クエストに配置しない</button>
+
+                    {useClueEvents && isNoAvailableQuestSlots && (
+                      <button onClick={() => animateDice(1, "手がかりイベント表", res => {
+                        upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "clue_event_result", clueEventDice: res[0] } }));
+                      })} style={btnFull(C.purpleBg, C.purpleBorder, C.purple, { marginTop: 4 })}>
+                        📜 手がかりイベント表を振る
+                      </button>
+                    )}
+
+                    <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }))} style={{ ...btnFull("none", "none", C.textFaint), marginTop: 8 }}>配置せず終了</button>
                   </div>
                 );
               } else {
@@ -2168,6 +2192,19 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const getMainAction = () => {
     if (gs.currentScene) return null;
     if (isIntro) return { label: "🎬 探索フェイズへ移行する", fn: () => setPendingAction("toExplore"), color: "#1976d2" };
+
+    const allScenarioQuests = gs.scenarioData?.quests || [];
+    const currentSolvedCount = (gs.quests || []).filter(q => q.solved).length;
+    const isAllSolved = allScenarioQuests.length > 0 && currentSolvedCount >= allScenarioQuests.length;
+
+    if (isAllSolved && gs.sessionPhase === "explore") {
+      return { 
+        label: "⚔️ 決戦フェイズへ移行する", 
+        fn: () => setPendingAction("toBattle"), 
+        color: C.red 
+      };
+    }
+
     if (isMorning) {
       if (!gs.newspaper) return { label: "📰 文々。新聞を読む", fn: handleNewspaper, color: C.blue };
       if (!gs.cluePlaced) return {

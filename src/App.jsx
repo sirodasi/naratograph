@@ -537,6 +537,50 @@ function SessionApp({ roomCode, user }) {
     }
   };
 
+  const doTransitionToBattle = () => {
+    const limitStr = gs.limit || "3日目の夜";
+    const limitDay = parseInt(limitStr.match(/\d+/)?.[0] || 3);
+    const limitCycleIdx = CYCLES.indexOf(limitStr.split("の")[1] || "夜");
+
+    const currentDay = gs.day;
+    const currentCycleIdx = gs.cycleIdx;
+
+    upd(p => {
+      let logAdd = [];
+      let nextPcs = [...p.pcs];
+
+      if (room.config?.useAdditionalActions) {
+        if (currentDay < limitDay) {
+          const bonus = limitDay - currentDay;
+          nextPcs = nextPcs.map(pc => ({
+            ...pc,
+            resources: { ...pc.resources, スペカ: { ...pc.resources.スペカ, cur: Math.min(pc.resources.スペカ.max, (pc.resources.スペカ.cur || 0) + bonus) } }
+          }));
+          logAdd.push(`早期解決ボーナス：全員がスペルカードを ${bonus} 点獲得した！`);
+        } else if (currentDay === limitDay && currentCycleIdx < limitCycleIdx) {
+          const bonusActions = limitCycleIdx - currentCycleIdx;
+          return {
+            ...p,
+            sessionPhase: "battle_bonus",
+            bonusCount: bonusActions,
+            bonusPcs: p.pcs.map(pc => pc.uid),
+            log: [`解決ボーナス：残り ${bonusActions} サイクル分の追加行動を獲得！`, ...p.log]
+          };
+        }
+      }
+
+      return {
+        ...p,
+        sessionPhase: "battle",
+        pcs: nextPcs,
+        actedPcs: [],
+        currentScene: null,
+        log: ["⚔️ 決戦フェイズへと移行した！", ...logAdd, ...p.log]
+      };
+    });
+    setPendingAction(null);
+  };
+
   // ─── レンダリング ────────────────────────────────────────────
 
   if (!mode) return (
@@ -600,15 +644,25 @@ function SessionApp({ roomCode, user }) {
 
       {pendingAction && (
         <ConfirmModal
-          title={pendingAction === "advance" ? "サイクルを進めますか？" : "探索フェイズへ移行しますか？"}
-          body={
-            pendingAction === "advance"
-              ? `${gs.day}日目・${CYCLES[gs.cycleIdx || 0]} → 次のフェーズへ進みます。` +
-                (gs.cycleIdx === 3 ? "\n※夜が明けるため、全員が拠点に帰還し【やる気】が1減少します。" : "\nスキルや処理の確認をお忘れなく。")
-              : "バックストーリーを経て探索フェイズへ移行します。\n開始時クエストが公開されます。"
+          title={
+            pendingAction === "advance" ? "サイクルを進めますか？" : 
+            pendingAction === "toBattle" ? "決戦フェイズへ移行しますか？" :
+            "探索フェイズへ移行しますか？"
           }
-          okLabel="進む"
-          onOk={pendingAction === "advance" ? doAdvanceCycle : () => { doTransitionToExplore(); setPendingAction(null); }}
+          body={
+            pendingAction === "toBattle" 
+              ? "全てのクエストが解決されました。物語はクライマックスの決戦フェイズへと進みます。"
+              : pendingAction === "advance"
+                ? `${gs.day}日目・${CYCLES[gs.cycleIdx || 0]} → 次のフェーズへ進みます。`
+                : "バックストーリーを経て探索フェイズへ移行します。"
+          }
+          okLabel={pendingAction === "toBattle" ? "決戦開始" : "進む"}
+          okColor={pendingAction === "toBattle" ? C.red : "#e07060"}
+          onOk={
+            pendingAction === "toBattle" ? doTransitionToBattle :
+            pendingAction === "advance" ? doAdvanceCycle : 
+            () => { doTransitionToExplore(); setPendingAction(null); }
+          }
           onCancel={() => setPendingAction(null)}
         />
       )}

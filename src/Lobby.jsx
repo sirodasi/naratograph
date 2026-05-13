@@ -256,6 +256,12 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
     if (room?.phase === "explore") window.location.reload();
   }, [room?.phase]);
 
+  const toggleExtraRule = (key) => {
+    if (!isGm) return;
+    const newValue = !room.config?.[key];
+    update(ref(db, `rooms/${roomCode}/config`), { [key]: newValue });
+  };
+
   // ダイスロール（アニメーション付き）
   const rollSkill = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -395,6 +401,20 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                   scenarioData: sc,
                 });
               }} />
+            </div>
+          )}
+
+          {isGm && (
+            <div style={S.card}>
+              <div style={S.h2}>追加ルール</div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 11 }}>
+                <input type="checkbox" checked={room.config?.useAdditionalActions || false} onChange={() => toggleExtraRule("useAdditionalActions")} />
+                探索終了時の追加行動
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 11 }}>
+                <input type="checkbox" checked={room.config?.useClueEvents || false} onChange={() => toggleExtraRule("useClueEvents")} />
+                手がかりイベント
+              </label>
             </div>
           )}
 
