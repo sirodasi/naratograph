@@ -1,7 +1,6 @@
 // src/SessionView.jsx
 import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
-import { animateDice } from "./App";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP } from "./data/gameData";
 import { C } from "./styles/colors";
@@ -2657,8 +2656,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
-  const [diceResult, setDiceResult] = useState(null);
-  const [diceAnim, setDiceAnim]   = useState(false);
   const [paperModal, setPaperModal] = useState(null);
   const [sceneSelect, setSceneSelect] = useState("");
 
@@ -2666,8 +2663,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const isIntro    = gs.sessionPhase === "intro" || gs.sessionPhase === "intro_main";
   const isMorning  = cycleIdx === 0;
   const cycleColor = CYCLE_COLORS[cycleIdx];
-
-  const rollD6 = () => Math.floor(Math.random() * 6) + 1;
 
   const handleNewspaper = () => {
     animateDice(2, "文々。新聞表", res => {

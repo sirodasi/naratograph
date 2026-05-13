@@ -43,25 +43,6 @@ function getSpot(id) {
   return SPOTS.find(s => s.id === id) ?? SPOTS.find(s => s.roll == id) ?? null;
 }
 
-const timerRef = useRef(null);
-
-export const animateDice = (count, label, cb) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setDiceAnim(true);
-    let f = 0;
-    timerRef.current = setInterval(() => {
-      f++;
-      setDiceResult(Array(count).fill(0).map(rollD6));
-      if (f >= 14) {
-        clearInterval(timerRef.current);
-        const res = Array(count).fill(0).map(rollD6);
-        setDiceResult(res);
-        setDiceAnim(false);
-        if (cb) cb(res);
-      }
-    }, 80);
-  };
-
 // ─── 定数 ────────────────────────────────────────────────────────
 
 const MAP_NATURAL_W = 1200;
@@ -287,9 +268,31 @@ function SessionApp({ roomCode, user }) {
   const [room, setRoom]             = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [questBanner, setQuestBanner]     = useState(null);
+  const [diceResult, setDiceResult] = useState(null);
+  const [diceAnim, setDiceAnim] = useState(false);
+  const timerRef = useRef(null);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
+
+  const rollD6 = () => Math.floor(Math.random() * 6) + 1;
+  const animateDice = useCallback((count, label, cb) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setDiceAnim(true);
+    let f = 0;
+    timerRef.current = setInterval(() => {
+      f++;
+      const tempResults = Array(count).fill(0).map(rollD6);
+      setDiceResult(tempResults);
+      if (f >= 14) {
+        clearInterval(timerRef.current);
+        const finalRes = Array(count).fill(0).map(rollD6);
+        setDiceResult(finalRes);
+        setDiceAnim(false);
+        if (cb) cb(finalRes);
+      }
+    }, 80);
+  }, []);
 
   useEffect(() => {
     const roomRef = ref(db, `rooms/${roomCode}`);
@@ -702,18 +705,15 @@ function SessionApp({ roomCode, user }) {
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
         {gs.sessionPhase === "battle_bonus" ? (
           <BonusPhaseView
-            gs={gs}
-            upd={upd}
-            user={user}
-            isGm={mode === "gm"}
+            gs={gs} upd={upd} user={user} isGm={mode === "gm"}
             animateDice={animateDice}
+            diceResult={diceResult} diceAnim={diceAnim}
           />
         ) : gs.battle?.active ? (
           <BattleView
-            gs={gs}
-            upd={upd}
-            user={user}
-            isGm={mode === "gm"}
+            gs={gs} upd={upd} user={user} isGm={mode === "gm"}
+            animateDice={animateDice}
+            diceResult={diceResult} diceAnim={diceAnim}
           />
         ) : (
           <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
@@ -722,7 +722,8 @@ function SessionApp({ roomCode, user }) {
 
       <RightPanel
         gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync}
-        isGm={mode === "gm"} user={user} room={room}
+        isGm={mode === "gm"} user={user} room={room} animateDice={animateDice}
+        diceResult={diceResult} diceAnim={diceAnim}
         CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER} getSpot={getSpot}
         doNewspaper={doNewspaper} doAdvanceCycle={doAdvanceCycle}
         doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
