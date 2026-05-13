@@ -224,6 +224,72 @@ export function BattleView({ gs, upd, user, isGm }) {
   let unactedPcs = alivePcs.filter(p => !(b.actedPcs || []).includes(p.uid));
   let unactedNpcs = aliveNpcs.filter(n => !(b.actedNpcs || []).includes(n.id));
 
+  const applyShot = (targetUid, diceResults) => {
+    upd(p => {
+      const currentGrid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
+      diceResults.forEach(d => {
+        if (d >= 1 && d <= 6) {
+          currentGrid[d - 1] += 1;
+        }
+      });
+
+      return {
+        ...p,
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [targetUid]: currentGrid },
+          phase: p.battle.phase === "npc_shot_roll" ? "npc_shot_after" : "pc_shot_after"
+        }
+      };
+    });
+  };
+
+  const handleSupportFire = (userUid) => {
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        supportDice: (p.battle.supportDice || 0) + 1,
+        usedIntervention: { ...p.battle.usedIntervention, [userUid]: "support" }
+      },
+      log: [`💥 ${pcs.find(x => x.uid === userUid)?.charName} の援護射撃！攻撃ダイスが増加します。`, ...p.log]
+    }));
+  };
+
+  const handleCover = (userUid, targetUid) => {
+    animateDice(1, "かばう", (res) => {
+      const die = res[0];
+      upd(p => {
+        const currentGrid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
+        let success = false;
+        if (currentGrid[die - 1] > 0) {
+          currentGrid[die - 1] -= 1;
+          success = true;
+        }
+        return {
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [targetUid]: currentGrid },
+            usedIntervention: { ...p.battle.usedIntervention, [userUid]: "cover" }
+          },
+          log: [`🛡️ ${pcs.find(x => x.uid === userUid)?.charName} が ${die}番マスをかばった！ ${success ? "弾幕を除去しました。" : "しかしそこには弾幕がなかった！"}`, ...p.log]
+        };
+      });
+    });
+  };
+
+  const executeNpcShot = () => {
+    const attacker = npcs.find(n => n.id === b.npcCombatant);
+    const bonus = b.supportDice || 0;
+    const totalDice = attacker.resources.攻撃力.cur + bonus;
+
+    animateDice(totalDice, "NPCショット", (results) => {
+      upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
+      applyShot(b.pcCombatant, results);
+    });
+  };
+
   if (b.phase === "setup" && isGm) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
@@ -422,28 +488,29 @@ export function BattleView({ gs, upd, user, isGm }) {
 
         {/* NPCショット実行ボタンと介入UI */}
         {b.phase === "npc_shot_roll" && (
-          <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center" }}>
-              <div style={{ color: C.red, fontSize: 11, marginBottom: 8 }}>ショット判定（攻撃力: {npcs.find(n => n.id === b.npcCombatant)?.resources.攻撃力.cur}）</div>
-              
-              {/* 観戦者の介入（援護射撃・かばう） */}
-              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-                 {/* 観戦者（対戦者以外のPL）の画面にのみボタンを出すロジックが後ほど必要 */}
-                 {/* 今はGMが一旦代行操作できる形式にします */}
-              </div>
+          <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+            <div style={{ color: C.red, fontSize: 11, marginBottom: 4 }}>NPC攻撃ステップ</div>
+            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{npcs.find(n => n.id === b.npcCombatant)?.name} の攻撃</div>
+            {b.supportDice > 0 && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>援護射撃ボーナス: +{b.supportDice}D</div>}
+            
+            {isGm && (
+              <button onClick={executeNpcShot} style={btnFull(C.redBg, C.redBorder, C.red)}>
+                🎲 ショットを放つ ({npcs.find(n => n.id === b.npcCombatant)?.resources.攻撃力.cur + (b.supportDice || 0)}D)
+              </button>
+            )}
+          </div>
+        )}
 
-              {isGm && (
-                <button 
-                  onClick={() => {
-                    const attacker = npcs.find(n => n.id === b.npcCombatant);
-                    const atkCount = attacker.resources.攻撃力.cur;
-                    // ダイスアニメーションを実行
-                    // ... animateDiceを呼び出す ...
-                  }}
-                  style={btnFull(C.redBg, C.redBorder, C.red)}
-                >
-                  🎲 攻撃ダイスを振る ({npcs.find(n => n.id === b.npcCombatant)?.resources.攻撃力.cur}D)
-                </button>
-              )}
+        {b.phase === "npc_shot_after" && (
+          <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+            <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
+            <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
+            <button 
+              onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_intro" } }))} 
+              style={btnFull(C.blueBg, C.blueBorder, C.blue)}
+            >
+              回避ステップへ進む
+            </button>
           </div>
         )}
       </div>
@@ -3153,14 +3220,14 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <button 
-                onClick={() => {/* 援護射撃ロジック */}}
+                onClick={() => handleSupportFire(user.uid)}
                 disabled={b.phase !== "npc_shot_roll" && b.phase !== "pc_shot_roll"}
                 style={btnFull(C.redBg, C.redBorder, C.red, {fontSize: 10})}
               >
                 💥 援護射撃 (ショット前)
               </button>
               <button 
-                onClick={() => {/* かばうロジック */}}
+                onClick={() => handleCover(user.uid, b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
                 disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
                 style={btnFull(C.greenBg, C.greenBorder, C.green, {fontSize: 10})}
               >
