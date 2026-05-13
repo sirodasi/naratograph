@@ -49,3 +49,13 @@ export const iStyle = {
   width:      "100%",
   boxSizing:  "border-box",
 };
+
+export const btnFull = (bg, border, color, extra = {}) => ({
+  width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer",
+  background: bg, border: `1px solid ${border}`, color, fontSize: 12, ...extra,
+});
+
+export const btnSmall = {
+  width: 24, height: 24, background: "rgba(255,255,255,0.05)",
+  border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer",
+};

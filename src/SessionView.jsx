@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP } from "./data/gameData";
-import { C } from "./styles/colors";
+import { C, btnFull, btnSmall } from "./styles/colors";
 
 // ─── ユーティリティ ───────────────────────────────────────────────
 export function getSpotByD66(d1, d2, SPOTS) {
@@ -105,6 +105,8 @@ export const INIT_RESOURCES = () => ({
   攻撃力:     { cur: 1, max: 5  },
 });
 
+export const ITEM_NAMES = ["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
+
 export const INIT_ITEMS = () => ({
   お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0, 妖器: 0,
 });
@@ -119,16 +121,6 @@ export const BAD_STATUS_TABLE = {
 };
 
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
-
-const btnFull = (bg, border, color, extra = {}) => ({
-  width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer",
-  background: bg, border: `1px solid ${border}`, color, fontSize: 12, ...extra,
-});
-
-const btnSmall = {
-  width: 24, height: 24, background: "rgba(255,255,255,0.05)",
-  border: `1px solid ${C.border}`, color: C.textFaint, borderRadius: 4, cursor: "pointer",
-};
 
 // ─── BackstoryScreen ──────────────────────────────────────────────
 export function BackstoryScreen({ gs, isGm, onProceed }) {
@@ -1530,8 +1522,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <button onClick={() => animateDice(1, "アイテム獲得", res => {
-            const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
-            const itemName = itemNames[res[0] - 1];
+            const itemName = ITEM_NAMES[res[0] - 1];
             proceed([`${pc.charName} は【${itemName}】を ${count} 個獲得した`], {
               pc: { items: { ...pc.items, [itemName]: (pc.items[itemName] || 0) + count } }
             });
@@ -1539,12 +1530,11 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         </div>
       );
     } else if (act.item === "any") {
-      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>獲得するアイテムを選んでください</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-            {itemNames.map(itemName => (
+            {ITEM_NAMES.map(itemName => (
               <button key={itemName} onClick={() => {
                 proceed([`${pc.charName} は【${itemName}】を ${count} 個獲得した`], {
                   pc: { items: { ...pc.items, [itemName]: (pc.items[itemName] || 0) + count } }
@@ -1664,12 +1654,11 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     }
 
     if (act.gain === "any") {
-      const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>【{selectedLose}】と交換で獲得するアイテムを選んでください</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-            {itemNames.map(itemName => (
+            {ITEM_NAMES.map(itemName => (
               <button key={itemName} onClick={() => {
                 proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
                   pc: { items: { ...pc.items, [selectedLose]: Math.max(0, pc.items[selectedLose] - 1), [itemName]: (pc.items[itemName] || 0) + 1 } }
@@ -1683,8 +1672,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <button onClick={() => animateDice(1, "アイテム交換", res => {
-            const itemNames =["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
-            const itemName = itemNames[res[0] - 1];
+            const itemName = ITEM_NAMES[res[0] - 1];
             proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
               pc: { items: { ...pc.items, [selectedLose]: Math.max(0, pc.items[selectedLose] - 1), [itemName]: (pc.items[itemName] || 0) + 1 } }
             });
