@@ -11,7 +11,6 @@ import {
   SPOTS, EDGES, NEWSPAPER,
   AREA_COLORS, CYCLES, CYCLE_COLORS,
 } from "./data/gameData";
-import { log } from "firebase/firestore/pipelines";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
 
@@ -52,7 +51,7 @@ const DEFAULT_GS = {
   sessionPhase: "intro",
   day: 1,
   cycleIdx: 0,
-  clues:[],
+  clues: [],
   newspaper: null,
   newspaperDone: false,
   cluePlaced: false,
@@ -61,15 +60,15 @@ const DEFAULT_GS = {
   items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残魔のかけら: 0, スペカのかけら: 0 },
   quests: [],
   log: [],
-  pcs:[],
+  pcs: [],
   sceneMode: false,
   sceneText: "",
   banner: null,
-  actedPcs:[],
+  actedPcs: [],
   currentScene: null,
 };
 
-const DEFAULT_SCENE = { bg: null, portraits:[] };
+const DEFAULT_SCENE = { bg: null, portraits: [] };
 
 // ─── カスタムフック ──────────────────────────────────────────────
 
@@ -89,7 +88,7 @@ function useMapBounds(containerRef) {
     const ro = new ResizeObserver(calc);
     ro.observe(el);
     return () => ro.disconnect();
-  },[containerRef]);
+  }, [containerRef]);
 
   return bounds;
 }
@@ -109,7 +108,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const fontSize = Math.max(8, Math.round(10 * scale * 1.4));
 
   const isMovePhase = gs.currentScene?.phase === "move_dest";
-  const actingPc    = isMovePhase ? (gs.pcs ||[]).find(p => p.uid === gs.currentScene.pcUid) : null;
+  const actingPc    = isMovePhase ? (gs.pcs || []).find(p => p.uid === gs.currentScene.pcUid) : null;
   const isMyTurn    = actingPc?.uid === user?.uid;
   const dists       = actingPc ? getDistances(actingPc.currentSpot) : {};
   const maxDist     = gs.currentScene?.selectedMoveDie || 0;
@@ -153,7 +152,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
       {mapBounds.width > 0 && SPOTS.map(spot => {
         const isDream     = spot.id === "dream";
         const hasClue     = !isDream && (gs.clues ||[]).includes(spot.id);
-        const pcsHere     = !isDream ? (gs.pcs ||[]).filter(pc => pc.currentSpot === spot.id) :[];
+        const pcsHere     = !isDream ? (gs.pcs || []).filter(pc => pc.currentSpot === spot.id) :[];
         const exactDist   = gs.currentScene?.exactMoveDist ?? null;
         const distance    = dists[spot.id] ?? 999;
 
@@ -189,7 +188,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         if (hasClue)     borderCol = "#00e5ff";
         if (isReachable) borderCol = "#64b5f6";
 
-        const shadows =[];
+        const shadows = [];
         if (hasClue)    shadows.push("0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)");
         if (newsMarker) shadows.push("0 0 15px rgba(255,183,77,0.8), inset 0 0 10px rgba(255,183,77,0.4)");
         const boxShadow = shadows.length > 0 ? shadows.join(", ") : "none";
@@ -322,9 +321,9 @@ function SessionApp({ roomCode, user }) {
           resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
           items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
           pcs:    val.pcs    || [],
-          quests: val.quests ||[],
+          quests: val.quests || [],
           clues:  val.clues  || [],
-          log:    val.log    ||[],
+          log:    val.log    || [],
         }));
       } else if (mode === "gm") {
         get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
@@ -345,7 +344,7 @@ function SessionApp({ roomCode, user }) {
     const unsubScene = onValue(sceneRef, snap => {
       if (snap.exists()) {
         const val = snap.val();
-        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ??[] });
+        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ?? [] });
       }
     });
 
@@ -353,7 +352,7 @@ function SessionApp({ roomCode, user }) {
   }, [mode, gsPath, scenePath]);
 
   function buildPcList(r) {
-    if (!r?.players) return[];
+    if (!r?.players) return [];
     return Object.values(r.players)
       .filter(p => p.role === "pl" && p.charId)
       .map(p => {
@@ -371,7 +370,7 @@ function SessionApp({ roomCode, user }) {
           charId: p.charId,
           charName: p.charName,
           tags:   p.tags ?? charData?.tags ?? [],
-          bonds:[], badStatus:[], flags: {},
+          bonds: [], badStatus: [], flags: {},
           spriteRow:     p.spriteRow ?? -1,
           spriteCol:     p.spriteCol ?? -1,
           customPortrait: p.customPortrait ?? null,
@@ -383,7 +382,7 @@ function SessionApp({ roomCode, user }) {
           items:       INIT_ITEMS(),
           baseSpotId,
           currentSpot: startSpotId ?? "11",
-          log:[],
+          log: [],
         };
       });
   }
@@ -407,7 +406,7 @@ function SessionApp({ roomCode, user }) {
   useEffect(() => {
     if (!synced || !room || mode !== "gm") return;
     const hasPlayers = Object.values(room.players || {}).some(p => p.role === "pl" && p.charId);
-    if ((gs.pcs ||[]).length === 0 && hasPlayers) {
+    if ((gs.pcs || []).length === 0 && hasPlayers) {
       upd(p => ({ ...p, pcs: buildPcList(room) }));
     }
   }, [synced, room, mode]);
@@ -416,7 +415,7 @@ function SessionApp({ roomCode, user }) {
 
   const doTransitionToExplore = () => {
     const startQuests = (gs.scenarioData?.quests ??[]).filter(q => (q.unlockType ?? "start") === "start");
-    const clueCount   = Math.ceil(((gs.pcs ||[]).length || 1) / 2);
+    const clueCount   = Math.ceil(((gs.pcs || []).length || 1) / 2);
     const shuffled    = SPOTS.filter(s => s.roll !== null).sort(() => Math.random() - 0.5);
     const clueSpots   = shuffled.slice(0, clueCount).map(s => s.id);
 
@@ -425,7 +424,7 @@ function SessionApp({ roomCode, user }) {
       sessionPhase: "explore", day: 1, cycleIdx: 0,
       clues:  clueSpots,
       quests: startQuests.map(q => ({ ...q, revealed: true, solved: false })),
-      log:[`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
+      log: [`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
     }));
 
     if (startQuests.length > 0) {
@@ -469,7 +468,7 @@ function SessionApp({ roomCode, user }) {
 
   const doReiryoku = () => {
     upd(p => {
-      const logParts =[];
+      const logParts = [];
       const newPcs = p.pcs.map(pc => {
         const spot = getSpot(pc.currentSpot);
         if (!spot) return pc;
@@ -499,7 +498,7 @@ function SessionApp({ roomCode, user }) {
       });
       return {
         ...p, pcs: newPcs, reiryokuDone: true,
-        log:[`【霊力増加】 ${logParts.length > 0 ? logParts.join(" / ") : "なし"}`, ...p.log],
+        log: [`【霊力増加】 ${logParts.length > 0 ? logParts.join(" / ") : "なし"}`, ...p.log],
       };
     });
   };
@@ -508,7 +507,7 @@ function SessionApp({ roomCode, user }) {
     upd(p => {
       let day      = p.day || 1;
       let cycleIdx = p.cycleIdx || 0;
-      const logMsgs =[];
+      const logMsgs = [];
       let nextPcs = p.pcs;
 
       if (cycleIdx === 0) {
@@ -559,10 +558,10 @@ function SessionApp({ roomCode, user }) {
         cluePlaced:   cycleIdx === 0 ? false : p.cluePlaced,
         reiryokuDone: false,
         quests:       newQuests,
-        actedPcs:[],
+        actedPcs: [],
         currentScene: null,
         pcs:          nextPcs,
-        log:[...logMsgs.reverse(), ...p.log],
+        log: [...logMsgs.reverse(), ...p.log],
       };
     });
     setPendingAction(null);
@@ -576,7 +575,7 @@ function SessionApp({ roomCode, user }) {
     const isMyTurn  = sc.pcUid === user.uid;
     if (!isGmMode && !isMyTurn) return;
 
-    const actingPc = (gs.pcs ||[]).find(p => p.uid === sc.pcUid);
+    const actingPc = (gs.pcs || []).find(p => p.uid === sc.pcUid);
     if (!actingPc) return;
 
     const dists     = getDistances(actingPc.currentSpot);
@@ -788,7 +787,7 @@ const LoadingScreen = ({ message, color = "#3a4a5a" }) => (
 
 export default function App() {
   const [user, setUser]           = useState(undefined);
-  const[roomCode, setRoomCode]   = useState(null);
+  const [roomCode, setRoomCode]   = useState(null);
   const [roomPhase, setRoomPhase] = useState(null);
 
   useEffect(() => {
@@ -798,7 +797,7 @@ export default function App() {
 
     const unsub = onAuthStateChanged(auth, u => setUser(u || null));
     return () => unsub();
-  },[]);
+  }, []);
 
   useEffect(() => {
     if (!roomCode) return;
