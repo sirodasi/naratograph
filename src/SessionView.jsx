@@ -1699,12 +1699,15 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                 仲間の合流を待っています...<br/>
                 <span style={{ fontSize: 9, color: C.textDim }}>（他のプレイヤーの画面に合流ボタンが表示されています）</span>
               </div>
-              <button 
-                onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_resolve" } }))}
-                style={btnFull(C.blueBg, C.blueBorder, C.blue)}
-              >
-                全員揃ったので解決に進む
-              </button>
+
+              {isGm && (
+                <button 
+                  onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_resolve" } }))}
+                  style={btnFull(C.blueBg, C.blueBorder, C.blue)}
+                >
+                  全員揃ったので解決に進む
+                </button>
+              )}
             </div>
           )}
 
@@ -1810,7 +1813,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   </div>
                 )}
 
-                {anySuccess && (isGm || pc.uid === user?.uid) && (
+                {anySuccess && isGm && (
                   <div style={{ textAlign: "center", marginTop: 16 }}>
                     <div style={{ fontSize: 13, color: C.green, marginBottom: 8 }}>✨ 判定成功！</div>
                     <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>
