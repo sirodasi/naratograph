@@ -2661,7 +2661,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [diceAnim, setDiceAnim]   = useState(false);
   const [paperModal, setPaperModal] = useState(null);
   const [sceneSelect, setSceneSelect] = useState("");
-  const timerRef = useRef(null);
 
   const cycleIdx   = gs.cycleIdx || 0;
   const isIntro    = gs.sessionPhase === "intro" || gs.sessionPhase === "intro_main";

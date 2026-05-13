@@ -43,6 +43,8 @@ function getSpot(id) {
   return SPOTS.find(s => s.id === id) ?? SPOTS.find(s => s.roll == id) ?? null;
 }
 
+const timerRef = useRef(null);
+
 export const animateDice = (count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
     setDiceAnim(true);
