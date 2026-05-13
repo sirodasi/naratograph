@@ -321,20 +321,22 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     
     animateDice(diceCount, `${isPc ? "PC" : "NPC"}回避判定`, (res) => {
       const maxDie = Math.max(...res);
-      const isSuccess = maxDie >= targetValue;
       const isFumble = isPc && res.every(d => d === 1);
+      const isSpecial = isPc && res.includes(6) && !isFumble;
+      const isSuccess = maxDie >= targetValue && !isFumble;
+      const resultNotice = isFumble ? "ファンブル！" : isSpecial ? "スペシャル！" : "";
 
-      if (isSuccess && !isFumble) {
+      if (isSuccess) {
         upd(p => ({
           ...p,
           battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" },
-          log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")}) ${isPc ? "移動先を選択してください。" : ""}`, ...p.log]
+          log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")})${resultNotice ? ` ${resultNotice}` : ""}` + (isPc ? " 移動先を選択してください。" : ""), ...p.log]
         }));
       } else {
         upd(p => ({
           ...p,
           battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check" },
-          log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})`, ...p.log]
+          log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})${resultNotice ? ` ${resultNotice}` : ""}`, ...p.log]
         }));
       }
     });
@@ -343,45 +345,51 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   const handlePcEvadeRoll = () => handleEvadeRoll(true);
   const handleNpcEvadeRoll = () => handleEvadeRoll(false);
 
-  const handleEvadeMove = (targetCellNum) => {
-    const pcUid = b.pcCombatant;
-    const oldPos = b.positions[pcUid];
-    const bulletsCleared = b.grids[pcUid][oldPos - 1];
+  const handleEvadeMove = (isPc, targetCellNum) => {
+    const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
+    const oldPos = b.positions[combatantId];
+    const bulletsCleared = b.grids[combatantId][oldPos - 1] || 0;
 
     upd(p => {
-      const newGrid = [...p.battle.grids[pcUid]];
+      const newGrid = [...p.battle.grids[combatantId]];
       newGrid[oldPos - 1] = 0;
 
-      const currentPc = p.pcs.find(x => x.uid === pcUid);
-      let nextGraze = (currentPc.resources.グレイズ?.cur || 0) + bulletsCleared;
-      let nextSpell = currentPc.resources.スペルカード?.cur || 0;
+      const currentEntity = isPc ? p.pcs.find(x => x.uid === combatantId) : p.battle.participants.npcs.find(n => n.id === combatantId);
+      const currentGraze = currentEntity.resources.グレイズ?.cur || 0;
+      const nextGraze = Math.min(currentEntity.resources.グレイズ?.max || 5, currentGraze + bulletsCleared);
 
-      const nextPcs = p.pcs.map(pc => {
-        if (pc.uid !== pcUid) return pc;
-        return {
-          ...pc,
-          resources: {
-            ...pc.resources,
-            グレイズ: { ...pc.resources.グレイズ, cur: nextGraze },
-            スペルカード: { ...pc.resources.スペルカード, cur: nextSpell }
-          }
-        };
-      });
+      const updatedEntity = {
+        ...currentEntity,
+        resources: {
+          ...currentEntity.resources,
+          グレイズ: { ...currentEntity.resources.グレイズ, cur: nextGraze }
+        }
+      };
 
-      const nextEvadeDice = (p.battle.currentEvadeDice ?? 3) - 1;
+      const updatedPcs = isPc
+        ? p.pcs.map(pc => pc.uid === combatantId ? updatedEntity : pc)
+        : p.pcs;
+
+      const updatedNpcs = isPc
+        ? p.battle.participants.npcs
+        : p.battle.participants.npcs.map(npc => npc.id === combatantId ? updatedEntity : npc);
 
       return {
         ...p,
-        pcs: nextPcs,
+        pcs: updatedPcs,
         battle: {
           ...p.battle,
-          positions: { ...p.battle.positions, [pcUid]: targetCellNum },
-          grids: { ...p.battle.grids, [pcUid]: newGrid },
-          currentEvadeDice: nextEvadeDice,
-          phase: nextEvadeDice > 0 ? "pc_evade_ask_next" : "pc_hit_check"
+          participants: {
+            ...p.battle.participants,
+            npcs: updatedNpcs
+          },
+          positions: { ...p.battle.positions, [combatantId]: targetCellNum },
+          grids: { ...p.battle.grids, [combatantId]: newGrid },
+          currentEvadeDice: isPc ? ((p.battle.currentEvadeDice ?? 3) - 1) : p.battle.currentEvadeDice,
+          phase: isPc ? ((p.battle.currentEvadeDice ?? 3) - 1 > 0 ? "pc_evade_ask_next" : "pc_hit_check") : "round_end_check"
         },
         log: [
-          `🏃 ${currentPc.charName} は ${targetCellNum}番マスへ移動。`,
+          `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
           `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}/5)`,
           ...p.log
         ]
@@ -399,9 +407,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
       let nextAtk = target.resources.攻撃力?.cur || 1;
 
       if (isPc && newLives === 1) {
-        nextRei = 20;
-        nextSpe = Math.min(9, nextSpe + 1);
+        nextRei = target.resources.霊力?.max || 20;
         nextAtk = 1 + Math.floor(nextRei / 5);
+      }
+      if (!isPc && newLives === 1) {
+        nextSpe = Math.min(target.resources.スペルカード?.max || 9, nextSpe + 1);
       }
 
       const updatedTarget = {
@@ -411,8 +421,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           残り人数: { ...target.resources.残り人数, cur: newLives },
           ...(isPc ? {
             霊力: { ...target.resources.霊力, cur: nextRei },
-            スペルカード: { ...target.resources.スペルカード, cur: nextSpe },
             攻撃力: { ...target.resources.攻撃力, cur: nextAtk }
+          } : {}),
+          ...(!isPc ? {
+            スペルカード: { ...target.resources.スペルカード, cur: nextSpe }
           } : {})
         }
       };
@@ -433,7 +445,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         },
         log: [
           `💥 ${target.charName || target.name} は被弾した！ 残り人数: ${newLives}`,
-          isPc && newLives === 1 ? `🔥 霊力とスペルカードが増加した！` : null,
+          isPc && newLives === 1 ? `🔥 霊力が最大まで回復した！` : null,
+          !isPc && newLives === 1 ? `🔮 ${target.name} はスペルカードを1点獲得した！` : null,
           ...p.log
         ].filter(Boolean)
       };
@@ -691,7 +704,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
                 if (isRecovery) {
                   upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [n.id]: num }, phase: "round_end_check" } }));
                 } else if (isEvadeMove) {
-                  upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [n.id]: num }, phase: "round_end_check" } }));
+                  handleEvadeMove(false, num);
                 }
               }}
               sprite={<div style={{ fontSize: 24 }}>👿</div>}
@@ -912,7 +925,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
               highlightCells={isMyTurn ? highlights : []}
               onCellClick={(num) => {
                 if (isRecovery) handleRecovery(p.uid, num);
-                else if (isEvadeMove) handleEvadeMove(num);
+                else if (isEvadeMove) handleEvadeMove(true, num);
               }}
               sprite={
                 p.customPortrait 
@@ -3535,37 +3548,39 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 function BattleDiceTray({ diceResult, diceAnim, label }) {
   if (!diceResult && !diceAnim) return <div style={{ height: 20 }} />;
 
+  const displayLabel = label ? label : "DICE ROLL";
+
   return (
     <div style={{ 
       margin: "0 0 10px 0", 
-      padding: "10px", 
-      background: "rgba(0,0,0,0.4)", 
+      padding: "12px 14px", 
+      background: "rgba(0,0,0,0.45)", 
       border: `1px solid ${C.border}`, 
-      borderRadius: 8,
+      borderRadius: 10,
       textAlign: "center",
       animation: "fadeUp 0.3s ease"
     }}>
-      <div style={{ fontSize: 8, color: C.gold, letterSpacing: 2, marginBottom: 6, textTransform: "uppercase" }}>
-        {label || "DICE ROLL"}
+      <div style={{ fontSize: 9, color: C.gold, letterSpacing: 2, marginBottom: 8, textTransform: "uppercase" }}>
+        {diceAnim ? `${displayLabel} を振っています...` : displayLabel}
       </div>
-      <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
         {(diceResult || [1, 1]).map((d, i) => (
           <div key={i} style={{ 
-            width: 32, height: 32, 
-            background: "rgba(14,20,36,0.95)", 
-            border: `2px solid ${C.blueBorder}`, 
-            borderRadius: 4, 
+            width: 36, height: 36, 
+            background: diceAnim ? "linear-gradient(180deg, rgba(35,55,90,1), rgba(10,22,36,0.98))" : "rgba(14,20,36,0.95)", 
+            border: `2px solid ${diceAnim ? "#64b5f6" : C.blueBorder}`,
+            borderRadius: 8,
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 16, color: "#60c0f0", fontWeight: "bold",
+            fontSize: 16, color: "#90caf9", fontWeight: "bold",
             animation: diceAnim ? "rollSpin 0.2s ease infinite" : "none",
-            boxShadow: diceAnim ? "0 0 10px rgba(96,192,240,0.3)" : "none"
+            boxShadow: diceAnim ? "0 0 18px rgba(96,192,240,0.25)" : "none"
           }}>
             {d}
           </div>
         ))}
       </div>
       {!diceAnim && diceResult && (
-        <div style={{ fontSize: 12, color: "#fff", marginTop: 6, fontWeight: "bold" }}>
+        <div style={{ fontSize: 12, color: "#fff", marginTop: 8, fontWeight: "bold" }}>
           RESULT: {diceResult.join(", ")}
         </div>
       )}
