@@ -496,15 +496,6 @@ function SessionApp({ roomCode, user }) {
       }
 
       let newQuests = [...(p.quests || [])];
-      if (cycleIdx === 0) {
-        (p.scenarioData?.quests ||[]).forEach(q => {
-          if (newQuests.find(nq => nq.id === q.id)) return;
-          if (q.unlockType === "quest") {
-            const ref = newQuests.find(nq => nq.id === q.unlockQuestId && nq.solved);
-            if (ref) newQuests.push({ ...q, revealed: true, solved: false });
-          }
-        });
-      }
 
       logMsgs.push(`${day}日目・${CYCLES[cycleIdx]}サイクル開始`);
 

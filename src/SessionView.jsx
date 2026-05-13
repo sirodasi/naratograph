@@ -2009,9 +2009,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                   upd(p => {
                     let nextQuests = p.quests.map(x => x.id === sc.questId ? { ...x, solved: true } : x);
 
-                    (p.scenarioData?.quests || []).forEach(scQ => {
-                      if (scQ.unlockType === "quest" && scQ.unlockQuestId === sc.questId) {
-                        if (!nextQuests.find(nq => nq.id === scQ.id)) {
+                    const allScenarioQuests = p.scenarioData?.quests || [];
+                    allScenarioQuests.forEach(scQ => {
+                      if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(sc.questId)) {
+                        if (!nextQuests.find(nq => String(nq.id) === String(scQ.id))) {
                           nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
                         }
                       }
@@ -2272,9 +2273,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                               const isNowSolved = !q.solved;
                               let nextQuests = p.quests.map(x => x.id === q.id ? { ...x, solved: isNowSolved } : x);
                               if (isNowSolved) {
-                                (p.scenarioData?.quests || []).forEach(scQ => {
-                                  if (scQ.unlockType === "quest" && scQ.unlockQuestId === q.id) {
-                                    if (!nextQuests.find(nq => nq.id === scQ.id)) {
+                                const allScenarioQuests = p.scenarioData?.quests || [];
+                                allScenarioQuests.forEach(scQ => {
+                                  if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(q.id)) {
+                                    if (!nextQuests.find(nq => String(nq.id) === String(scQ.id))) {
                                       nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
                                     }
                                   }
