@@ -549,9 +549,8 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               </div>
             ))}
           </div>
-        </div>
 
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, marginTop: 16 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, marginTop: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 13, color: C.red, letterSpacing: 1, fontWeight: "bold" }}>⚔️ 決戦フェイズ：エネミー陣営</div>
@@ -647,6 +646,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>
