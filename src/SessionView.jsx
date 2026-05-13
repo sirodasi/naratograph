@@ -2702,9 +2702,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
           <BattleRightPanel 
             gs={gs} 
             upd={upd} 
-            user={props.user} 
-            isGm={props.isGm} 
-            getSpot={props.getSpot} 
+            user={user} 
+            isGm={isGm} 
+            getSpot={getSpot} 
           />
         ) : (
           <>
