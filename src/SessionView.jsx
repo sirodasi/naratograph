@@ -289,6 +289,78 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const combatantPc = pcs.find(p => p.uid === b.pcCombatant);
+  const currentPos = b.positions?.[b.pcCombatant];
+  const danmakuAtPos = b.grids?.[b.pcCombatant]?.[currentPos - 1] || 0;
+  const evadeTarget = danmakuAtPos + 3;
+
+  const handleEvadeRoll = () => {
+    const diceCount = b.currentEvadeDice ?? 3;
+    
+    animateDice(diceCount, "回避判定", (res) => {
+      const maxDie = Math.max(...res);
+      const isSuccess = maxDie >= evadeTarget;
+      const isFumble = res.every(d => d === 1);
+
+      if (isSuccess && !isFumble) {
+        upd(p => ({
+          ...p,
+          battle: { ...p.battle, phase: "pc_evade_move" },
+          log: [`✨ ${combatantPc.charName} は回避判定に成功！(出目:${res.join(",")}) 移動先を選択してください。`, ...p.log]
+        }));
+      } else {
+        upd(p => ({
+          ...p,
+          battle: { ...p.battle, phase: "pc_hit_check" },
+          log: [`💀 ${combatantPc.charName} は回避に失敗... (出目:${res.join(",")})`, ...p.log]
+        }));
+      }
+    });
+  };
+
+  const handleEvadeMove = (targetCellNum) => {
+    upd(p => {
+      const oldPos = p.battle.positions[b.pcCombatant];
+      const bulletsCleared = p.battle.grids[b.pcCombatant][oldPos - 1];
+
+      const newGrid = [...p.battle.grids[b.pcCombatant]];
+      newGrid[oldPos - 1] = 0;
+
+      const nextPcs = p.pcs.map(pc => {
+        if (pc.uid !== b.pcCombatant) return pc;
+        let nextGraze = (pc.resources.グレイズ?.cur || 0) + bulletsCleared;
+        let nextSpe = pc.resources.スペカ?.cur || 0;
+        if (nextGraze >= 5) {
+          nextGraze -= 5;
+          nextSpe += 1;
+        }
+        return {
+          ...pc,
+          resources: { 
+            ...pc.resources, 
+            グレイズ: { ...pc.resources.グレイズ, cur: Math.min(5, nextGraze) },
+            スペカ: { ...pc.resources.スペカ, cur: Math.min(9, nextSpe) }
+          }
+        };
+      });
+
+      const nextEvadeDice = (p.battle.currentEvadeDice ?? 3) - 1;
+
+      return {
+        ...p,
+        pcs: nextPcs,
+        battle: {
+          ...p.battle,
+          positions: { ...p.battle.positions, [b.pcCombatant]: targetCellNum },
+          grids: { ...p.battle.grids, [b.pcCombatant]: newGrid },
+          currentEvadeDice: nextEvadeDice,
+          phase: nextEvadeDice > 0 ? "pc_evade_ask_next" : "pc_hit_check"
+        },
+        log: [`🏃 ${combatantPc.charName} は ${targetCellNum}番マスへ移動。${bulletsCleared}点のグレイズを獲得！`, ...p.log]
+      };
+    });
+  };
+
   if (b.phase === "setup" && isGm) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
@@ -485,7 +557,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           {b.phase.toUpperCase()}
         </div>
 
-        {/* NPCショット実行ボタンと介入UI */}
         {b.phase === "npc_shot_roll" && (
           <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
             <div style={{ color: C.red, fontSize: 11, marginBottom: 4 }}>NPC攻撃ステップ</div>
@@ -512,25 +583,71 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             </button>
           </div>
         )}
+
+        {b.phase === "pc_evade_intro" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.blueBorder}`, textAlign: "center" }}>
+            <div style={{ color: C.blue, fontSize: 11, marginBottom: 4 }}>回避ステップ</div>
+            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{combatantPc?.charName} の回避</div>
+            {danmakuAtPos === 0 ? (
+              <div>
+                <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
+                <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {evadeTarget} (弾幕 {danmakuAtPos} + 3)</div>
+                {(user.uid === b.pcCombatant || isGm) && (
+                  <button onClick={handleEvadeRoll} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                    🎲 回避判定 ({b.currentEvadeDice ?? 3}D)
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {b.phase === "pc_evade_ask_next" && (
+          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.goldDim}`, textAlign: "center" }}>
+            <div style={{ color: C.gold, fontSize: 11, marginBottom: 4 }}>連続回避</div>
+            <div style={{ color: C.text, fontSize: 10, marginBottom: 12 }}>さらに回避を繰り返しますか？<br/>(判定ダイスが {b.currentEvadeDice}個 に減少します)</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_intro" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>さらに回避</button>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check" } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>ここで終了</button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 20, paddingTop: 20 }}>
-        {pcs.map(p => (
-          <BattleGrid 
-            key={p.uid}
-            name={p.charName}
-            isNpc={false}
-            isCombatant={b.pcCombatant === p.uid}
-            grid={b.grids?.[p.uid]}
-            pos={b.positions?.[p.uid]}
-            isDead={(p.resources?.残り人数?.cur || 0) <= 0}
-            sprite={
-              p.customPortrait 
-                ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
-                : <CharSprite spriteRow={p.spriteRow} spriteCol={p.spriteCol} size={40} />
-            }
-          />
-        ))}
+        {pcs.map(p => {
+          const isCombatant = b.pcCombatant === p.uid;
+          const isMovePhase = b.phase === "pc_evade_move" && isCombatant;
+          const currentPos = b.positions[p.uid];
+          const neighbors = ADJACENT_MAP[currentPos] || [];
+
+          return (
+            <div key={p.uid} style={{ position: "relative" }}>
+              <BattleGrid 
+                name={p.charName}
+                grid={b.grids?.[p.uid]}
+                pos={currentPos}
+                isCombatant={isCombatant}
+                highlightCells={isMovePhase ? neighbors : []}
+                onCellClick={(num) => {
+                  if (isMovePhase && neighbors.includes(num)) {
+                    handleEvadeMove(num);
+                  }
+                }}
+                isDead={(p.resources?.残り人数?.cur || 0) <= 0}
+                sprite={
+                  p.customPortrait 
+                    ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
+                    : <CharSprite spriteRow={p.spriteRow} spriteCol={p.spriteCol} size={40} />
+                }
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -3224,7 +3341,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
       <BattleDiceTray diceResult={diceResult} diceAnim={diceAnim} label={diceLabel} />
-      
+
       <div style={{ padding: 10, background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
         <div style={{ fontSize: 9, color: C.red, letterSpacing: 2, marginBottom: 4 }}>ENEMY COMBATANT</div>
         <div style={{ fontSize: 13, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
