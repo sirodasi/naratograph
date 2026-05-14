@@ -308,9 +308,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   };
 
   const combatantPc = pcs.find(p => p.uid === b.pcCombatant);
+  const combatantNpc = npcs.find(n => n.id === b.npcCombatant);
   const currentPos = b.positions?.[b.pcCombatant];
   const danmakuAtPos = b.grids?.[b.pcCombatant]?.[currentPos - 1] || 0;
   const evadeTarget = danmakuAtPos + 3;
+  const npcPos = b.positions?.[b.npcCombatant];
+  const npcDanmakuAtPos = b.grids?.[b.npcCombatant]?.[npcPos - 1] || 0;
 
   const handleEvadeRoll = (isPc) => {
     const combatant = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
@@ -341,9 +344,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
       }
     });
   };
-
-  const handlePcEvadeRoll = () => handleEvadeRoll(true);
-  const handleNpcEvadeRoll = () => handleEvadeRoll(false);
 
   const handleEvadeMove = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
@@ -386,7 +386,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: isPc ? ((p.battle.currentEvadeDice ?? 3) - 1) : p.battle.currentEvadeDice,
-          phase: isPc ? ((p.battle.currentEvadeDice ?? 3) - 1 > 0 ? "pc_evade_ask_next" : "pc_hit_check") : "round_end_check"
+          phase: isPc ? "pc_hit_check" : "round_end_check",
+      currentEvadeDice: isPc ? 3 : p.battle.currentEvadeDice
         },
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
@@ -506,6 +507,174 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     });
   };
 
+  const renderShotIntro = (isPc) => {
+    const combatant = isPc ? combatantPc : npcs.find(n => n.id === b.npcCombatant);
+    const title = isPc ? "PLAYER ATTACK TURN" : "NPC ATTACK TURN";
+    const titleColor = isPc ? C.blue : C.red;
+    const nextPhase = isPc ? "pc_shot_roll" : "npc_shot_roll";
+    const buttonLabel = isPc ? "準備完了 🎲" : "ショット開始 🎲";
+    const buttonStyle = isPc ? btnFull(C.blueBg, C.blueBorder, C.blue) : btnFull(C.redBg, C.redBorder, C.red);
+    const canProceed = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
+
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+        <div style={{ textAlign: "center", animation: "fadeUp 0.8s ease" }}>
+          <div style={{ fontSize: 12, color: titleColor, letterSpacing: 4, marginBottom: 10 }}>{title}</div>
+          <div style={{ fontSize: 32, color: "#fff", fontWeight: "bold", textShadow: `0 0 20px ${titleColor}55` }}>{combatant?.charName || combatant?.name}</div>
+          <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
+          {canProceed && (
+            <button 
+              onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }))}
+              style={{ ...buttonStyle, marginTop: 30, width: 200 }}
+            >
+              {buttonLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderShotRoll = (isPc) => {
+    const attacker = isPc ? combatantPc : npcs.find(n => n.id === b.npcCombatant);
+    const diceCount = (attacker?.resources?.攻撃力?.cur || 0) + (b.supportDice || 0);
+    const title = isPc ? "PC攻撃ステップ" : "NPC攻撃ステップ";
+    const name = attacker?.charName || attacker?.name;
+    const cardColor = isPc ? C.blue : C.red;
+    const buttonStyle = isPc ? btnFull(C.blueBg, C.blueBorder, C.blue) : btnFull(C.redBg, C.redBorder, C.red);
+    const canRoll = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${cardColor}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+        <div style={{ color: cardColor, fontSize: 11, marginBottom: 4 }}>{title}</div>
+        <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{name} の攻撃</div>
+        {b.supportDice > 0 && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>援護射撃ボーナス: +{b.supportDice}D</div>}
+        {canRoll && (
+          <button onClick={() => executeShot(isPc)} style={buttonStyle}>
+            🎲 ショットを放つ ({diceCount}D)
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderShotAfter = (isPc) => {
+    const nextPhase = isPc ? "npc_evade_intro" : "pc_evade_intro";
+    const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
+    const buttonStyle = btnFull(C.blueBg, C.blueBorder, C.blue);
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+        <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
+        <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
+        {canProceed && (
+          <button 
+            onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }))} 
+            style={buttonStyle}
+          >
+            回避ステップへ進む
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderEvadeIntro = (isPc) => {
+    const combatant = isPc ? combatantPc : combatantNpc;
+    const targetValue = isPc ? evadeTarget : npcDanmakuAtPos + 3;
+    const bulletCount = isPc ? danmakuAtPos : npcDanmakuAtPos;
+    const titleColor = isPc ? C.blue : C.red;
+    const borderColor = isPc ? C.blueBorder : C.redBorder;
+    const isPlayable = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
+    const canAutoSuccess = isPc && bulletCount === 0;
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${borderColor}`, textAlign: "center" }}>
+        <div style={{ color: titleColor, fontSize: 11, marginBottom: 4 }}>{isPc ? "回避ステップ" : "回避ステップ(NPC)"}</div>
+        <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{combatant?.charName || combatant?.name} の回避</div>
+        {canAutoSuccess ? (
+          <div>
+            <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
+            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {targetValue} (弾幕 {bulletCount} + 3)</div>
+            {isPlayable && (
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
+                  🎲 回避判定 ({isPc ? (b.currentEvadeDice ?? 3) : 3}D)
+                </button>
+                {isPc && (
+                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: 3 } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
+                    その場にとどまる
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderEvadeMove = (isPc) => {
+    const borderColor = isPc ? C.blue : C.red;
+    const textColor = isPc ? C.blue : C.red;
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.85)", padding: "12px 20px", borderRadius: 8, border: `1px solid ${borderColor}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+        <div style={{ color: textColor, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>移動先を選択</div>
+        <div style={{ color: "#fff", fontSize: 10 }}>ハイライトされた隣接マスをクリックしてください</div>
+        {isGm && (
+          <div style={{ marginTop: 8, fontSize: 9, color: C.textFaint }}>※GMはPLの代わりに操作可能です</div>
+        )}
+      </div>
+    );
+  };
+
+  const renderHitCheck = (isPc) => {
+    const targetId = isPc ? b.pcCombatant : b.npcCombatant;
+    const target = isPc ? combatantPc : combatantNpc;
+    const count = b.grids?.[targetId]?.[b.positions?.[targetId] - 1] || 0;
+    const isSafe = isPc && count === 0;
+    const canApply = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
+    const applyHandler = () => isPc ? applyPcHit(targetId) : applyNpcHit(targetId);
+    const cardBorder = isSafe ? C.green : C.red;
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${cardBorder}`, textAlign: "center" }}>
+        <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>{isPc ? "当たり判定ステップ" : "当たり判定ステップ(NPC)"}</div>
+        {isSafe ? (
+          <div>
+            <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
+            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_intro", currentEvadeDice: 3 } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>PC攻撃ステップへ</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ color: C.red, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>被弾（HIT!!）</div>
+            {canApply && (
+              <button onClick={applyHandler} style={btnFull(C.redBg, C.redBorder, C.red)}>ダメージを適用</button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderDropout = (isPc) => {
+    const combatant = isPc ? combatantPc : combatantNpc;
+    return (
+      <div style={{ background: "rgba(0,0,0,0.85)", padding: 20, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
+        <div style={{ color: C.red, fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>脱落</div>
+        <div style={{ color: "#fff", fontSize: 11, marginBottom: 15 }}>{combatant?.charName || combatant?.name} は戦線から離脱しました...</div>
+        {isGm && (
+          <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "cleanup" } }))} style={btnFull(C.border, C.border, C.textFaint)}>ラウンド終了処理へ</button>
+        )}
+      </div>
+    );
+  };
+
   if (b.phase === "setup" && isGm) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
@@ -604,7 +773,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             <div style={{ textAlign: "center", color: C.textDim }}>GMが対戦者を選出しています...</div>
           ) : (
             <div>
-              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>1. 出撃するPCを選択（未行動優先）</div>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>1. 出撃するPCを選択</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
                 {alivePcs.map(p => {
                   const isActed = (b.actedPcs || []).includes(p.uid);
@@ -656,27 +825,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     );
   }
 
-  if (b.phase === "npc_shot_intro") {
-    const npc = npcs.find(n => n.id === b.npcCombatant);
-    return (
-      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
-        <div style={{ textAlign: "center", animation: "fadeUp 0.8s ease" }}>
-          <div style={{ fontSize: 12, color: C.red, letterSpacing: 4, marginBottom: 10 }}>NPC ATTACK TURN</div>
-          <div style={{ fontSize: 32, color: "#fff", fontWeight: "bold", textShadow: "0 0 20px rgba(255,0,0,0.5)" }}>{npc?.name}</div>
-          <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
-          {isGm && (
-            <button 
-              onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "npc_shot_roll" } }))}
-              style={{ ...btnFull(C.redBg, C.redBorder, C.red), marginTop: 30, width: 200 }}
-            >
-              ショット開始 🎲
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
       
@@ -721,94 +869,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           {b.phase.toUpperCase()}
         </div>
 
-        {b.phase === "npc_shot_roll" && (
-          <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-            <div style={{ color: C.red, fontSize: 11, marginBottom: 4 }}>NPC攻撃ステップ</div>
-            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{npcs.find(n => n.id === b.npcCombatant)?.name} の攻撃</div>
-            {b.supportDice > 0 && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>援護射撃ボーナス: +{b.supportDice}D</div>}
-            
-            {isGm && (
-              <button onClick={executeNpcShot} style={btnFull(C.redBg, C.redBorder, C.red)}>
-                🎲 ショットを放つ ({npcs.find(n => n.id === b.npcCombatant)?.resources.攻撃力.cur + (b.supportDice || 0)}D)
-              </button>
-            )}
-          </div>
-        )}
+        {(b.phase === "pc_shot_intro" || b.phase === "npc_shot_intro") && renderShotIntro(b.phase === "pc_shot_intro")}
 
-        {b.phase === "npc_shot_after" && (
-          <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-            <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
-            <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
-            <button 
-              onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_intro" } }))} 
-              style={btnFull(C.blueBg, C.blueBorder, C.blue)}
-            >
-              回避ステップへ進む
-            </button>
-          </div>
-        )}
+        {(b.phase === "pc_shot_roll" || b.phase === "npc_shot_roll") && renderShotRoll(b.phase === "pc_shot_roll")}
 
-        {b.phase === "pc_evade_intro" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.blueBorder}`, textAlign: "center" }}>
-            <div style={{ color: C.blue, fontSize: 11, marginBottom: 4 }}>回避ステップ</div>
-            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{combatantPc?.charName} の回避</div>
-            {danmakuAtPos === 0 ? (
-              <div>
-                <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
-                <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
-              </div>
-            ) : (
-              <div>
-                <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {evadeTarget} (弾幕 {danmakuAtPos} + 3)</div>
-                {(user.uid === b.pcCombatant || isGm) && (
-                  <button onClick={handleEvadeRoll} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
-                    🎲 回避判定 ({b.currentEvadeDice ?? 3}D)
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {(b.phase === "pc_shot_after" || b.phase === "npc_shot_after") && renderShotAfter(b.phase === "pc_shot_after")}
 
-        {b.phase === "pc_evade_ask_next" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.goldDim}`, textAlign: "center" }}>
-            <div style={{ color: C.gold, fontSize: 11, marginBottom: 4 }}>連続回避</div>
-            <div style={{ color: C.text, fontSize: 10, marginBottom: 12 }}>さらに回避を繰り返しますか？<br/>(判定ダイスが {b.currentEvadeDice}個 に減少します)</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_intro" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>さらに回避</button>
-              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check" } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>ここで終了</button>
-            </div>
-          </div>
-        )}
+        {(b.phase === "pc_evade_intro" || b.phase === "npc_evade_intro") && renderEvadeIntro(b.phase === "pc_evade_intro")}
 
-        {b.phase === "pc_evade_move" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: "12px 20px", borderRadius: 8, border: `1px solid ${C.blue}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-            <div style={{ color: C.blue, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>移動先を選択</div>
-            <div style={{ color: "#fff", fontSize: 10 }}>ハイライトされた隣接マスをクリックしてください</div>
-            {isGm && (
-              <div style={{ marginTop: 8, fontSize: 9, color: C.textFaint }}>※GMはPLの代わりに操作可能です</div>
-            )}
-          </div>
-        )}
+        {(b.phase === "pc_evade_move" || b.phase === "npc_evade_move") && renderEvadeMove(b.phase === "pc_evade_move")}
 
-        {b.phase === "pc_hit_check" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${danmakuAtPos > 0 ? C.red : C.green}`, textAlign: "center" }}>
-            <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>当たり判定ステップ</div>
-            {danmakuAtPos > 0 ? (
-              <div>
-                <div style={{ color: C.red, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>被弾（HIT!!）</div>
-                {(user.uid === b.pcCombatant || isGm) && (
-                  <button onClick={() => applyPcHit(b.pcCombatant)} style={btnFull(C.redBg, C.redBorder, C.red)}>ダメージを適用</button>
-                )}
-              </div>
-            ) : (
-              <div>
-                <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
-                <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_intro", currentEvadeDice: 3 } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>PC攻撃ステップへ</button>
-              </div>
-            )}
-          </div>
-        )}
+        {(b.phase === "pc_hit_check" || b.phase === "npc_hit_check") && renderHitCheck(b.phase === "pc_hit_check")}
 
         {(b.phase === "pc_hit_recovery" || b.phase === "npc_hit_recovery") && (
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
@@ -817,81 +888,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           </div>
         )}
 
-        {b.phase === "pc_dropout" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 20, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
-            <div style={{ color: C.red, fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>脱落</div>
-            <div style={{ color: "#fff", fontSize: 11, marginBottom: 15 }}>{combatantPc?.charName} は戦線から離脱しました...</div>
-            {isGm && (
-              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "cleanup" } }))} style={btnFull(C.border, C.border, C.textFaint)}>ラウンド終了処理へ</button>
-            )}
-          </div>
-        )}
-
-        {b.phase === "pc_shot_intro" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 20, borderRadius: 8, border: `2px solid ${C.blue}`, textAlign: "center", animation: "fadeUp 0.8s ease" }}>
-            <div style={{ fontSize: 12, color: C.blue, letterSpacing: 4, marginBottom: 10 }}>PLAYER ATTACK TURN</div>
-            <div style={{ fontSize: 24, color: "#fff", fontWeight: "bold" }}>{combatantPc?.charName}</div>
-            <div style={{ fontSize: 11, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
-            {(user.uid === b.pcCombatant || isGm) && (
-              <button 
-                onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_roll" } }))}
-                style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 20 }}
-              >
-                準備完了 🎲
-              </button>
-            )}
-          </div>
-        )}
-
-        {b.phase === "pc_shot_roll" && (
-          <div style={{ background: "rgba(0,0,0,0.9)", padding: 15, borderRadius: 8, border: `1px solid ${C.blueBorder}`, textAlign: "center", width: 260 }}>
-            <div style={{ color: C.blue, fontSize: 11, marginBottom: 4 }}>PC攻撃ステップ</div>
-            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{pcs.find(p => p.uid === b.pcCombatant)?.name} の攻撃</div>
-            
-            {b.supportDice > 0 && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>援護射撃ボーナス: +{b.supportDice}D</div>}
-
-            {(user.uid === b.pcCombatant || isGm) && (
-              <button onClick={executePcShot} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
-                🎲 ショットを放つ ({combatantPc.resources.攻撃力.cur + (b.supportDice || 0)}D)
-              </button>
-            )}
-          </div>
-        )}
-
-        {b.phase === "pc_shot_after" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center" }}>
-            <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
-            <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>（相手は「かばう」を使用できます）</div>
-            {isGm && (
-              <button 
-                onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "npc_evade_intro", lastSpellUsed: null } }))} 
-                style={btnFull(C.redBg, C.redBorder, C.red)}
-              >
-                NPCの回避ステップへ進む
-              </button>
-            )}
-          </div>
-        )}
-
-        {b.phase === "npc_evade_intro" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.redBorder}`, textAlign: "center" }}>
-            <div style={{ color: C.red, fontSize: 11, marginBottom: 4 }}>回避ステップ(NPC)</div>
-            <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{npcs.find(n => n.id === b.npcCombatant)?.name} の回避</div>
-            <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {b.grids[b.npcCombatant][b.positions[b.npcCombatant]-1] + 3}</div>
-            {isGm && (
-              <button onClick={handleNpcEvadeRoll} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 回避判定 (3D)</button>
-            )}
-          </div>
-        )}
-
-        {b.phase === "npc_hit_check" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
-            <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>当たり判定ステップ(NPC)</div>
-            {isGm && (
-              <button onClick={() => applyNpcHit(b.npcCombatant)} style={btnFull(C.redBg, C.redBorder, C.red)}>ダメージ適用</button>
-            )}
-          </div>
-        )}
+        {(b.phase === "pc_dropout" || b.phase === "npc_dropout") && renderDropout(b.phase === "pc_dropout")}
 
         {b.phase === "round_end_check" && (
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
