@@ -94,7 +94,7 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
       {/* Header row */}
       <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", cursor:"pointer",
         background: open ? `${solColor}08` : "rgba(255,255,255,0.02)" }}
-        onClick={()=>setOpen(v=>!v)}>
+        onClick={() => setOpen(v => !v)}>
         <div style={{ width:18, height:18, borderRadius:"50%", background:C.goldBg, border:`1px solid ${C.goldDim}`,
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:C.gold, flexShrink:0 }}>
           {index+1}
@@ -109,7 +109,7 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
         {(quest.unlockType||"start")==="quest" && <Chip label="条件付き公開" color={C.gold}/>}
         {(quest.unlockType||"start")==="custom" && <Chip label="手動公開" color="#f9a825"/>}
         <Chip label={quest.solutionType} color={solColor} />
-        <button onClick={e=>{e.stopPropagation();onDelete();}}
+        <button onClick={e => {e.stopPropagation();onDelete();}}
           style={{ ...btn(C.redBg,C.redBorder,C.red,{padding:"2px 8px",fontSize:10}) }}>✕</button>
         <span style={{ color:C.textFaint, fontSize:12 }}>{open?"▲":"▼"}</span>
       </div>
@@ -119,25 +119,25 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             <div>
               <Label>クエスト名 *</Label>
-              <input style={iBase} value={quest.name} onChange={e=>upd("name",e.target.value)} placeholder="クエスト名"/>
+              <input style={iBase} value={quest.name} onChange={e => upd("name",e.target.value)} placeholder="クエスト名"/>
             </div>
             <div>
               <Label>レベル</Label>
-              <input type="number" min="1" max="9" style={{...iBase,width:60}} value={quest.level} onChange={e=>upd("level",parseInt(e.target.value)||1)}/>
+              <input type="number" min="1" max="9" style={{...iBase,width:60}} value={quest.level} onChange={e => upd("level",parseInt(e.target.value)||1)}/>
             </div>
           </div>
 
           <Label>概要</Label>
-          <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e=>upd("summary",e.target.value)} placeholder="クエストの概要"/>
+          <textarea style={{...taBase,height:52}} value={quest.summary} onChange={e => upd("summary",e.target.value)} placeholder="クエストの概要"/>
 
           <SecTitle>公開条件</SecTitle>
           <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-            {[["start","探索フェイズ開始時"],["quest","クエスト解決時"],["custom","カスタム"]].map(([v,label])=>(
-              <button key={v} onClick={()=>upd("unlockType",v)}
+            {[["start","探索フェイズ開始時"],["quest","クエスト解決時"],["custom","カスタム"]].map(([v, label]) => (
+              <button key={v} onClick={() => upd("unlockType",v)}
                 style={{ ...btn(
-                  (quest.unlockType||"start")===v ? C.goldBg : "rgba(255,255,255,0.02)",
-                  (quest.unlockType||"start")===v ? C.goldDim : C.border,
-                  (quest.unlockType||"start")===v ? C.gold : C.textFaint,
+                  (quest.unlockType||"start")=== v ? C.goldBg : "rgba(255,255,255,0.02)",
+                  (quest.unlockType||"start")=== v ? C.goldDim : C.border,
+                  (quest.unlockType||"start")=== v ? C.gold : C.textFaint,
                   {padding:"4px 10px",fontSize:10}
                 )}}>
                 {label}
@@ -152,9 +152,9 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
           {(quest.unlockType||"start")==="quest" && (
             <div>
               <select style={iBase} value={quest.unlockQuestId||""}
-                onChange={e=>upd("unlockQuestId",e.target.value)}>
+                onChange={e => upd("unlockQuestId",e.target.value)}>
                 <option value="">参照するクエストを選択…</option>
-                {(allQuests||[]).filter(q=>q.id!==quest.id&&q.name).map(q=>(
+                {(allQuests||[]).filter(q => q.id!==quest.id&&q.name).map(q => (
                   <option key={q.id} value={q.id}>クエスト「{q.name}」</option>
                 ))}
               </select>
@@ -173,7 +173,7 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
           {(quest.unlockType||"start")==="custom" && (
             <div>
               <input style={iBase} value={quest.unlockCondition||""}
-                onChange={e=>upd("unlockCondition",e.target.value)}
+                onChange={e => upd("unlockCondition",e.target.value)}
                 placeholder="例: 特定の手がかりを取得後"/>
               <div style={{ fontSize:9, color:"#f9a825", marginTop:4 }}>
                 ※カスタム条件のためGMが手動でクエストを公開してください
@@ -182,17 +182,17 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
           )}
 
           <Label>クエストの真相</Label>
-          <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e=>upd("truth",e.target.value)} placeholder="クエストの真相"/>
+          <textarea style={{...taBase,height:52}} value={quest.truth} onChange={e => upd("truth",e.target.value)} placeholder="クエストの真相"/>
 
           <SecTitle>解決方法</SecTitle>
           <div style={{ display:"flex", gap:6, marginBottom:10 }}>
-            {SOLUTION_TYPES.map(t=>(
-              <button key={t} onClick={()=>upd("solutionType",t)}
+            {SOLUTION_TYPES.map(t => (
+              <button key={t} onClick={() => upd("solutionType",t)}
                 style={{ ...btn(
-                  quest.solutionType===t ? `${SOLUTION_COLORS[t]}20` : "rgba(255,255,255,0.02)",
-                  quest.solutionType===t ? SOLUTION_COLORS[t] : C.border,
-                  quest.solutionType===t ? SOLUTION_COLORS[t] : C.textFaint,
-                  { padding:"5px 12px", fontWeight: quest.solutionType===t?"bold":"normal" }
+                  quest.solutionType === t ? `${SOLUTION_COLORS[t]}20` : "rgba(255,255,255,0.02)",
+                  quest.solutionType === t ? SOLUTION_COLORS[t] : C.border,
+                  quest.solutionType === t ? SOLUTION_COLORS[t] : C.textFaint,
+                  { padding:"5px 12px", fontWeight: quest.solutionType === t?"bold":"normal" }
                 )}}>
                 {t}
               </button>
@@ -205,18 +205,18 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 <div>
                   <Label>指定タグ（任意）</Label>
-                  <input style={iBase} value={quest.specifiedTag} onChange={e=>upd("specifiedTag",e.target.value)} placeholder="例: 妖怪・巫女"/>
+                  <input style={iBase} value={quest.specifiedTag} onChange={e => upd("specifiedTag",e.target.value)} placeholder="例: 妖怪・巫女"/>
                 </div>
                 <div>
                   <Label>解決場所（スポットID）</Label>
-                  <input style={iBase} value={quest.location} onChange={e=>upd("location",e.target.value)} placeholder="例: 11"/>
+                  <input style={iBase} value={quest.location} onChange={e => upd("location",e.target.value)} placeholder="例: 11"/>
                 </div>
               </div>
             </div>
           )}
 
           {/* 弾幕ごっこ */}
-          {quest.solutionType==="弾幕ごっこ" && (()=>{
+          {quest.solutionType==="弾幕ごっこ" && (()=> {
             const en = quest.enemy || EMPTY_ENEMY();
             const sc1ok = !!(en.sc1name && en.sc1effect);
             const sc1partial = !!(en.sc1name || en.sc1effect) && !sc1ok;
@@ -228,31 +228,31 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 70px 70px", gap:8, marginBottom:4 }}>
                   <div>
                     <Label>エネミー名 *</Label>
-                    <input style={iBase} value={en.name} onChange={e=>updEnemy("name",e.target.value)} placeholder="例: 謎の妖怪"/>
+                    <input style={iBase} value={en.name} onChange={e => updEnemy("name",e.target.value)} placeholder="例: 謎の妖怪"/>
                   </div>
                   <div>
                     <Label>残り人数</Label>
-                    <input type="number" min="1" max="99" style={iBase} value={en.life??2} onChange={e=>updEnemy("life",parseInt(e.target.value)||1)}/>
+                    <input type="number" min="1" max="99" style={iBase} value={en.life??2} onChange={e => updEnemy("life",parseInt(e.target.value)||1)}/>
                   </div>
                   <div>
                     <Label>スペルカード</Label>
-                    <input type="number" min="0" max="9" style={iBase} value={en.spellcard??1} onChange={e=>updEnemy("spellcard",parseInt(e.target.value)||0)}/>
+                    <input type="number" min="0" max="9" style={iBase} value={en.spellcard??1} onChange={e => updEnemy("spellcard",parseInt(e.target.value)||0)}/>
                   </div>
                   <div>
                     <Label>攻撃力</Label>
-                    <input type="number" min="0" max="99" style={iBase} value={en.attack??5} onChange={e=>updEnemy("attack",parseInt(e.target.value)||0)}/>
+                    <input type="number" min="0" max="99" style={iBase} value={en.attack??5} onChange={e => updEnemy("attack",parseInt(e.target.value)||0)}/>
                   </div>
                 </div>
 
                 {/* 弾幕スキル */}
                 <Label>弾幕スキル（任意）</Label>
                 <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                  {[["none","なし"],["official","公式から選択"],["custom","カスタム"]].map(([v,label])=>(
-                    <button key={v} onClick={()=>updEnemy("dsType",v)}
+                  {[["none","なし"],["official","公式から選択"],["custom","カスタム"]].map(([v, label]) => (
+                    <button key={v} onClick={() => updEnemy("dsType",v)}
                       style={{ ...btn(
-                        en.dsType===v?"rgba(200,160,64,0.2)":"rgba(255,255,255,0.02)",
-                        en.dsType===v?C.goldDim:C.border,
-                        en.dsType===v?C.gold:C.textFaint,
+                        en.dsType === v?"rgba(200,160,64,0.2)":"rgba(255,255,255,0.02)",
+                        en.dsType === v?C.goldDim:C.border,
+                        en.dsType === v?C.gold:C.textFaint,
                         {padding:"4px 10px",fontSize:10}
                       )}}>
                       {label}
@@ -262,13 +262,13 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                 {en.dsType==="official" && (
                   <div style={{ marginBottom:8 }}>
                     <select style={iBase} value={en.dsName}
-                      onChange={e=>{
-                        const sk=OFFICIAL_DANMAKU_SKILLS.find(s=>s.name===e.target.value);
+                      onChange={e => {
+                        const sk=OFFICIAL_DANMAKU_SKILLS.find(s => s.name === e.target.value);
                         updEnemy("dsName",e.target.value);
                         updEnemy("dsDesc",sk?.desc||"");
                       }}>
                       <option value="">スキルを選択…</option>
-                      {OFFICIAL_DANMAKU_SKILLS.map(sk=><option key={sk.name} value={sk.name}>{sk.name}</option>)}
+                      {OFFICIAL_DANMAKU_SKILLS.map(sk => <option key={sk.name} value={sk.name}>{sk.name}</option>)}
                     </select>
                     {en.dsName && (
                       <div style={{ marginTop:5, padding:"5px 8px", background:"rgba(255,255,255,0.03)", borderRadius:3, fontSize:9, color:C.textDim, lineHeight:1.6 }}>
@@ -280,9 +280,9 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                 {en.dsType==="custom" && (
                   <div style={{ marginBottom:8 }}>
                     <Label>スキル名</Label>
-                    <input style={{...iBase,marginBottom:4}} value={en.dsCustomName||""} onChange={e=>updEnemy("dsCustomName",e.target.value)} placeholder="スキル名"/>
+                    <input style={{...iBase,marginBottom:4}} value={en.dsCustomName||""} onChange={e => updEnemy("dsCustomName",e.target.value)} placeholder="スキル名"/>
                     <Label>効果テキスト</Label>
-                    <textarea style={{...iBase,height:52,resize:"vertical"}} value={en.dsDesc||""} onChange={e=>updEnemy("dsDesc",e.target.value)} placeholder="効果の説明"/>
+                    <textarea style={{...iBase,height:52,resize:"vertical"}} value={en.dsDesc||""} onChange={e => updEnemy("dsDesc",e.target.value)} placeholder="効果の説明"/>
                     <div style={{ fontSize:9, color:"#f9a825", marginTop:3 }}>※カスタムスキルのため弾幕ごっこ中に手動で処理してください</div>
                   </div>
                 )}
@@ -292,8 +292,8 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   <div style={{ fontSize:9, color: sc1partial?"#f9a825":C.textFaint, marginBottom:4 }}>
                     スペルカード①（任意・名前と効果は両方必要）{sc1partial&&" ⚠ どちらか一方が未入力"}
                   </div>
-                  <input style={{...iBase,marginBottom:4}} value={en.sc1name||""} onChange={e=>updEnemy("sc1name",e.target.value)} placeholder="スペルカード名（任意）"/>
-                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc1effect||""} onChange={e=>updEnemy("sc1effect",e.target.value)} placeholder="効果テキスト（任意）"/>
+                  <input style={{...iBase,marginBottom:4}} value={en.sc1name||""} onChange={e => updEnemy("sc1name",e.target.value)} placeholder="スペルカード名（任意）"/>
+                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc1effect||""} onChange={e => updEnemy("sc1effect",e.target.value)} placeholder="効果テキスト（任意）"/>
                 </div>
 
                 {/* スペルカード② */}
@@ -301,14 +301,14 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   <div style={{ fontSize:9, color: sc2partial?"#f9a825":C.textFaint, marginBottom:4 }}>
                     スペルカード②（任意・名前と効果は両方必要）{sc2partial&&" ⚠ どちらか一方が未入力"}
                   </div>
-                  <input style={{...iBase,marginBottom:4}} value={en.sc2name||""} onChange={e=>updEnemy("sc2name",e.target.value)} placeholder="スペルカード名（任意）"/>
-                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc2effect||""} onChange={e=>updEnemy("sc2effect",e.target.value)} placeholder="効果テキスト（任意）"/>
+                  <input style={{...iBase,marginBottom:4}} value={en.sc2name||""} onChange={e => updEnemy("sc2name",e.target.value)} placeholder="スペルカード名（任意）"/>
+                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc2effect||""} onChange={e => updEnemy("sc2effect",e.target.value)} placeholder="効果テキスト（任意）"/>
                 </div>
 
                 {/* 解決場所 */}
                 <div style={{ marginTop:8 }}>
                   <Label>解決場所（スポットID）</Label>
-                  <input style={{...iBase,width:80}} value={quest.location} onChange={e=>upd("location",e.target.value)} placeholder="例: 11"/>
+                  <input style={{...iBase,width:80}} value={quest.location} onChange={e => upd("location",e.target.value)} placeholder="例: 11"/>
                 </div>
               </div>
             );
@@ -330,12 +330,12 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
 function ScenarioForm({ initial, onSave, onCancel }) {
   const [sc, setSc] = useState(initial || EMPTY_SCENARIO());
   const [saving, setSaving] = useState(false);
-  const upd = (k,v) => setSc(p=>({...p,[k]:v}));
+  const upd = (k,v) => setSc(p => ({...p,[k]:v}));
 
-  const addQuest = () => setSc(p=>({...p, quests:[...(p.quests||[]), EMPTY_QUEST()]}));
-  const updateQuest = (i,q) => setSc(p=>({...p, quests:p.quests.map((x,j)=>j===i?q:x)}));
-  const deleteQuest = (i) => setSc(p=>({...p, quests:p.quests.filter((_,j)=>j!==i)}));
-  const moveQuest = (i,dir) => setSc(p=>{
+  const addQuest = () => setSc(p => ({...p, quests:[...(p.quests||[]), EMPTY_QUEST()]}));
+  const updateQuest = (i,q) => setSc(p => ({...p, quests:p.quests.map((x, j) => j === i?q:x)}));
+  const deleteQuest = (i) => setSc(p => ({...p, quests:p.quests.filter((_, j) => j!==i)}));
+  const moveQuest = (i,dir) => setSc(p => {
     const qs=[...(p.quests||[])];
     const j=i+dir;
     if(j<0||j>=qs.length)return p;
@@ -346,7 +346,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
   const handleSave = async () => {
     if(!sc.name.trim()){alert("シナリオ名を入力してください");return;}
     // スペルカードの片方未入力チェック
-    const badQuests = (sc.quests||[]).filter(q=>{
+    const badQuests = (sc.quests||[]).filter(q => {
       const en = q.enemy;
       if(q.solutionType!=="弾幕ごっこ"||!en) return false;
       const sc1partial = !!(en.sc1name||en.sc1effect) && !(en.sc1name&&en.sc1effect);
@@ -354,7 +354,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
       return sc1partial||sc2partial;
     });
     if(badQuests.length>0){
-      alert(`クエスト「${badQuests.map(q=>q.name||"(名前なし)").join("・")}」のスペルカードで名前と効果のどちらか一方が未入力です。`);
+      alert(`クエスト「${badQuests.map(q => q.name||"(名前なし)").join("・")}」のスペルカードで名前と効果のどちらか一方が未入力です。`);
       return;
     }
     setSaving(true);
@@ -406,25 +406,25 @@ function ScenarioForm({ initial, onSave, onCancel }) {
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14, marginBottom:12 }}>
             <SecTitle>基本情報</SecTitle>
             <Label>シナリオ名 *</Label>
-            <input style={iBase} value={sc.name} onChange={e=>upd("name",e.target.value)} placeholder="シナリオタイトル"/>
+            <input style={iBase} value={sc.name} onChange={e => upd("name",e.target.value)} placeholder="シナリオタイトル"/>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
               <div>
                 <Label>最小人数</Label>
                 <input type="number" min="1" max="8" style={iBase} value={sc.playerCountMin}
-                  onChange={e=>upd("playerCountMin",parseInt(e.target.value)||1)}/>
+                  onChange={e => upd("playerCountMin",parseInt(e.target.value)||1)}/>
               </div>
               <div>
                 <Label>最大人数</Label>
                 <input type="number" min="1" max="8" style={iBase} value={sc.playerCountMax}
-                  onChange={e=>upd("playerCountMax",parseInt(e.target.value)||4)}/>
+                  onChange={e => upd("playerCountMax",parseInt(e.target.value)||4)}/>
               </div>
             </div>
             <Label>難易度</Label>
-            <select style={iBase} value={sc.difficulty} onChange={e=>upd("difficulty",e.target.value)}>
+            <select style={iBase} value={sc.difficulty} onChange={e => upd("difficulty",e.target.value)}>
               {DIFFICULTIES.map(d=><option key={d} value={d}>{d}</option>)}
             </select>
             <Label>リミット</Label>
-            <input style={iBase} value={sc.limit} onChange={e=>upd("limit",e.target.value)} placeholder="例: 3日目の夜"/>
+            <input style={iBase} value={sc.limit} onChange={e => upd("limit",e.target.value)} placeholder="例: 3日目の夜"/>
           </div>
 
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14, marginBottom:12 }}>
@@ -433,8 +433,8 @@ function ScenarioForm({ initial, onSave, onCancel }) {
             {/* 選択済みチップ */}
             {(sc.bannedChars||[]).length>0 && (
               <div style={{marginBottom:8,display:"flex",flexWrap:"wrap",gap:4}}>
-                {sc.bannedChars.map(c=>(
-                  <span key={c} onClick={()=>upd("bannedChars",(sc.bannedChars||[]).filter(x=>x!==c))}
+                {sc.bannedChars.map(c => (
+                  <span key={c} onClick={() => upd("bannedChars",(sc.bannedChars||[]).filter(x => x!==c))}
                     style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",
                       background:"rgba(192,57,43,0.2)",border:`1px solid ${C.redBorder}`,
                       borderRadius:10,fontSize:9,color:C.red,cursor:"pointer"}}>
@@ -445,12 +445,12 @@ function ScenarioForm({ initial, onSave, onCancel }) {
             )}
             {/* キャラ一覧グリッド */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(72px,1fr))",gap:4,maxHeight:200,overflowY:"auto"}}>
-              {CHAR_NAMES.map(name=>{
+              {CHAR_NAMES.map(name => {
                 const banned=(sc.bannedChars||[]).includes(name);
                 return(
-                  <div key={name} onClick={()=>{
+                  <div key={name} onClick={() => {
                     const cur=sc.bannedChars||[];
-                    upd("bannedChars",banned?cur.filter(x=>x!==name):[...cur,name]);
+                    upd("bannedChars",banned?cur.filter(x => x!==name):[...cur,name]);
                   }} style={{
                     padding:"3px 4px",borderRadius:4,cursor:"pointer",textAlign:"center",
                     background:banned?"rgba(192,57,43,0.18)":"rgba(255,255,255,0.02)",
@@ -467,12 +467,12 @@ function ScenarioForm({ initial, onSave, onCancel }) {
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14 }}>
             <SecTitle>探索フェイズ開始スポット</SecTitle>
             <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-              {[["base","各PCの拠点"],["fixed","指定スポット"]].map(([v,label])=>(
-                <button key={v} onClick={()=>upd("startSpotType",v)}
+              {[["base","各PCの拠点"],["fixed","指定スポット"]].map(([v, label]) => (
+                <button key={v} onClick={() => upd("startSpotType",v)}
                   style={{ ...btn(
-                    (sc.startSpotType||"base")===v ? C.goldBg : "rgba(255,255,255,0.02)",
-                    (sc.startSpotType||"base")===v ? C.goldDim : C.border,
-                    (sc.startSpotType||"base")===v ? C.gold : C.textFaint,
+                    (sc.startSpotType||"base")=== v ? C.goldBg : "rgba(255,255,255,0.02)",
+                    (sc.startSpotType||"base")=== v ? C.goldDim : C.border,
+                    (sc.startSpotType||"base")=== v ? C.gold : C.textFaint,
                     {padding:"4px 10px",fontSize:10}
                   )}}>
                   {label}
@@ -488,7 +488,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               <div>
                 <Label>スポットID（例: 11）</Label>
                 <input style={{...iBase,width:80}} value={sc.startSpotId||""}
-                  onChange={e=>upd("startSpotId",e.target.value)}
+                  onChange={e => upd("startSpotId",e.target.value)}
                   placeholder="11"/>
                 <div style={{ fontSize:9,color:C.textFaint,marginTop:3 }}>
                   全PCが同じスポットからスタートします
@@ -497,11 +497,11 @@ function ScenarioForm({ initial, onSave, onCancel }) {
             )}
             <SecTitle>バックストーリー</SecTitle>
             <textarea style={{...taBase,height:160}} value={sc.backstory}
-              onChange={e=>upd("backstory",e.target.value)}
+              onChange={e => upd("backstory",e.target.value)}
               placeholder="セッション開始時に表示されるバックストーリー。クリックで探索フェイズへ進む画面に使用されます。"/>
             <SecTitle>GMメモ</SecTitle>
             <textarea style={{...taBase,height:80}} value={sc.notes||""}
-              onChange={e=>upd("notes",e.target.value)}
+              onChange={e => upd("notes",e.target.value)}
               placeholder="GMだけが見るメモ（セッション中には非表示）"/>
           </div>
         </div>
@@ -514,18 +514,18 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               <button onClick={addQuest} style={btn(C.goldBg,C.goldDim,C.gold,{padding:"5px 14px"})}>＋ クエストを追加</button>
             </div>
 
-            {(sc.quests||[]).length===0 && (
+            {(sc.quests||[]).length === 0 && (
               <div style={{ fontSize:10, color:C.textFaint, textAlign:"center", padding:"20px 0" }}>
                 クエストがありません。「＋ クエストを追加」で追加してください。
               </div>
             )}
-            {(sc.quests||[]).map((q,i)=>(
+            {(sc.quests||[]).map((q, i) => (
               <div key={q.id||i} style={{ position:"relative" }}>
                 <div style={{ position:"absolute", left:-28, top:8, display:"flex", flexDirection:"column", gap:2 }}>
-                  <button onClick={()=>moveQuest(i,-1)} style={{ ...btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{width:20,height:20,padding:0,fontSize:10}) }}>↑</button>
-                  <button onClick={()=>moveQuest(i,1)} style={{ ...btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{width:20,height:20,padding:0,fontSize:10}) }}>↓</button>
+                  <button onClick={() => moveQuest(i,-1)} style={{ ...btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{width:20,height:20,padding:0,fontSize:10}) }}>↑</button>
+                  <button onClick={() => moveQuest(i,1)} style={{ ...btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{width:20,height:20,padding:0,fontSize:10}) }}>↓</button>
                 </div>
-                <QuestEditor quest={q} index={i} onChange={nq=>updateQuest(i,nq)} onDelete={()=>deleteQuest(i)} allQuests={sc.quests||[]}/>
+                <QuestEditor quest={q} index={i} onChange={nq => updateQuest(i,nq)} onDelete={() => deleteQuest(i)} allQuests={sc.quests||[]}/>
               </div>
             ))}
           </div>
@@ -639,20 +639,20 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
   const [loading, setLoading] = useState(true);
   const user = auth.currentUser;
 
-  useEffect(()=>{
+  useEffect(()=> {
     if(!user)return;
     const r = ref(db, `users/${user.uid}/scenarios`);
-    const unsub = onValue(r, snap=>{
+    const unsub = onValue(r, snap => {
       if(snap.exists()){
-        const arr = Object.entries(snap.val()).map(([id,v])=>({...v,id}));
-        arr.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+        const arr = Object.entries(snap.val()).map(([id, v]) => ({...v,id}));
+        arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
         setScenarios(arr);
       } else {
         setScenarios([]);
       }
       setLoading(false);
     });
-    return()=>unsub();
+    return() => unsub();
   },[user]);
 
   const diffColor = { "Easy":C.green, "Normal":C.blue, "Hard":C.gold, "Lunatic":C.purple };
@@ -661,16 +661,16 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
 
   return(
     <div>
-      {scenarios.length===0&&<div style={{fontSize:10,color:C.textFaint}}>保存済みシナリオはありません</div>}
-      {scenarios.map(sc=>(
-        <div key={sc.id} onClick={()=>onSelect&&onSelect(sc)}
+      {scenarios.length === 0&&<div style={{fontSize:10,color:C.textFaint}}>保存済みシナリオはありません</div>}
+      {scenarios.map(sc => (
+        <div key={sc.id} onClick={() => onSelect&&onSelect(sc)}
           style={{ padding:"10px 12px", marginBottom:6, borderRadius:5, cursor:onSelect?"pointer":"default",
-            background: selectedId===sc.id ? C.goldBg : C.card,
-            border:`1px solid ${selectedId===sc.id ? C.goldDim : C.border}`,
+            background: selectedId === sc.id ? C.goldBg : C.card,
+            border:`1px solid ${selectedId === sc.id ? C.goldDim : C.border}`,
           }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:12, color: selectedId===sc.id ? C.gold : C.text, marginBottom:2 }}>{sc.name}</div>
+              <div style={{ fontSize:12, color: selectedId === sc.id ? C.gold : C.text, marginBottom:2 }}>{sc.name}</div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <Chip label={`${sc.playerCountMin}〜${sc.playerCountMax}人`} color={C.blue}/>
                 <Chip label={sc.difficulty} color={diffColor[sc.difficulty]||C.text}/>
@@ -679,7 +679,7 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
               </div>
             </div>
             {onEdit && (
-              <button onClick={e=>{e.stopPropagation();onEdit(sc);}}
+              <button onClick={e => {e.stopPropagation();onEdit(sc);}}
                 style={{ ...btn("rgba(255,255,255,0.04)",C.border,C.textDim,{padding:"3px 10px",fontSize:10,flexShrink:0}) }}>
                 編集
               </button>
@@ -702,56 +702,56 @@ function ProfilePage({ onClose }) {
   const [nameSaved, setNameSaved] = useState(false);
   const user = auth.currentUser;
 
-  useEffect(()=>{
+  useEffect(()=> {
     setNewName(user?.displayName||"");
   },[user]);
 
   // 自分が建てた部屋を取得
-  useEffect(()=>{
+  useEffect(()=> {
     if(!user)return;
     const r = ref(db,"rooms");
-    const unsub = onValue(r,snap=>{
+    const unsub = onValue(r,snap => {
       if(snap.exists()){
         const arr = Object.entries(snap.val())
-          .filter(([,v])=>v.gmUid===user.uid)
-          .map(([code,v])=>({code,...v}));
-        arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+          .filter(([, v]) => v.gmUid === user.uid)
+          .map(([code, v]) => ({code,...v}));
+        arr.sort((a, b) => (b.createdAt||0)-(a.createdAt||0));
         setRooms(arr);
       } else setRooms([]);
       setRoomsLoading(false);
     });
-    return()=>unsub();
+    return() => unsub();
   },[user]);
 
-  const saveName = async()=>{
+  const saveName = async()=> {
     if(!newName.trim())return;
     setNameSaving(true);
-    await updateProfile(user,{displayName:newName.trim()}).catch(()=>{});
+    await updateProfile(user,{displayName:newName.trim()}).catch(()=> {});
     setNameSaving(false);
     setNameSaved(true);
-    setTimeout(()=>setNameSaved(false),2500);
+    setTimeout(() => setNameSaved(false),2500);
   };
 
-  const saveScenario = async(sc)=>{
+  const saveScenario = async(sc)=> {
     const id = sc.id || push(ref(db,`users/${user.uid}/scenarios`)).key;
     await set(ref(db,`users/${user.uid}/scenarios/${id}`),{...sc,id});
     setEditTarget(null);
   };
 
-  const deleteRoom = async(code)=>{
+  const deleteRoom = async(code)=> {
     if(!confirm(`部屋「${code}」を削除しますか？
 （セッションデータも消去されます）`))return;
     await remove(ref(db,`rooms/${code}`));
   };
 
-  const phaseLabel = p=>({prep:"準備中",explore:"探索中",scene:"シーン中",end:"終了"}[p]||p||"不明");
-  const phaseColor = p=>({prep:C.blue,explore:C.green,scene:C.purple,end:C.textFaint}[p]||C.textFaint);
+  const phaseLabel = p => ({prep:"準備中",explore:"探索中",scene:"シーン中",end:"終了"}[p]||p||"不明");
+  const phaseColor = p => ({prep:C.blue,explore:C.green,scene:C.purple,end:C.textFaint}[p]||C.textFaint);
 
   if(editTarget) return(
     <ScenarioForm
       initial={editTarget==="new"?null:editTarget}
       onSave={saveScenario}
-      onCancel={()=>setEditTarget(null)}
+      onCancel={() => setEditTarget(null)}
     />
   );
 
@@ -770,9 +770,9 @@ function ProfilePage({ onClose }) {
       </div>
 
       <div style={{display:"flex",gap:6,marginBottom:20}}>
-        {TABS.map(([id,label])=>(
-          <button key={id} onClick={()=>setView(id)} style={{
-            ...btn(view===id?C.goldBg:"rgba(255,255,255,0.02)",view===id?C.goldDim:C.border,view===id?C.gold:C.textFaint),
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => setView(id)} style={{
+            ...btn(view === id?C.goldBg:"rgba(255,255,255,0.02)",view === id?C.goldDim:C.border,view === id?C.gold:C.textFaint),
           }}>{label}</button>
         ))}
       </div>
@@ -790,8 +790,8 @@ function ProfilePage({ onClose }) {
 
             <div style={{marginBottom:6,fontSize:9,color:C.textFaint}}>セッション表示名</div>
             <div style={{display:"flex",gap:8}}>
-              <input value={newName} onChange={e=>setNewName(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&saveName()}
+              <input value={newName} onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && saveName()}
                 style={{...iBase,flex:1,fontSize:13}}
                 placeholder="表示名を入力"/>
               <button onClick={saveName} disabled={nameSaving||!newName.trim()}
@@ -809,11 +809,11 @@ function ProfilePage({ onClose }) {
         <div style={{maxWidth:700}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div style={{fontSize:12,color:C.text}}>保存済みシナリオ</div>
-            <button onClick={()=>setEditTarget("new")} style={btn(C.goldBg,C.goldDim,C.gold,{padding:"6px 16px"})}>
+            <button onClick={() => setEditTarget("new")} style={btn(C.goldBg,C.goldDim,C.gold,{padding:"6px 16px"})}>
               ＋ 新規シナリオを作成
             </button>
           </div>
-          <ScenarioList onEdit={sc=>setEditTarget(sc)} onSelect={null}/>
+          <ScenarioList onEdit={sc => setEditTarget(sc)} onSelect={null}/>
         </div>
       )}
 
@@ -822,12 +822,12 @@ function ProfilePage({ onClose }) {
         <div style={{maxWidth:700}}>
           <div style={{fontSize:12,color:C.text,marginBottom:12}}>自分が作成した部屋</div>
           {roomsLoading&&<div style={{fontSize:10,color:C.textFaint}}>読み込み中…</div>}
-          {!roomsLoading&&rooms.length===0&&(
+          {!roomsLoading&&rooms.length === 0&&(
             <div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>作成した部屋はありません</div>
           )}
-          {rooms.map(room=>{
+          {rooms.map(room => {
             const playerCount = Object.keys(room.players||{}).length;
-            const plCount = Object.values(room.players||{}).filter(p=>p.role==="pl").length;
+            const plCount = Object.values(room.players||{}).filter(p => p.role==="pl").length;
             const date = room.createdAt ? new Date(room.createdAt).toLocaleDateString("ja-JP") : "—";
             return(
               <div key={room.code} style={{
@@ -848,7 +848,7 @@ function ProfilePage({ onClose }) {
                     </div>
                     {plCount>0&&(
                       <div style={{marginTop:5,display:"flex",gap:4,flexWrap:"wrap"}}>
-                        {Object.values(room.players||{}).filter(p=>p.role==="pl").map(p=>(
+                        {Object.values(room.players||{}).filter(p => p.role==="pl").map(p => (
                           <span key={p.uid} style={{fontSize:9,color:C.textFaint}}>
                             {p.name}{p.charName?` (${p.charName})`:""}
                           </span>
@@ -857,11 +857,11 @@ function ProfilePage({ onClose }) {
                     )}
                   </div>
                   <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:12}}>
-                    <button onClick={()=>{window.open(`${window.location.origin}?room=${room.code}`,"_blank");}}
+                    <button onClick={() => {window.open(`${window.location.origin}?room=${room.code}`,"_blank");}}
                       style={btn(C.blueBg,C.blueBorder,C.blue,{padding:"4px 10px",fontSize:10})}>
                       開く
                     </button>
-                    <button onClick={()=>deleteRoom(room.code)}
+                    <button onClick={() => deleteRoom(room.code)}
                       style={btn(C.redBg,C.redBorder,C.red,{padding:"4px 10px",fontSize:10})}>
                       削除
                     </button>
@@ -882,30 +882,30 @@ export function ScenarioSelector({ value, onChange }) {
   const [scenarios, setScenarios] = useState([]);
   const user = auth.currentUser;
 
-  useEffect(()=>{
+  useEffect(()=> {
     if(!user)return;
     const r = ref(db,`users/${user.uid}/scenarios`);
-    const unsub = onValue(r, snap=>{
+    const unsub = onValue(r, snap => {
       if(snap.exists()){
-        const arr = Object.entries(snap.val()).map(([id,v])=>({...v,id}));
-        arr.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+        const arr = Object.entries(snap.val()).map(([id, v]) => ({...v,id}));
+        arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
         setScenarios(arr);
       } else setScenarios([]);
     });
-    return()=>unsub();
+    return() => unsub();
   },[user]);
 
-  const selected = scenarios.find(s=>s.id===value?.id);
+  const selected = scenarios.find(s => s.id === value?.id);
 
   return(
     <div>
       <div style={{ display:"flex", gap:6, alignItems:"center" }}>
         <div style={{ flex:1, padding:"6px 10px", background:"rgba(255,255,255,0.04)", border:`1px solid ${C.border}`,
           borderRadius:3, fontSize:11, color: selected ? C.text : C.textFaint, cursor:"pointer" }}
-          onClick={()=>setOpen(v=>!v)}>
+          onClick={() => setOpen(v => !v)}>
           {selected ? selected.name : "シナリオを選択してください"}
         </div>
-        <button onClick={()=>setOpen(v=>!v)}
+        <button onClick={() => setOpen(v => !v)}
           style={btn(C.goldBg,C.goldDim,C.gold,{padding:"5px 12px",fontSize:10})}>
           {open?"閉じる":"選択"}
         </button>
@@ -913,9 +913,9 @@ export function ScenarioSelector({ value, onChange }) {
 
       {open&&(
         <div style={{ marginTop:6, padding:10, background:"#0a0c16", border:`1px solid ${C.border}`, borderRadius:4 }}>
-          {scenarios.length===0
+          {scenarios.length === 0
             ? <div style={{fontSize:10,color:C.textFaint}}>保存済みシナリオがありません。プロフィールから作成してください。</div>
-            : <ScenarioList selectedId={value?.id} onSelect={sc=>{onChange(sc);setOpen(false);}}/>
+            : <ScenarioList selectedId={value?.id} onSelect={sc => {onChange(sc);setOpen(false);}}/>
           }
         </div>
       )}

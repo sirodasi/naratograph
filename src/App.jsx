@@ -56,7 +56,7 @@ const DEFAULT_GS = {
   newspaperDone: false,
   cluePlaced: false,
   reiryokuDone: false,
-  resources: { やる気:[1, 3], 残り人数: [2, 5], スペルカード: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力:[1, 5] },
+  resources: { やる気: [1, 3], 残り人数: [2, 5], スペルカード: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力: [1, 5] },
   items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0 },
   quests: [],
   log: [],

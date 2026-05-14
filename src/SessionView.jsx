@@ -482,14 +482,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
       const clearedGrid = [0, 0, 0, 0, 0, 0];
 
+      const nextBattle = {
+        ...p.battle,
+        grids: { ...p.battle.grids, [targetId]: clearedGrid },
+        phase: isPc ? (newLives > 0 ? "pc_hit_recovery" : "pc_dropout") : (newLives > 0 ? "npc_hit_recovery" : "npc_dropout"),
+        ...(isPc ? {} : { participants: { ...p.battle.participants, npcs: nextEntities } }),
+      };
+
       return {
         ...p,
-        ...(isPc ? { pcs: nextEntities } : { battle: { ...p.battle, participants: { ...p.battle.participants, npcs: nextEntities } } }),
-        battle: {
-          ...p.battle,
-          grids: { ...p.battle.grids, [targetId]: clearedGrid },
-          phase: isPc ? (newLives > 0 ? "pc_hit_recovery" : "pc_dropout") : (newLives > 0 ? "npc_hit_recovery" : "npc_dropout")
-        },
+        ...(isPc ? { pcs: nextEntities } : {}),
+        battle: nextBattle,
         log: [
           `💥 ${target.charName || target.name} は被弾した！ 残り人数: ${newLives}`,
           isPc && newLives === 1 ? `🔥 霊力が最大まで回復した！` : null,
@@ -688,7 +691,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     const targetId = isPc ? b.pcCombatant : b.npcCombatant;
     const target = isPc ? combatantPc : combatantNpc;
     const count = b.grids?.[targetId]?.[b.positions?.[targetId] - 1] || 0;
-    const isSafe = isPc && count === 0;
+    const isSafe = count === 0;
     const canApply = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
     const applyHandler = () => isPc ? applyPcHit(targetId) : applyNpcHit(targetId);
     const cardBorder = isSafe ? C.green : C.red;
@@ -1056,8 +1059,7 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice, diceResult, d
 
   const handleItem = () => {
     animateDice(1, "ボーナスアイテム", res => {
-      const items = ["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
-      const itemName = items[res[0] - 1];
+      const itemName = ITEM_NAMES[res[0] - 1];
       finishAction(`✨ ${myPc.charName} はボーナスで【${itemName}】を獲得した`, {
         items: { ...myPc.items, [itemName]: (myPc.items[itemName] || 0) + 1 }
       });
@@ -1242,7 +1244,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
     onUpdatePc({ ...pc, resources: updated });
   };
 
-  const resKeys  =["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
+  const resKeys  = ["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
   const itemKeys = Object.keys(INIT_ITEMS());
 
   return (
@@ -1623,7 +1625,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>すべてのアイテムを失います</div>
           <button onClick={() => {
             proceed([`${pc.charName} は所持しているアイテムを全て失った`], {
-              pc: { items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0, 妖器: 0 } }
+              pc: { items: INIT_ITEMS() }
             });
           }} style={btnFull(C.redBg, C.redBorder, C.red)}>適用する</button>
         </div>
@@ -2506,7 +2508,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               </div>
               {sc.gambleSuccess ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
-                  {["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"].map(k => (
+                  {ITEM_NAMES.map(k => (
                     <button key={k} onClick={() => {
                         gainItem(k, 1);
                         const count = (sc.gambleRewards || 0) + 1;

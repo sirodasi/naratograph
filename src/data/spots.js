@@ -140,7 +140,7 @@ export const SPOT_DETAILS = {
       {
         name: "妖精を蹴散らす",
         target: 5,
-        effect: "成功時:【Pアイテム】、【残機のかけら】、【スペルカードのかけら】のうちから1つ選んで獲得する。",
+        effect: "成功時:【Pアイテム】、【残機のかけら】、【スペカのかけら】のうちから1つ選んで獲得する。",
         onSuccess:[ { type: "GAIN_SELECT_ITEM", count: "1", select: ["Pアイテム", "残機のかけら", "スペカのかけら"] } ]
       }
     ]
