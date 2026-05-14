@@ -339,6 +339,18 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   const npcDanmakuAtPos = b.grids?.[b.npcCombatant]?.[npcPos - 1] || 0;
 
   const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur || 3;
+
+  const isFirstAttacker = (isPc) => {
+    return b.startOrder === "npc" ? !isPc : isPc;
+  };
+  const afterDefensePhase = (isPc) => {
+    if (isFirstAttacker(!isPc)) {
+      return isPc ? "npc_shot_intro" : "pc_shot_intro";
+    } else {
+      return "round_end_check";
+    }
+  };
+
   const getEvadeDiceCount = (isPc) => {
     const combatant = isPc ? combatantPc : combatantNpc;
     return b.currentEvadeDice ?? getDefaultEvadeDice(combatant);
@@ -418,7 +430,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
           phase: isPc
-            ? "round_end_check"
+            ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(true))
             : (nextDice > 0 ? "npc_evade_intro" : "npc_hit_check")
         },
         log: [
@@ -432,7 +444,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
   const handleRecovery = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
-    const nextPhase = isPc ? "pc_shot_intro" : "round_end_check";
+    const nextPhase = afterDefensePhase(isPc);
 
     upd(p => ({
       ...p,
@@ -704,7 +716,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         {isSafe ? (
           <div>
             <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
-            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_intro", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>PC攻撃ステップへ</button>
+            <button onClick={() => {
+              const next = afterDefensePhase(b.phase === "pc_hit_check");
+              upd(p => ({ ...p, battle: { ...p.battle, phase: next,
+                currentEvadeDice: next === "pc_evade_intro" ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice
+              } }));
+            }} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+              {afterDefensePhase(b.phase === "pc_hit_check") === "round_end_check" ? "ラウンド終了へ" : "後攻ショットへ"}
+            </button>
           </div>
         ) : (
           <div>
