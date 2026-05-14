@@ -100,7 +100,7 @@ export const INIT_RESOURCES = () => ({
   やる気:     { cur: 1, max: 3  },
   残り人数:   { cur: 2, max: 5  },
   スペルカード:     { cur: 1, max: 5  },
-  グレイズ:   { cur: 0, max: 5  },
+  グレイズ:   { cur: 0, max: 999 },  // 上限なし
   霊力:       { cur: 0, max: 20 },
   攻撃力:     { cur: 1, max: 5  },
 });
@@ -353,8 +353,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     
     animateDice(diceCount, `${isPc ? "PC" : "NPC"}回避判定`, (res) => {
       const maxDie = Math.max(...res);
-      const isFumble = isPc && res.every(d => d === 1);
-      const isSpecial = isPc && res.includes(6) && !isFumble;
+      const isFumble = res.every(d => d === 1);
+      const isSpecial = res.includes(6) && !isFumble;
       const isSuccess = maxDie >= targetValue && !isFumble;
       const resultNotice = isFumble ? "ファンブル！" : isSpecial ? "スペシャル！" : "";
 
@@ -417,11 +417,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
-          phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : "pc_hit_check") : "npc_hit_check"
+          phase: isPc
+            ? "round_end_check"
+            : (nextDice > 0 ? "npc_evade_intro" : "npc_hit_check")
         },
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
-          `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}/5)`,
+          `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}点)`,
           ...p.log
         ]
       };
@@ -741,7 +743,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             <div style={{ fontSize: 11, color: C.textDim }}>相手: {npcs.map(n => n.name).join(", ")}</div>
           </div>
 
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>先攻を選択</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{ key: "pc", label: "PC先攻" }, { key: "npc", label: "NPC先攻" }].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, startOrder: opt.key } }))}
+                  style={btnFull(
+                    b.startOrder === opt.key ? C.goldBg : "rgba(255,255,255,0.05)",
+                    b.startOrder === opt.key ? C.goldDim : C.border,
+                    b.startOrder === opt.key ? C.gold : C.text,
+                    { flex: 1 }
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button 
+            disabled={!b.startOrder}
             onClick={() => {
               const positions = {};
               const grids = {};
@@ -768,7 +791,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
                 }
               }));
             }}
-            style={btnFull(C.redBg, C.redBorder, C.red, { padding: "12px" })}
+            style={btnFull(C.redBg, C.redBorder, C.red, { padding: "12px", opacity: b.startOrder ? 1 : 0.3, marginTop: 4 })}
           >
             対戦を開始する
           </button>
@@ -804,7 +827,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     const startRound = (pcUid, npcId) => {
       const pcChar = pcs.find(p => p.uid === pcUid);
       const npcChar = npcs.find(n => n.id === npcId);
-      const order = b.tempStartOrder || "pc";
+      const order = b.startOrder || "pc";
       const firstPhase = order === "npc" ? "npc_shot_intro" : "pc_shot_intro";
 
       upd(p => ({
@@ -861,27 +884,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
                     </button>
                   );
                 })}
-              </div>
-
-              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>3. 先攻を選択</div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                {[
-                  { key: "pc", label: "PC先攻" },
-                  { key: "npc", label: "NPC先攻" }
-                ].map(option => (
-                  <button
-                    key={option.key}
-                    onClick={() => upd(p => ({ ...p, battle: { ...p.battle, tempStartOrder: option.key } }))}
-                    style={btnFull(
-                      b.tempStartOrder === option.key ? C.goldBg : "rgba(255,255,255,0.05)",
-                      b.tempStartOrder === option.key ? C.gold : C.border,
-                      b.tempStartOrder === option.key ? C.gold : C.text,
-                      { flex: 1 }
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
               </div>
 
               <button 
@@ -1059,7 +1061,8 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice, diceResult, d
 
   const handleItem = () => {
     animateDice(1, "ボーナスアイテム", res => {
-      const itemName = ITEM_NAMES[res[0] - 1];
+      const items = ["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"];
+      const itemName = items[res[0] - 1];
       finishAction(`✨ ${myPc.charName} はボーナスで【${itemName}】を獲得した`, {
         items: { ...myPc.items, [itemName]: (myPc.items[itemName] || 0) + 1 }
       });
@@ -1244,7 +1247,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
     onUpdatePc({ ...pc, resources: updated });
   };
 
-  const resKeys  = ["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
+  const resKeys  =["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
   const itemKeys = Object.keys(INIT_ITEMS());
 
   return (
@@ -1625,7 +1628,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           <div style={{ color: C.red, marginBottom: 8, fontSize: 11 }}>すべてのアイテムを失います</div>
           <button onClick={() => {
             proceed([`${pc.charName} は所持しているアイテムを全て失った`], {
-              pc: { items: INIT_ITEMS() }
+              pc: { items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0, 妖器: 0 } }
             });
           }} style={btnFull(C.redBg, C.redBorder, C.red)}>適用する</button>
         </div>
@@ -2508,7 +2511,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
               </div>
               {sc.gambleSuccess ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
-                  {ITEM_NAMES.map(k => (
+                  {["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"].map(k => (
                     <button key={k} onClick={() => {
                         gainItem(k, 1);
                         const count = (sc.gambleRewards || 0) + 1;
@@ -3714,7 +3717,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
                 <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant?.resources.グレイズ?.cur ?? 0}/5</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant?.resources.グレイズ?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
@@ -3725,7 +3728,33 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
                 <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ?.cur ?? 0}/5</span></div>
+                <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                  グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ?.cur ?? 0}点</span>
+                  {(pcCombatant?.resources.グレイズ?.cur ?? 0) >= 5 && (
+                    <button
+                      onClick={() => upd(p => {
+                        const pc = p.pcs.find(x => x.uid === b.pcCombatant);
+                        if (!pc) return p;
+                        const newGraze = (pc.resources.グレイズ?.cur || 0) - 5;
+                        const newSpe   = Math.min((pc.resources.スペルカード?.max || 9), (pc.resources.スペルカード?.cur || 0) + 1);
+                        const newAtk   = pc.resources.攻撃力?.cur || 1;
+                        return {
+                          ...p,
+                          pcs: p.pcs.map(x => x.uid !== b.pcCombatant ? x : {
+                            ...x,
+                            resources: {
+                              ...x.resources,
+                              グレイズ:       { ...x.resources.グレイズ,       cur: newGraze },
+                              スペルカード: { ...x.resources.スペルカード, cur: newSpe   },
+                            },
+                          }),
+                          log: [`💠 ${pc.charName} グレイズ5点消費 → スペルカード+1 (現在:${newSpe})`, ...p.log],
+                        };
+                      })}
+                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
+                    >G→SC</button>
+                  )}
+                </div>
                 <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
