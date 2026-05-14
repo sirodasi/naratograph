@@ -3727,27 +3727,32 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
       <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
         {battleTab === "info" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {!combatantNpc || !combatantPc ? (
+              <div style={{ padding: "20px 10px", textAlign: "center", color: C.textFaint, fontSize: 10 }}>
+                対戦者を選出すると<br />ステータスが表示されます
+              </div>
+            ) : (<>
             <div style={{ padding: "8px 10px", background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 8, color: C.red, letterSpacing: 2, marginBottom: 2 }}>ENEMY</div>
-              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
+              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{combatantNpc.name}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
-                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant?.resources.グレイズ?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur ?? 3}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{combatantNpc.resources.残り人数?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{combatantNpc.resources.スペルカード?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{combatantNpc.resources.攻撃力?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{combatantNpc.resources.グレイズ?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{combatantNpc.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
 
             <div style={{ padding: "8px 10px", background: "rgba(25,118,210,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, marginBottom: 2 }}>PLAYER</div>
-              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pcCombatant?.charName || "???"}</div>
+              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{combatantPc.charName}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
-                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{combatantPc.resources.残り人数?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{combatantPc.resources.スペルカード?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-                  グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ?.cur ?? 0}点</span>
-                  {(pcCombatant?.resources.グレイズ?.cur ?? 0) >= 5 && (
+                  グレイズ: <span style={{color:C.green}}>{combatantPc.resources.グレイズ?.cur ?? 0}点</span>
+                  {(combatantPc.resources.グレイズ?.cur ?? 0) >= 5 && (
                     <button
                       onClick={() => upd(p => {
                         const pc = p.pcs.find(x => x.uid === b.pcCombatant);
@@ -3772,11 +3777,13 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
                     >G→SC</button>
                   )}
                 </div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur ?? 3}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{combatantPc.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
 
-            {isSpectator && (
+            </>)}
+
+            {isSpectator && combatantPc && combatantNpc && (
               <div style={{ padding: 10, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
                 <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>観戦者介入</div>
                 {interventionUsed ? (
