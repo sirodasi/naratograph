@@ -206,7 +206,7 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
   );
 }
 
-export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceAnim }) {
+export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceAnim, diceLabel }) {
   const b = gs.battle;
   if (!b) return null;
 
@@ -315,12 +315,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   const npcPos = b.positions?.[b.npcCombatant];
   const npcDanmakuAtPos = b.grids?.[b.npcCombatant]?.[npcPos - 1] || 0;
 
+  const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur || 3;
+  const getEvadeDiceCount = (isPc) => isPc
+    ? (b.currentEvadeDice ?? getDefaultEvadeDice(combatantPc))
+    : getDefaultEvadeDice(combatantNpc);
+
   const handleEvadeRoll = (isPc) => {
     const combatant = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
     const pos = b.positions[isPc ? b.pcCombatant : b.npcCombatant];
     const bulletCount = b.grids[isPc ? b.pcCombatant : b.npcCombatant][pos - 1];
     const targetValue = bulletCount + 3;
-    const diceCount = isPc ? (b.currentEvadeDice ?? 3) : 3;
+    const diceCount = getEvadeDiceCount(isPc);
     
     animateDice(diceCount, `${isPc ? "PC" : "NPC"}回避判定`, (res) => {
       const maxDie = Math.max(...res);
@@ -385,9 +390,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           },
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
-          currentEvadeDice: isPc ? ((p.battle.currentEvadeDice ?? 3) - 1) : p.battle.currentEvadeDice,
-          phase: isPc ? "pc_hit_check" : "round_end_check",
-      currentEvadeDice: isPc ? 3 : p.battle.currentEvadeDice
+          currentEvadeDice: isPc ? ((p.battle.currentEvadeDice ?? getDefaultEvadeDice(currentEntity)) - 1) : p.battle.currentEvadeDice,
+          phase: isPc ? "pc_hit_check" : "round_end_check"
         },
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
@@ -408,7 +412,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         ...p.battle,
         positions: { ...p.battle.positions, [combatantId]: targetCellNum },
         phase: nextPhase,
-        currentEvadeDice: isPc ? 3 : p.battle.currentEvadeDice
+        currentEvadeDice: isPc ? getDefaultEvadeDice(p.pcs.find(x => x.uid === combatantId)) : p.battle.currentEvadeDice
       },
       log: [`✨ ${isPc ? pcs.find(x => x.uid === combatantId)?.charName : npcs.find(n => n.id === combatantId)?.name} は ${targetCellNum}番マスに復帰した。`, ...p.log]
     }));
@@ -496,7 +500,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           actedNpcs: nextActedNpcs,
           pcCombatant: null,
           npcCombatant: null,
-          currentEvadeDice: 3,
+          currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
           tempSelectedPc: null,
@@ -603,10 +607,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             {isPlayable && (
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
-                  🎲 回避判定 ({isPc ? (b.currentEvadeDice ?? 3) : 3}D)
+                  🎲 回避判定 ({getEvadeDiceCount(isPc)}D)
                 </button>
                 {isPc && (
-                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: 3 } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
+                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
                     その場にとどまる
                   </button>
                 )}
@@ -648,7 +652,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         {isSafe ? (
           <div>
             <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
-            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_intro", currentEvadeDice: 3 } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>PC攻撃ステップへ</button>
+            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_shot_intro", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>PC攻撃ステップへ</button>
           </div>
         ) : (
           <div>
@@ -755,7 +759,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         ...p,
         battle: {
           ...p.battle,
-          phase: "npc_shot_intro",
+          phase: "pc_shot_intro",
           pcCombatant: pcUid,
           npcCombatant: npcId,
           usedIntervention: {},
@@ -827,6 +831,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
   return (
     <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
+      <BattleDiceTray diceResult={diceResult} diceAnim={diceAnim} label={diceLabel} />
       
       <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 15, flexWrap: "wrap", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
         {npcs.map(n => {
@@ -3589,7 +3594,7 @@ function BattleDiceTray({ diceResult, diceAnim, label }) {
   );
 }
 
-function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResult, diceAnim, diceLabel }) {
+function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResult, diceAnim }) {
   const [battleTab, setBattleTab] = useState("info");
   const b = gs.battle;
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
@@ -3606,8 +3611,6 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <BattleDiceTray diceResult={diceResult} diceAnim={diceAnim} label={diceLabel} />
-
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 10, flexShrink: 0 }}>
         <button 
           onClick={() => setBattleTab("info")}

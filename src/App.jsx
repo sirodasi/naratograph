@@ -450,6 +450,7 @@ function SessionApp({ roomCode, user }) {
               残り人数: { cur: enemy.life, max: enemy.life },
               スペルカード: { cur: enemy.spellcard, max: 9 },
               攻撃力: { cur: enemy.attack, max: 99 },
+              回避力: { cur: enemy.evade || 3, max: 3 },
               グレイズ: { cur: 0, max: 5 }
             },
             ds: { name: enemy.dsName || enemy.dsCustomName, desc: enemy.dsDesc },
@@ -607,7 +608,7 @@ function SessionApp({ roomCode, user }) {
         残り人数: { cur: en.life, max: en.life },
         スペルカード: { cur: en.spellcard, max: 9 },
         攻撃力: { cur: en.attack, max: 99 },
-        回避力: { cur: 3, max: 3 }
+        回避力: { cur: en.evade || 3, max: 3 }
       },
       ds: { 
         name: en.dsName || en.dsCustomName, 
@@ -722,7 +723,7 @@ function SessionApp({ roomCode, user }) {
           <BattleView
             gs={gs} upd={upd} user={user} isGm={mode === "gm"}
             animateDice={animateDice}
-            diceResult={diceResult} diceAnim={diceAnim}
+            diceResult={diceResult} diceAnim={diceAnim} diceLabel={diceLabel}
           />
         ) : (
           <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
