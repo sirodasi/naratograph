@@ -219,6 +219,29 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   let unactedPcs = alivePcs.filter(p => !(b.actedPcs || []).includes(p.uid));
   let unactedNpcs = aliveNpcs.filter(n => !(b.actedNpcs || []).includes(n.id));
 
+  useEffect(() => {
+    if (b.phase !== "round_start") return;
+    const shouldResetPcs = unactedPcs.length === 0 && alivePcs.length > 0 && (b.actedPcs || []).length > 0;
+    const shouldResetNpcs = unactedNpcs.length === 0 && aliveNpcs.length > 0 && (b.actedNpcs || []).length > 0;
+    if (!shouldResetPcs && !shouldResetNpcs) return;
+
+    const nextActedPcs = shouldResetPcs ? [] : (b.actedPcs || []);
+    const nextActedNpcs = shouldResetNpcs ? [] : (b.actedNpcs || []);
+    const resetLogs = [];
+    if (shouldResetPcs) resetLogs.push("🔄 PC陣営が全員行動したため、全員未行動に戻ります。");
+    if (shouldResetNpcs) resetLogs.push("🔄 NPC陣営が全員行動したため、全員未行動に戻ります。");
+
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        actedPcs: nextActedPcs,
+        actedNpcs: nextActedNpcs
+      },
+      log: [...resetLogs.reverse(), ...p.log]
+    }));
+  }, [b.phase, alivePcs.length, aliveNpcs.length, unactedPcs.length, unactedNpcs.length, b.actedPcs?.length, b.actedNpcs?.length, upd]);
+
   const applyShot = (targetUid, diceResults) => {
     upd(p => {
       const currentGrid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
@@ -316,9 +339,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   const npcDanmakuAtPos = b.grids?.[b.npcCombatant]?.[npcPos - 1] || 0;
 
   const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur || 3;
-  const getEvadeDiceCount = (isPc) => isPc
-    ? (b.currentEvadeDice ?? getDefaultEvadeDice(combatantPc))
-    : getDefaultEvadeDice(combatantNpc);
+  const getEvadeDiceCount = (isPc) => {
+    const combatant = isPc ? combatantPc : combatantNpc;
+    return b.currentEvadeDice ?? getDefaultEvadeDice(combatant);
+  };
 
   const handleEvadeRoll = (isPc) => {
     const combatant = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
@@ -362,6 +386,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
       const currentEntity = isPc ? p.pcs.find(x => x.uid === combatantId) : p.battle.participants.npcs.find(n => n.id === combatantId);
       const currentGraze = currentEntity.resources.グレイズ?.cur || 0;
       const nextGraze = Math.min(currentEntity.resources.グレイズ?.max || 5, currentGraze + bulletsCleared);
+      const currentDice = p.battle.currentEvadeDice ?? getDefaultEvadeDice(currentEntity);
+      const nextDice = Math.max(0, currentDice - 1);
 
       const updatedEntity = {
         ...currentEntity,
@@ -390,8 +416,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           },
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
-          currentEvadeDice: isPc ? ((p.battle.currentEvadeDice ?? getDefaultEvadeDice(currentEntity)) - 1) : p.battle.currentEvadeDice,
-          phase: isPc ? "pc_hit_check" : "round_end_check"
+          currentEvadeDice: nextDice,
+          phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : "pc_hit_check") : (nextDice > 0 ? "npc_evade_intro" : "npc_hit_check")
         },
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
@@ -573,7 +599,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
         {canProceed && (
           <button 
-            onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }))} 
+            onClick={() => upd(p => ({
+              ...p,
+              battle: {
+                ...p.battle,
+                phase: nextPhase,
+                currentEvadeDice: nextPhase === "pc_evade_intro"
+                  ? getDefaultEvadeDice(combatantPc)
+                  : getDefaultEvadeDice(combatantNpc)
+              }
+            }))} 
             style={buttonStyle}
           >
             回避ステップへ進む
@@ -590,7 +625,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     const titleColor = isPc ? C.blue : C.red;
     const borderColor = isPc ? C.blueBorder : C.redBorder;
     const isPlayable = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
-    const canAutoSuccess = isPc && bulletCount === 0;
+    const canAutoSuccess = bulletCount === 0;
+    const remainingDice = getEvadeDiceCount(isPc);
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${borderColor}`, textAlign: "center" }}>
@@ -599,19 +635,27 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         {canAutoSuccess ? (
           <div>
             <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
-            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
+            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
           </div>
         ) : (
           <div>
             <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {targetValue} (弾幕 {bulletCount} + 3)</div>
             {isPlayable && (
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
-                  🎲 回避判定 ({getEvadeDiceCount(isPc)}D)
-                </button>
-                {isPc && (
-                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
-                    その場にとどまる
+                {remainingDice > 0 ? (
+                  <>
+                    <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
+                      🎲 回避判定 ({remainingDice}D)
+                    </button>
+                    {isPc && (
+                      <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
+                        その場にとどまる
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.08)", C.border, C.text)}>
+                    回避ダイスがなくなりました。判定へ
                   </button>
                 )}
               </div>
@@ -754,16 +798,18 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     const startRound = (pcUid, npcId) => {
       const pcChar = pcs.find(p => p.uid === pcUid);
       const npcChar = npcs.find(n => n.id === npcId);
+      const order = b.tempStartOrder || "pc";
+      const firstPhase = order === "npc" ? "npc_shot_intro" : "pc_shot_intro";
 
       upd(p => ({
         ...p,
         battle: {
           ...p.battle,
-          phase: "pc_shot_intro",
+          phase: firstPhase,
           pcCombatant: pcUid,
           npcCombatant: npcId,
           usedIntervention: {},
-          log: [`⚔️ ラウンド開始：${npcChar.name} vs ${pcChar.charName}`, ...p.log]
+          log: [`⚔️ ラウンド開始：${npcChar.name} vs ${pcChar.charName} （先攻: ${order === "pc" ? "PC" : "NPC"}）`, ...p.log]
         }
       }));
     };
@@ -795,7 +841,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
               </div>
 
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>2. 迎え撃つNPCを選択</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 24 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
                 {aliveNpcs.map(n => {
                   const isActed = (b.actedNpcs || []).includes(n.id);
                   const isSelected = b.tempSelectedNpc === n.id;
@@ -809,6 +855,27 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
                     </button>
                   );
                 })}
+              </div>
+
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>3. 先攻を選択</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {[
+                  { key: "pc", label: "PC先攻" },
+                  { key: "npc", label: "NPC先攻" }
+                ].map(option => (
+                  <button
+                    key={option.key}
+                    onClick={() => upd(p => ({ ...p, battle: { ...p.battle, tempStartOrder: option.key } }))}
+                    style={btnFull(
+                      b.tempStartOrder === option.key ? C.goldBg : "rgba(255,255,255,0.05)",
+                      b.tempStartOrder === option.key ? C.gold : C.border,
+                      b.tempStartOrder === option.key ? C.gold : C.text,
+                      { flex: 1 }
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
 
               <button 
@@ -3607,7 +3674,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
 
   const isSpectator = spectators.some(p => p.uid === user.uid);
   const isCombatant = b.pcCombatant === user.uid;
-  const interventionUsed = b.useIntervention?.[user.uid];
+  const interventionUsed = b.usedIntervention?.[user.uid];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -3639,11 +3706,11 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
               <div style={{ fontSize: 8, color: C.red, letterSpacing: 2, marginBottom: 2 }}>ENEMY</div>
               <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{npcCombatant?.name || "???"}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
-                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数?.cur}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力?.cur}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant?.resources.グレイズ?.cur}/5</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur || 3}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant?.resources.残り人数?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant?.resources.スペルカード?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant?.resources.攻撃力?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant?.resources.グレイズ?.cur ?? 0}/5</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant?.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
 
@@ -3651,10 +3718,10 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
               <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, marginBottom: 2 }}>PLAYER</div>
               <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pcCombatant?.charName || "???"}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
-                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数?.cur}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ?.cur}/5</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur || 3}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant?.resources.残り人数?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant?.resources.スペルカード?.cur ?? 0}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{pcCombatant?.resources.グレイズ?.cur ?? 0}/5</span></div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant?.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
 
