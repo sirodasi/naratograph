@@ -3727,7 +3727,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
       <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
         {battleTab === "info" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {!combatantNpc || !combatantPc ? (
+            {!npcCombatant || !pcCombatant ? (
               <div style={{ padding: "20px 10px", textAlign: "center", color: C.textFaint, fontSize: 10 }}>
                 対戦者を選出すると<br />ステータスが表示されます
               </div>
@@ -3783,7 +3783,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResul
 
             </>)}
 
-            {isSpectator && combatantPc && combatantNpc && (
+            {isSpectator && pcCombatant && npcCombatant && (
               <div style={{ padding: 10, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
                 <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>観戦者介入</div>
                 {interventionUsed ? (
