@@ -1,4 +1,3 @@
-// src/SessionView.jsx
 import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
@@ -100,7 +99,7 @@ export const INIT_RESOURCES = () => ({
   やる気:     { cur: 1, max: 3  },
   残り人数:   { cur: 2, max: 5  },
   スペルカード:     { cur: 1, max: 5  },
-  グレイズ:   { cur: 0, max: 999 },  // 上限なし
+  グレイズ:   { cur: 0, max: 999 },
   霊力:       { cur: 0, max: 20 },
   攻撃力:     { cur: 1, max: 5  },
 });
@@ -340,12 +339,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
   const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur || 3;
 
-  const isFirstAttacker = (isPc) => {
-    return b.startOrder === "npc" ? !isPc : isPc;
-  };
-  const afterDefensePhase = (isPc) => {
-    if (isFirstAttacker(!isPc)) {
-      return isPc ? "npc_shot_intro" : "pc_shot_intro";
+  const afterDefensePhase = (isAttackerPc) => {
+    const attackerIsFirst = b.startOrder === "npc" ? !isAttackerPc : isAttackerPc;
+    if (attackerIsFirst) {
+      return isAttackerPc ? "npc_shot_intro" : "pc_shot_intro";
     } else {
       return "round_end_check";
     }
@@ -430,7 +427,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
           phase: isPc
-            ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(true))
+            ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false))
             : (nextDice > 0 ? "npc_evade_intro" : "npc_hit_check")
         },
         log: [
@@ -444,7 +441,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
   const handleRecovery = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
-    const nextPhase = afterDefensePhase(isPc);
+    const nextPhase = afterDefensePhase(!isPc);
 
     upd(p => ({
       ...p,
@@ -717,12 +714,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           <div>
             <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
             <button onClick={() => {
-              const next = afterDefensePhase(b.phase === "pc_hit_check");
+              const isAttackerPc = b.phase === "npc_hit_check";
+              const next = afterDefensePhase(isAttackerPc);
               upd(p => ({ ...p, battle: { ...p.battle, phase: next,
                 currentEvadeDice: next === "pc_evade_intro" ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice
               } }));
             }} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
-              {afterDefensePhase(b.phase === "pc_hit_check") === "round_end_check" ? "ラウンド終了へ" : "後攻ショットへ"}
+              {afterDefensePhase(b.phase === "npc_hit_check") === "round_end_check" ? "ラウンド終了へ" : "後攻ショットへ"}
             </button>
           </div>
         ) : (
@@ -1045,7 +1043,7 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice, diceResult, d
   const myRemaining = bonusStatus[user?.uid] || 0;
   const myPc = gs.pcs.find(p => p.uid === user?.uid);
 
-  const [mode, setMode] = useState("select"); // select | bond_target
+  const [mode, setMode] = useState("select");
   
   const finishAction = (logMsg, pcUpdate = {}) => {
     upd(p => {
