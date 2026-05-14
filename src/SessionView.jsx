@@ -417,7 +417,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
-          phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : "pc_hit_check") : (nextDice > 0 ? "npc_evade_intro" : "npc_hit_check")
+          phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : "pc_hit_check") : "npc_hit_check"
         },
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
@@ -635,7 +635,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
         {canAutoSuccess ? (
           <div>
             <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
-            <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>その場にとどまる</button>
+            </div>
           </div>
         ) : (
           <div>
