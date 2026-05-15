@@ -641,6 +641,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
     const isPlayable = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
     const canAutoSuccess = bulletCount === 0;
     const remainingDice = getEvadeDiceCount(isPc);
+    const canProceed = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${borderColor}`, textAlign: "center" }}>
@@ -650,8 +651,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
           <div>
             <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
-              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>その場にとどまる</button>
+              {canProceed && (
+                <>
+                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
+                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>その場にとどまる</button>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -659,21 +664,25 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
             <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {targetValue} (弾幕 {bulletCount} + 3)</div>
             {isPlayable && (
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                {remainingDice > 0 ? (
+                {canProceed && (
                   <>
-                    <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
-                      🎲 回避判定 ({remainingDice}D)
-                    </button>
-                    {isPc && (
-                      <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
-                        その場にとどまる
+                    {remainingDice > 0 ? (
+                      <>
+                        <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
+                          🎲 回避判定 ({remainingDice}D)
+                        </button>
+                        {isPc && (
+                          <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
+                            その場にとどまる
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.08)", C.border, C.text)}>
+                        回避ダイスがなくなりました。判定へ
                       </button>
                     )}
                   </>
-                ) : (
-                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.08)", C.border, C.text)}>
-                    回避ダイスがなくなりました。判定へ
-                  </button>
                 )}
               </div>
             )}
