@@ -65,6 +65,7 @@ const DEFAULT_GS = {
   sceneText: "",
   banner: null,
   actedPcs: [],
+  dice: { rolling: false, results: [], label: "" },
   currentScene: null,
 };
 
@@ -267,9 +268,6 @@ function SessionApp({ roomCode, user }) {
   const [room, setRoom]             = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [questBanner, setQuestBanner]     = useState(null);
-  const [diceResult, setDiceResult] = useState(null);
-  const [diceAnim, setDiceAnim] = useState(false);
-  const [diceLabel, setDiceLabel] = useState("");
   const timerRef = useRef(null);
 
   const gsPath    = `rooms/${roomCode}/state`;
@@ -278,17 +276,16 @@ function SessionApp({ roomCode, user }) {
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
   const animateDice = (count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
-    setDiceAnim(true);
-    setDiceLabel(label);
+    upd(p => ({ ...p, dice: { rolling: true, results: [], label } }));
     let f = 0;
     timerRef.current = setInterval(() => {
       f++;
-      setDiceResult(Array(count).fill(0).map(() => Math.floor(Math.random() * 6) + 1));
+      const mid = Array(count).fill(0).map(rollD6);
+      upd(p => ({ ...p, dice: { ...p.dice, results: mid } }));
       if (f >= 14) {
         clearInterval(timerRef.current);
-        const res = Array(count).fill(0).map(() => Math.floor(Math.random() * 6) + 1);
-        setDiceResult(res);
-        setDiceAnim(false);
+        const res = Array(count).fill(0).map(rollD6);
+        upd(p => ({ ...p, dice: { rolling: false, results: res, label } }));
         if (cb) cb(res);
       }
     }, 80);
@@ -717,13 +714,13 @@ function SessionApp({ roomCode, user }) {
           <BonusPhaseView
             gs={gs} upd={upd} user={user} isGm={mode === "gm"}
             animateDice={animateDice}
-            diceResult={diceResult} diceAnim={diceAnim}
+            diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling}
           />
         ) : gs.battle?.active ? (
           <BattleView
             gs={gs} upd={upd} user={user} isGm={mode === "gm"}
             animateDice={animateDice}
-            diceResult={diceResult} diceAnim={diceAnim} diceLabel={diceLabel}
+            diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} diceLabel={gs.dice?.label}
           />
         ) : (
           <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
@@ -733,7 +730,7 @@ function SessionApp({ roomCode, user }) {
       <RightPanel
         gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync}
         isGm={mode === "gm"} user={user} room={room} animateDice={animateDice}
-        diceResult={diceResult} diceAnim={diceAnim}
+        diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling}
         CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER} getSpot={getSpot}
         doNewspaper={doNewspaper} doAdvanceCycle={doAdvanceCycle}
         doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
