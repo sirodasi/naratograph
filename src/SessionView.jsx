@@ -858,7 +858,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       );
     }
 
-    if (available.length === 0 && timing === "standard") return null;
+    if (available.length === 0 ) return null;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
@@ -871,53 +871,50 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
         {spellPts <= 0 && <div style={{ fontSize: 10, color: C.textFaint, marginBottom: 6 }}>スペルカードの点数が足りません</div>}
 
-        {available.length === 0
-          ? <div style={{ fontSize: 10, color: C.textFaint }}>このタイミングで宣言できるスペルカードはありません</div>
-          : available.map((spell, i) => {
-            const disabled = spellPts <= 0 || !canDeclare;
-            const [expanded, setExpanded] = [false, () => {}];
-            return (
-              <div key={i} style={{ marginBottom: 6, border: `1px solid ${C.border}`, borderRadius: 4, overflow: "hidden" }}>
-                <div style={{ padding: "6px 8px", background: "rgba(255,255,255,0.03)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, color: spell.manual ? C.textDim : C.gold, marginBottom: 2 }}>{spell.name}</div>
-                      <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.text}</div>
-                      {spell.condition && (
-                        <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
-                      )}
-                      {spell.manual && (
-                        <div style={{ fontSize: 9, color: "#5a6070", marginTop: 3 }}>★ 効果はGMが手動処理</div>
-                      )}
-                      {spell.effectTiming === "round_end" && (
-                        <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
-                      )}
-                      {spell.effects.some(e => e.count === -1) && (
-                        <div style={{ fontSize: 9, color: C.blue, marginTop: 3 }}>※ 枚数は宣言時に確認</div>
-                      )}
-                    </div>
-                    <button
-                      disabled={disabled}
-                      onClick={() => {
-                        const needCount = spell.effects.some(e => e.count === -1);
-                        if (needCount) {
-                          const n = parseInt(window.prompt("配置する弾幕の数を入力してください", "1"));
-                          if (!isNaN(n) && n > 0) declareSpell(spell, isPcAttacker, n);
-                        } else {
-                          declareSpell(spell, isPcAttacker, null);
-                        }
-                      }}
-                      style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: disabled ? "not-allowed" : "pointer",
-                        background: disabled ? "rgba(255,255,255,0.03)" : "rgba(200,160,64,0.2)",
-                        border: `1px solid ${disabled ? C.border : C.goldDim}`,
-                        color: disabled ? C.textFaint : C.gold, borderRadius: 3 }}
-                    >宣言</button>
+        {available.map((spell, i) => {
+          const disabled = spellPts <= 0 || !canDeclare;
+          const [expanded, setExpanded] = [false, () => {}];
+          return (
+            <div key={i} style={{ marginBottom: 6, border: `1px solid ${C.border}`, borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ padding: "6px 8px", background: "rgba(255,255,255,0.03)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: spell.manual ? C.textDim : C.gold, marginBottom: 2 }}>{spell.name}</div>
+                    <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.text}</div>
+                    {spell.condition && (
+                      <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
+                    )}
+                    {spell.manual && (
+                      <div style={{ fontSize: 9, color: "#5a6070", marginTop: 3 }}>★ 効果はGMが手動処理</div>
+                    )}
+                    {spell.effectTiming === "round_end" && (
+                      <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
+                    )}
+                    {spell.effects.some(e => e.count === -1) && (
+                      <div style={{ fontSize: 9, color: C.blue, marginTop: 3 }}>※ 枚数は宣言時に確認</div>
+                    )}
                   </div>
+                  <button
+                    disabled={disabled}
+                    onClick={() => {
+                      const needCount = spell.effects.some(e => e.count === -1);
+                      if (needCount) {
+                        const n = parseInt(window.prompt("配置する弾幕の数を入力してください", "1"));
+                        if (!isNaN(n) && n > 0) declareSpell(spell, isPcAttacker, n);
+                      } else {
+                        declareSpell(spell, isPcAttacker, null);
+                      }
+                    }}
+                    style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: disabled ? "not-allowed" : "pointer",
+                      background: disabled ? "rgba(255,255,255,0.03)" : "rgba(200,160,64,0.2)",
+                      border: `1px solid ${disabled ? C.border : C.goldDim}`,
+                      color: disabled ? C.textFaint : C.gold, borderRadius: 3 }}
+                  >宣言</button>
                 </div>
               </div>
-            );
-          })
-        }
+            </div>
+          );
+        })}
       </div>
     );
   };
