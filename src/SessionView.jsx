@@ -205,7 +205,7 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
   );
 }
 
-export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceAnim, diceLabel }) {
+export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const b = gs.battle;
   if (!b) return null;
 
@@ -932,7 +932,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
 
   return (
     <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
-      <BattleDiceTray diceResult={diceResult} diceAnim={diceAnim} label={diceLabel} />
+      <BattleDiceTray diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} label={gs.dice?.label} />
       
       <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 15, flexWrap: "wrap", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
         {npcs.map(n => {
@@ -1047,7 +1047,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, diceResult, diceA
   );
 }
 
-export function BonusPhaseView({ gs, upd, user, isGm, animateDice, diceResult, diceAnim }) {
+export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
   const bonusStatus = gs.bonusStatus || {};
   const myRemaining = bonusStatus[user?.uid] || 0;
   const myPc = gs.pcs.find(p => p.uid === user?.uid);
@@ -3139,7 +3139,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
 }
 
 // ─── RightPanel ───────────────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, diceResult, diceAnim, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
@@ -3407,14 +3407,14 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       </div>
                     </>
                   )}
-                  {diceResult && (
+                  {gs.dice?.results && (
                     <div style={{ marginTop: 12, textAlign: "center" }}>
                       <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 4 }}>
-                        {diceResult.map((d, i) => (
-                          <div key={i} style={{ width: 40, height: 40, border: "2px solid #1e3a5a", borderRadius: 5, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#60c0f0", fontWeight: "bold", animation: diceAnim ? "rollSpin 0.25s ease infinite" : "none" }}>{d}</div>
+                        {gs.dice.results.map((d, i) => (
+                          <div key={i} style={{ width: 40, height: 40, border: "2px solid #1e3a5a", borderRadius: 5, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#60c0f0", fontWeight: "bold", animation: gs.dice.rolling ? "rollSpin 0.25s ease infinite" : "none" }}>{d}</div>
                         ))}
                       </div>
-                      {!diceAnim && <div style={{ fontSize: 16, color: C.gold }}>{diceResult.join("")}</div>}
+                      {!gs.dice?.rolling && <div style={{ fontSize: 16, color: C.gold }}>{gs.dice?.results.join("")}</div>}
                     </div>
                   )}
                 </div>
@@ -3653,7 +3653,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 }
 
 function BattleDiceTray({ diceResult, diceAnim, label }) {
-  if (!diceResult && !diceAnim) return <div style={{ height: 20 }} />;
+  if (!diceResult?.length && !diceAnim) return <div style={{ height: 20 }} />;
 
   const displayLabel = label ? label : "DICE ROLL";
 
@@ -3695,7 +3695,7 @@ function BattleDiceTray({ diceResult, diceAnim, label }) {
   );
 }
 
-function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice, diceResult, diceAnim }) {
+function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   const [battleTab, setBattleTab] = useState("info");
   const b = gs.battle;
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
