@@ -835,9 +835,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     upd(p => ({
       ...p,
-      battle: {
-        log: [`${spellsRaw}`, ...p.log]
-      }
+      log: [`${spellsRaw}`, ...p.log]
     }));
 
     // CHOOSE 選択中
