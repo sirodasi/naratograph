@@ -205,6 +205,70 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
   );
 }
 
+const TIMING_RULES = [
+  { key: "round_start", re: /ラウンドの?開始時/       },
+  { key: "evade",       re: /回避ステップ/            },
+  { key: "hit",         re: /被弾|【残り人数】を減少/ },
+];
+
+const EFFECT_PATTERNS = [
+  { type: "SELF",     re: /【自機マス×(\d+)】/g                },
+  { type: "ENEMY",    re: /【敵機マス×(\d+)】/g               },
+  { type: "ADJACENT", re: /【隣接マス×(\d+)】/g               },
+  { type: "CHOOSE",   re: /【指定マス×(\d+)】/g               },
+  { type: "RANDOM",   re: /【ランダム×(\d+|X)】/g             },
+  { type: "FIXED",    re: /【(\d+)番マス×(\d+)】/g           },
+];
+
+const CONDITION_RE = /(?:[^。]*(?:できない|限り使用できない|場合にしか使用できない)[^。]*。?)/;
+
+export function parseSpell(text) {
+  // タイミング
+  let timing = "standard";
+  for (const { key, re } of TIMING_RULES) {
+    if (re.test(text)) { timing = key; break; }
+  }
+
+  // 効果タイミング（宣言はstandard・効果発揮がラウンド終了時）
+  const effectTiming = /ラウンドの?終了時/.test(text) ? "round_end" : "immediate";
+
+  // 効果リスト
+  const effects = [];
+  for (const { type, re } of EFFECT_PATTERNS) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (type === "FIXED") {
+        effects.push({ type, cell: parseInt(m[1]), count: parseInt(m[2]) });
+      } else {
+        effects.push({ type, count: m[1] === "X" ? -1 : parseInt(m[1]) });
+      }
+    }
+  }
+
+  // 宣言条件（テキスト抽出のみ、自動チェックはしない）
+  const condMatch = CONDITION_RE.exec(text);
+  const condition = condMatch ? condMatch[0].trim() : null;
+
+  return {
+    timing,
+    effectTiming,
+    effects,
+    manual: effects.length === 0,  // キーワードなし → 手動
+    condition,
+  };
+}
+
+// スペカテキストからフルオブジェクトを組み立てる
+export function buildSpellCard(text) {
+  const nameMatch = text.match(/^(.+?[」])/);
+  return {
+    name:    nameMatch ? nameMatch[1] : text.slice(0, 20),
+    text,
+    ...parseSpell(text),
+  };
+}
+
 export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const b = gs.battle;
   if (!b) return null;
@@ -310,23 +374,178 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const executePcShot = () => executeShot(true);
   const executeNpcShot = () => executeShot(false);
 
-  const handleUseSpell = (spellName) => {
-    upd(p => {
-      const pc = p.pcs.find(x => x.uid === b.pcCombatant);
-      if (pc.resources.スペルカード?.cur <= 0) return p;
+  // ─── スペルカード関連 ─────────────────────────────────────────────
 
-      const nextPcs = p.pcs.map(x => x.uid === b.pcCombatant 
-        ? { ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: x.resources.スペルカード?.cur - 1 } } }
-        : x
-      );
+  // グリッドに弾幕を配置するヘルパー（攻撃側フィールド）
+  const placeSpellBullets = (attackerGrid, effects, attackerPos, defenderPos, customCount = null) => {
+    const grid = [...attackerGrid];
+    const ADJACENT_MAP = { 1:[2,4], 2:[1,3,5], 3:[2,6], 4:[1,5], 5:[4,6,2], 6:[3,5] };
 
-      return {
-        ...p,
-        pcs: nextPcs,
-        battle: { ...p.battle, lastSpellUsed: spellName },
-        log: [`🔮 ${pc.charName} のスペルカード：${spellName}！！`, ...p.log]
-      };
+    for (const ef of effects) {
+      const count = ef.count === -1 ? (customCount ?? 1) : ef.count;
+      if (ef.type === "SELF") {
+        grid[attackerPos - 1] = (grid[attackerPos - 1] || 0) + count;
+      } else if (ef.type === "ENEMY") {
+        grid[defenderPos - 1] = (grid[defenderPos - 1] || 0) + count;
+      } else if (ef.type === "ADJACENT") {
+        const adj = ADJACENT_MAP[defenderPos] || [];
+        adj.forEach(cell => { grid[cell - 1] = (grid[cell - 1] || 0) + count; });
+      } else if (ef.type === "FIXED") {
+        grid[ef.cell - 1] = (grid[ef.cell - 1] || 0) + ef.count;
+      }
+      // RANDOM は別途ダイスで処理、CHOOSE は手動選択で処理
+    }
+    return grid;
+  };
+
+  // RANDOM エフェクトをダイスで処理
+  const resolveRandomEffects = (effects, attackerGridId, customCount, cb) => {
+    const randoms = effects.filter(e => e.type === "RANDOM");
+    if (randoms.length === 0) { cb({}); return; }
+
+    const totalDice = randoms.reduce((sum, e) => sum + (e.count === -1 ? (customCount ?? 1) : e.count), 0);
+    animateDice(totalDice, "スペルカード（ランダム配置）", res => {
+      const grid = [...(b.grids?.[attackerGridId] || [0,0,0,0,0,0])];
+      res.forEach(d => { grid[d - 1] = (grid[d - 1] || 0) + 1; });
+      cb({ [attackerGridId]: grid });
     });
+  };
+
+  // スペルカード宣言のメイン処理
+  const declareSpell = (spellCard, isPcAttacker, customCount = null) => {
+    const attackerId = isPcAttacker ? b.pcCombatant : b.npcCombatant;
+    const defenderId = isPcAttacker ? b.npcCombatant : b.pcCombatant;
+    const attPos = b.positions?.[attackerId] || 1;
+    const defPos = b.positions?.[defenderId] || 1;
+    const attackerGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
+
+    // スペカ点数を消費
+    const consumeSpell = (p) => isPcAttacker
+      ? { ...p, pcs: p.pcs.map(x => x.uid !== attackerId ? x : {
+          ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, (x.resources.スペルカード?.cur || 0) - 1) } }
+        })}
+      : { ...p, battle: { ...p.battle, participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== attackerId ? n : {
+          ...n, resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: Math.max(0, (n.resources.スペルカード?.cur || 0) - 1) } }
+        })}}};
+
+    const nonRandomEffects = spellCard.effects.filter(e => e.type !== "RANDOM" && e.type !== "CHOOSE");
+    const hasRandom = spellCard.effects.some(e => e.type === "RANDOM");
+    const hasChoose = spellCard.effects.some(e => e.type === "CHOOSE");
+
+    // effectTiming が round_end のものは grids に反映せず pendingSpell に保存
+    if (spellCard.effectTiming === "round_end") {
+      upd(p => ({
+        ...consumeSpell(p),
+        battle: { ...p.battle, pendingSpell: { ...spellCard, attackerId, defenderPos: defPos } },
+        log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
+      }));
+      return;
+    }
+
+    // manual または CHOOSE → 宣言のみ記録して CHOOSE フェーズへ
+    if (spellCard.manual) {
+      upd(p => ({
+        ...consumeSpell(p),
+        battle: { ...p.battle, lastSpellUsed: spellCard.name },
+        log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
+      }));
+      return;
+    }
+
+    // 非ランダム効果を即座に適用
+    const updatedGrid = placeSpellBullets(attackerGrid, nonRandomEffects, attPos, defPos, customCount);
+
+    if (hasChoose) {
+      // CHOOSE → 選択フェーズへ
+      const chooseCount = spellCard.effects.find(e => e.type === "CHOOSE")?.count ?? 1;
+      upd(p => ({
+        ...consumeSpell(p),
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [attackerId]: updatedGrid },
+          spellChoose: { attackerId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
+          lastSpellUsed: spellCard.name,
+        },
+        log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
+      }));
+      return;
+    }
+
+    if (hasRandom) {
+      // ランダム配置のダイスロール
+      upd(p => consumeSpell(p));
+      resolveRandomEffects(spellCard.effects, attackerId, customCount, gridPatch => {
+        upd(p => ({
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [attackerId]: updatedGrid.map((v, i) => v + (gridPatch[attackerId]?.[i] || 0)), },
+            lastSpellUsed: spellCard.name,
+          },
+          log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！`, ...p.log],
+        }));
+      });
+      return;
+    }
+
+    // 完全自動
+    upd(p => ({
+      ...consumeSpell(p),
+      battle: {
+        ...p.battle,
+        grids: { ...p.battle.grids, [attackerId]: updatedGrid },
+        lastSpellUsed: spellCard.name,
+      },
+      log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！`, ...p.log],
+    }));
+  };
+
+  // CHOOSE: グリッドのマスをクリックして弾幕を配置
+  const handleSpellChooseCell = (cell) => {
+    const sc = b.spellChoose;
+    if (!sc) return;
+    if (sc.selected.includes(cell)) return;  // 同じマスは選べない
+    const newSelected = [...sc.selected, cell];
+    const grid = [...(b.grids?.[sc.attackerId] || [0,0,0,0,0,0])];
+    grid[cell - 1] = (grid[cell - 1] || 0) + 1;
+
+    if (newSelected.length >= sc.remaining) {
+      // 選択完了
+      upd(p => ({
+        ...p,
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [sc.attackerId]: grid },
+          spellChoose: null,
+        },
+      }));
+    } else {
+      upd(p => ({
+        ...p,
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [sc.attackerId]: grid },
+          spellChoose: { ...sc, selected: newSelected },
+        },
+      }));
+    }
+  };
+
+  // ラウンド終了時の pendingSpell 適用
+  const applyPendingSpell = () => {
+    const ps = b.pendingSpell;
+    if (!ps) return;
+    const grid = b.grids?.[ps.attackerId] || [0,0,0,0,0,0];
+    // manual のものはテキスト表示のみ（グリッド変更なし）
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        grids: ps.manual ? p.battle.grids : { ...p.battle.grids, [ps.attackerId]: grid },
+        pendingSpell: null,
+      },
+      log: [`⏰ ${ps.name} の効果が発動した`, ...p.log],
+    }));
   };
 
   const combatantPc = pcs.find(p => p.uid === b.pcCombatant);
@@ -602,6 +821,107 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     );
   };
 
+  const renderSpellStep = (isPcAttacker, timing = "standard") => {
+    const attacker    = isPcAttacker ? combatantPc : combatantNpc;
+    const spellsRaw   = isPcAttacker
+      ? [...(attacker?.spellCards || []), ...(attacker?.growthSpellUnlocked ? [attacker?.growthSpellCard] : [])]
+      : [...(attacker?.spellCards || [])];
+    const spells      = spellsRaw.filter(Boolean).map(t => typeof t === "string" ? buildSpellCard(t) : t);
+    const available   = spells.filter(s => s.timing === timing);
+    const spellPts    = attacker?.resources?.スペルカード?.cur || 0;
+    const canDeclare  = isPcAttacker ? (isGm || user.uid === b.pcCombatant) : isGm;
+    const cardColor   = isPcAttacker ? C.blue : C.red;
+    const borderColor = isPcAttacker ? C.blueBorder : C.redBorder;
+
+    // CHOOSE 選択中
+    if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
+      const remaining = b.spellChoose.remaining - b.spellChoose.selected.length;
+      return (
+        <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${C.gold}`, marginTop: 10 }}>
+          <div style={{ fontSize: 11, color: C.gold, marginBottom: 6 }}>🔮 マスを {remaining} 箇所選択してください</div>
+          <div style={{ fontSize: 9, color: C.textDim }}>（グリッド上のマス番号をクリック）</div>
+          <div style={{ display: "flex", gap: 4, marginTop: 8, justifyContent: "center" }}>
+            {[1,2,3,4,5,6].map(cell => {
+              const alreadySelected = b.spellChoose.selected.includes(cell);
+              return (
+                <button key={cell} onClick={() => handleSpellChooseCell(cell)}
+                  disabled={alreadySelected || !canDeclare}
+                  style={{ width: 32, height: 32, borderRadius: 4, cursor: alreadySelected ? "default" : "pointer",
+                    background: alreadySelected ? "rgba(200,160,64,0.3)" : "rgba(255,255,255,0.05)",
+                    border: `1px solid ${alreadySelected ? C.gold : C.border}`, color: alreadySelected ? C.gold : C.text, fontSize: 13 }}>
+                  {cell}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    if (available.length === 0 && timing === "standard") return null;
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: cardColor }}>
+            🔮 スペルカード宣言 — {attacker?.charName || attacker?.name}
+          </div>
+          <div style={{ fontSize: 10, color: C.gold }}>残り {spellPts} 点</div>
+        </div>
+
+        {spellPts <= 0 && <div style={{ fontSize: 10, color: C.textFaint, marginBottom: 6 }}>スペルカードの点数が足りません</div>}
+
+        {available.length === 0
+          ? <div style={{ fontSize: 10, color: C.textFaint }}>このタイミングで宣言できるスペルカードはありません</div>
+          : available.map((spell, i) => {
+            const disabled = spellPts <= 0 || !canDeclare;
+            const [expanded, setExpanded] = [false, () => {}];
+            return (
+              <div key={i} style={{ marginBottom: 6, border: `1px solid ${C.border}`, borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ padding: "6px 8px", background: "rgba(255,255,255,0.03)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: spell.manual ? C.textDim : C.gold, marginBottom: 2 }}>{spell.name}</div>
+                      <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.text}</div>
+                      {spell.condition && (
+                        <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
+                      )}
+                      {spell.manual && (
+                        <div style={{ fontSize: 9, color: "#5a6070", marginTop: 3 }}>★ 効果はGMが手動処理</div>
+                      )}
+                      {spell.effectTiming === "round_end" && (
+                        <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
+                      )}
+                      {spell.effects.some(e => e.count === -1) && (
+                        <div style={{ fontSize: 9, color: C.blue, marginTop: 3 }}>※ 枚数は宣言時に確認</div>
+                      )}
+                    </div>
+                    <button
+                      disabled={disabled}
+                      onClick={() => {
+                        const needCount = spell.effects.some(e => e.count === -1);
+                        if (needCount) {
+                          const n = parseInt(window.prompt("配置する弾幕の数を入力してください", "1"));
+                          if (!isNaN(n) && n > 0) declareSpell(spell, isPcAttacker, n);
+                        } else {
+                          declareSpell(spell, isPcAttacker, null);
+                        }
+                      }}
+                      style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: disabled ? "not-allowed" : "pointer",
+                        background: disabled ? "rgba(255,255,255,0.03)" : "rgba(200,160,64,0.2)",
+                        border: `1px solid ${disabled ? C.border : C.goldDim}`,
+                        color: disabled ? C.textFaint : C.gold, borderRadius: 3 }}
+                    >宣言</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        }
+      </div>
+    );
+  };
+
   const renderShotAfter = (isPc) => {
     const nextPhase = isPc ? "npc_evade_intro" : "pc_evade_intro";
     const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
@@ -611,7 +931,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
         <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
         <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
-        {canProceed && (
+
+        {renderSpellStep(isPc, "standard")}
+
+        {b.pendingSpell && (
+          <div style={{ marginTop: 8, padding: "5px 8px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 4 }}>
+            <div style={{ fontSize: 9, color: "#ef9a9a" }}>⏰ 宣言済: {b.pendingSpell.name}（ラウンド終了時に効果）</div>
+          </div>
+        )}
+
+        {canProceed && !b.spellChoose && (
           <button 
             onClick={() => upd(p => ({
               ...p,
@@ -623,7 +952,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   : getDefaultEvadeDice(combatantNpc)
               }
             }))} 
-            style={buttonStyle}
+            style={{ ...buttonStyle, marginTop: 8 }}
           >
             回避ステップへ進む
           </button>
@@ -688,6 +1017,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             )}
           </div>
         )}
+      {renderSpellStep(!isPc, "evade")}
       </div>
     );
   };
@@ -719,6 +1049,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${cardBorder}`, textAlign: "center" }}>
         <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>{isPc ? "当たり判定ステップ" : "当たり判定ステップ(NPC)"}</div>
+        {renderSpellStep(isPc, "hit")}
         {isSafe ? (
           <div>
             <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
@@ -912,6 +1243,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                 })}
               </div>
 
+              {b.pcCombatant && b.npcCombatant && (<>
+                {renderSpellStep(true,  "round_start")}
+                {renderSpellStep(false, "round_start")}
+              </>)}
+
               <button 
                 disabled={!b.tempSelectedPc || !b.tempSelectedNpc}
                 onClick={() => startRound(b.tempSelectedPc, b.tempSelectedNpc)}
@@ -1000,7 +1336,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
             <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了確認</div>
             <div style={{ color: "#fff", fontSize: 11, marginBottom: 12 }}>敵の回避に成功しました。このラウンドを終了して次に進みます。</div>
-            {(isGm || user.uid === b.pcCombatant) && (
+            {b.pendingSpell && (
+              <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 5 }}>
+                <div style={{ fontSize: 11, color: "#ef9a9a", marginBottom: 4 }}>⏰ {b.pendingSpell.name} — ラウンド終了時の効果が発動します</div>
+                <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{b.pendingSpell.text}</div>
+                {b.pendingSpell.manual && (
+                  <div style={{ fontSize: 9, color: "#5a6070", marginBottom: 6 }}>★ GMが手動で効果を処理してください</div>
+                )}
+                {isGm && (
+                  <button onClick={applyPendingSpell} style={{ ...btnFull("rgba(239,154,154,0.2)", "#c62828", "#ef9a9a"), marginTop: 4 }}>
+                    効果を適用して次へ
+                  </button>
+                )}
+              </div>
+            )}
+            {(isGm || user.uid === b.pcCombatant) && !b.pendingSpell && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
           </div>
