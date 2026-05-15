@@ -759,6 +759,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           actedNpcs: nextActedNpcs,
           pcCombatant: null,
           npcCombatant: null,
+          lastSpellUsed: null,
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
@@ -858,7 +859,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       );
     }
 
-    if (available.length === 0 ) return null;
+    if (available.length === 0 || b.lastSpellUsed) return null;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
