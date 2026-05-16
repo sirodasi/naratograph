@@ -674,7 +674,6 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <Chip label={`${sc.playerCountMin}〜${sc.playerCountMax}人`} color={C.blue}/>
                 <Chip label={sc.difficulty} color={diffColor[sc.difficulty]||C.text}/>
-                <Chip label={`クエスト${(sc.quests||[]).length}個`} color={C.purple}/>
                 <Chip label={`リミット: ${sc.limit}`} color={C.textDim}/>
               </div>
             </div>
