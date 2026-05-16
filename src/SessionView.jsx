@@ -376,9 +376,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const bonus = b.supportDice || 0;
     const totalDice = attacker.resources.攻撃力.cur + bonus;
 
+    const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
+    const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
+
+    // ショット直前の近接攻撃を試行
+    tryApplyProximity(attackerId, defenderId);
+
     animateDice(totalDice, `${isPc ? "PC" : "NPC"}ショット`, (results) => {
       upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
-      applyShot(isPc ? b.npcCombatant : b.pcCombatant, results);
+      // ロール直後の大威力を試行（成功すれば対象マスに追加で弾幕を配置）
+      tryApplyBigPower(attackerId, defenderId, results);
+      applyShot(defenderId, results);
     });
   };
 
@@ -599,6 +607,117 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }));
   };
 
+  // --- 公式弾幕スキル: 使用管理と自動適用ヘルパー ---
+  const hasOfficialSkill = (entity, skillName) => {
+    if (!entity) return false;
+    return entity.dsType === "official" && entity.dsName === skillName;
+  };
+
+  const isDanmakuUsed = (attackerId, skillName) => {
+    return !!(b.usedDanmakuSkills && b.usedDanmakuSkills[attackerId] && b.usedDanmakuSkills[attackerId].includes(skillName));
+  };
+
+  const markDanmakuUsed = (attackerId, skillName) => {
+    if (!attackerId) return;
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        usedDanmakuSkills: {
+          ...(p.battle.usedDanmakuSkills || {}),
+          [attackerId]: [...((p.battle.usedDanmakuSkills || {})[attackerId] || []), skillName]
+        }
+      }
+    }));
+  };
+
+  // 近接攻撃: ショット直前に同じマスなら相手のそのマスに弾幕+1
+  const tryApplyProximity = (attackerId, defenderId) => {
+    const attackerPos = b.positions?.[attackerId];
+    const defenderPos = b.positions?.[defenderId];
+    if (!attackerPos || !defenderPos) return false;
+    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
+    if (!hasOfficialSkill(attacker, "近接攻撃")) return false;
+    if (isDanmakuUsed(attackerId, "近接攻撃")) return false;
+    if (attackerPos !== defenderPos) return false;
+
+    // そのマスに弾幕を1追加
+    upd(p => {
+      const grid = [...(p.battle.grids?.[defenderId] || [0,0,0,0,0,0])];
+      grid[defenderPos - 1] = (grid[defenderPos - 1] || 0) + 1;
+      return {
+        ...p,
+        battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: grid } },
+        log: [`💥 ${attacker.charName || attacker.name} の『近接攻撃』が発動：${defenderPos}番マスに弾幕が追加されました。`, ...p.log]
+      };
+    });
+    markDanmakuUsed(attackerId, "近接攻撃");
+    return true;
+  };
+
+  // 大威力: ロール直後に重複出目があれば1つ選んでそのマスに+1
+  const tryApplyBigPower = (attackerId, defenderId, diceResults) => {
+    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
+    if (!hasOfficialSkill(attacker, "大威力")) return false;
+    if (isDanmakuUsed(attackerId, "大威力")) return false;
+    if (!diceResults || diceResults.length === 0) return false;
+
+    const counts = {};
+    diceResults.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
+    const dupes = Object.entries(counts).filter(([v, c]) => c >= 2).map(([v]) => parseInt(v, 10));
+    if (dupes.length === 0) return false;
+
+    // 選択: 最大の出目重複を優先
+    const chosen = Math.max(...dupes);
+    upd(p => {
+      const grid = [...(p.battle.grids?.[defenderId] || [0,0,0,0,0,0])];
+      grid[chosen - 1] = (grid[chosen - 1] || 0) + 1;
+      return {
+        ...p,
+        battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: grid } },
+        log: [`💥 ${attacker.charName || attacker.name} の『大威力』が発動：出目 ${chosen} のマスに弾幕が1つ追加されました。`, ...p.log]
+      };
+    });
+    markDanmakuUsed(attackerId, "大威力");
+    return true;
+  };
+
+  // 弾消し: 任意タイミングだが自動化としてはショット開始前（intro）に相手フィールドから1つ除去
+  const tryApplyErase = (attackerId, defenderId) => {
+    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
+    if (!hasOfficialSkill(attacker, "弾消し")) return false;
+    if (isDanmakuUsed(attackerId, "弾消し")) return false;
+
+    // 対象フィールドのうち最大の弾数があるマスを1つ減らす
+    const grid = b.grids?.[defenderId] ? [...b.grids[defenderId]] : [0,0,0,0,0,0];
+    let maxCount = 0;
+    let maxIdx = -1;
+    grid.forEach((v, i) => { if ((v || 0) > maxCount) { maxCount = v; maxIdx = i; } });
+    if (maxCount <= 0) return false;
+
+    upd(p => {
+      const newGrid = [...(p.battle.grids?.[defenderId] || [0,0,0,0,0,0])];
+      newGrid[maxIdx] = Math.max(0, (newGrid[maxIdx] || 0) - 1);
+      return {
+        ...p,
+        battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: newGrid } },
+        log: [`🧹 ${attacker.charName || attacker.name} の『弾消し』が発動：${maxIdx + 1}番マスの弾幕を1つ取り除きました。`, ...p.log]
+      };
+    });
+    markDanmakuUsed(attackerId, "弾消し");
+    return true;
+  };
+
+  // ショットイントロからショットロールへ移る際にイントロ系スキルを適用してから進行する
+  const handleProceedToShotRoll = (isPc, nextPhase) => {
+    const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
+    const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
+    // 弾消しはイントロで自動適用
+    tryApplyErase(attackerId, defenderId);
+    // 進行
+    upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }));
+  };
+
   const combatantPc = pcs.find(p => p.uid === b.pcCombatant);
   const combatantNpc = npcs.find(n => n.id === b.npcCombatant);
   const currentPos = b.positions?.[b.pcCombatant];
@@ -809,6 +928,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           pcCombatant: null,
           npcCombatant: null,
           lastSpellUsed: null,
+          usedDanmakuSkills: {},
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
@@ -837,7 +957,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
           {canProceed && (
             <button 
-              onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }))}
+              onClick={() => handleProceedToShotRoll(isPc, nextPhase)}
               style={{ ...buttonStyle, marginTop: 30, width: 200 }}
             >
               {buttonLabel}
