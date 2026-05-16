@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import LobbyRoot, { CharSprite, CHARACTERS } from "./Lobby";
+import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
 import { BackstoryScreen, BattleView, BonusPhaseView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, getSpotByD66 } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
@@ -317,7 +317,7 @@ function SessionApp({ roomCode, user }) {
           ...DEFAULT_GS, ...val,
           resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
           items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
-          pcs:    val.pcs    || [],
+          pcs:    (val.pcs || []).map(normalizePc),
           quests: val.quests || [],
           clues:  val.clues  || [],
           log:    val.log    || [],
@@ -348,6 +348,24 @@ function SessionApp({ roomCode, user }) {
     return () => { clearTimeout(timeout); unsubGs(); unsubScene(); };
   }, [mode, gsPath, scenePath]);
 
+  function normalizePc(p) {
+    const charData = CHARACTERS.find(c => c.id === p.charId) ?? null;
+    const personality = p.ps ?? (p.skillId ? {
+      id:   p.skillId,
+      name: p.skillName ?? PERSONALITY_SKILLS[p.skillId]?.name ?? "",
+      type: PERSONALITY_SKILLS[p.skillId]?.type ?? null,
+      desc: PERSONALITY_SKILLS[p.skillId]?.desc ?? null,
+    } : null);
+
+    return {
+      ...p,
+      as:  p.as  ?? charData?.as  ?? null,
+      ds:  p.ds  ?? charData?.ds  ?? null,
+      ps: personality,
+      skillName: p.skillName ?? personality?.name ?? "",
+    };
+  }
+
   function buildPcList(r) {
     if (!r?.players) return [];
     return Object.values(r.players)
@@ -373,8 +391,14 @@ function SessionApp({ roomCode, user }) {
           customPortrait: p.customPortrait ?? null,
           skillId:   p.skillId   ?? null,
           skillName: p.skillName ?? "",
-          as: charData?.as ?? (p.charId?.startsWith("custom_") ? (p.as ?? null) : null),
-          ds: charData?.ds ?? null,
+          ps: p.ps ?? (p.skillId ? {
+            id:   p.skillId,
+            name: p.skillName ?? PERSONALITY_SKILLS[p.skillId]?.name ?? "",
+            type: PERSONALITY_SKILLS[p.skillId]?.type ?? null,
+            desc: PERSONALITY_SKILLS[p.skillId]?.desc ?? null,
+          } : null),
+          as:  p.as  ?? charData?.as  ?? null,
+          ds:  p.ds  ?? charData?.ds  ?? null,
           spellCards:          charData?.spellCards      ?? p.spellCards      ?? [],
           growthSpellCard:     charData?.growthSpellCard ?? p.growthSpellCard ?? null,
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,

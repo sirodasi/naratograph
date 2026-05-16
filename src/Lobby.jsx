@@ -291,8 +291,8 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       base:          selectedChar.base || "人間の里",
       customPortrait: selectedChar.customPortrait || null,
       tags:          selectedChar.tags ||[],
-      as:  selectedChar.as || null,
-      ds:  selectedChar.ds || null,
+      as:  selectedChar.as ?? null,
+      ds:  selectedChar.ds ?? null,
     });
     setStep("skillSelect");
   };
@@ -303,6 +303,12 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
     await update(ref(db, `rooms/${roomCode}/players/${user.uid}`), {
       skillId:   selectedSkillId,
       skillName: skill?.name || "",
+      ps: {
+        id:   selectedSkillId,
+        name: skill?.name || "",
+        type: skill?.type || null,
+        desc: skill?.desc || null,
+      },
       ready:     true,
     });
     setStep("ready");
