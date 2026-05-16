@@ -457,7 +457,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (spellCard.manual) {
       upd(p => ({
         ...consumeSpell(p),
-        battle: { ...p.battle, lastSpellUsed: spellCard.name },
+        battle: {
+          ...p.battle,
+          lastSpellUsed: spellCard.name,
+          manualSpell: { ...spellCard, attackerId, defenderId, defenderPos: defPos }
+        },
         log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
       }));
       return;
@@ -558,6 +562,40 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         pendingSpell: null,
       },
       log: [`⏰ ${ps.name} の効果が発動した`, ...p.log],
+    }));
+  };
+
+  const updateCombatantPosition = (combatantId, targetCellNum) => {
+    if (!combatantId) return;
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        positions: { ...p.battle.positions, [combatantId]: targetCellNum }
+      }
+    }));
+  };
+
+  const changeBulletCount = (combatantId, cell, delta) => {
+    if (!combatantId) return;
+    upd(p => {
+      const oldGrid = [...(p.battle.grids[combatantId] || [0,0,0,0,0,0])];
+      const updated = Math.max(0, (oldGrid[cell - 1] || 0) + delta);
+      oldGrid[cell - 1] = updated;
+      return {
+        ...p,
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [combatantId]: oldGrid }
+        }
+      };
+    });
+  };
+
+  const clearManualSpell = () => {
+    upd(p => ({
+      ...p,
+      battle: { ...p.battle, manualSpell: null }
     }));
   };
 
@@ -927,11 +965,72 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     );
   };
 
+  const renderManualSpellControls = () => {
+    const spell = b.manualSpell || b.pendingSpell;
+    if (!spell || !isGm) return null;
+
+    const pcId = b.pcCombatant;
+    const npcId = b.npcCombatant;
+    const pcGrid = b.grids?.[pcId] || [0,0,0,0,0,0];
+    const npcGrid = b.grids?.[npcId] || [0,0,0,0,0,0];
+    const pcPos = b.positions?.[pcId] || 0;
+    const npcPos = b.positions?.[npcId] || 0;
+
+    const renderEntityEditor = (entityId, label, grid, pos) => (
+      <div style={{ flex: 1, minWidth: 220, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 }}>
+        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 6 }}>{label}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 6, marginBottom: 8 }}>
+          {grid.map((count, index) => (
+            <div key={index} style={{ padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 6, textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: C.textDim }}>#{index + 1}</div>
+              <div style={{ fontSize: 14, color: C.text, marginTop: 4 }}>{count}</div>
+              <div style={{ display: "flex", gap: 4, justifyContent: "center", marginTop: 6 }}>
+                <button onClick={() => changeBulletCount(entityId, index + 1, -1)} style={{ width: 22, height: 22, fontSize: 12, borderRadius: 4, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.05)", color: C.text }}>-</button>
+                <button onClick={() => changeBulletCount(entityId, index + 1, 1)} style={{ width: 22, height: 22, fontSize: 12, borderRadius: 4, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.05)", color: C.text }}>+</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>現在の位置: {pos || "-"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gap: 4 }}>
+          {[1,2,3,4,5,6].map(num => (
+            <button key={num} onClick={() => updateCombatantPosition(entityId, num)}
+              style={{ padding: 6, borderRadius: 4, border: `1px solid ${num === pos ? C.gold : C.border}`, background: num === pos ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.04)", color: C.text, fontSize: 11 }}>
+              {num}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.82)", padding: 12, borderRadius: 10, border: `1px solid ${C.goldDim}`, marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 11, color: C.gold, marginBottom: 4 }}>🛠️ 手動スペル処理</div>
+            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>{spell.name}</div>
+            <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.text}</div>
+            <div style={{ fontSize: 9, color: C.textDim, marginTop: 4 }}>
+              PC/NPC の移動と弾幕数を調整できます。
+            </div>
+          </div>
+          <button onClick={clearManualSpell} style={{ ...btnFull("rgba(255,255,255,0.08)", C.border, C.text), height: 32, alignSelf: "flex-start" }}>
+            完了
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+          {renderEntityEditor(pcId, "PC", pcGrid, pcPos)}
+          {renderEntityEditor(npcId, "NPC", npcGrid, npcPos)}
+        </div>
+      </div>
+    );
+  };
+
   const renderShotAfter = (isPc) => {
     const nextPhase = isPc ? "npc_evade_intro" : "pc_evade_intro";
     const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
     const buttonStyle = btnFull(C.blueBg, C.blueBorder, C.blue);
-
+    
     return (
       <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
         <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
@@ -1321,6 +1420,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         {(b.phase === "pc_shot_roll" || b.phase === "npc_shot_roll") && renderShotRoll(b.phase === "pc_shot_roll")}
 
         {(b.phase === "pc_shot_after" || b.phase === "npc_shot_after") && renderShotAfter(b.phase === "pc_shot_after")}
+
+        {renderManualSpellControls()}
 
         {(b.phase === "pc_evade_intro" || b.phase === "npc_evade_intro") && renderEvadeIntro(b.phase === "pc_evade_intro")}
 
