@@ -845,8 +845,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const cardColor   = isPcAttacker ? C.blue : C.red;
     const borderColor = isPcAttacker ? C.blueBorder : C.redBorder;
 
-    console.log(spellsRaw);
-
     // CHOOSE 選択中
     if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
       const remaining = b.spellChoose.remaining - b.spellChoose.selected.length;
@@ -4143,7 +4141,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
 
             <div style={{ padding: "8px 10px", background: "rgba(25,118,210,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, marginBottom: 2 }}>PLAYER</div>
-              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pcCombatant.name}</div>
+              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pcCombatant.charName}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
                 <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant.resources.残り人数?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant.resources.スペルカード?.cur ?? 0}</span></div>

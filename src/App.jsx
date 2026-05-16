@@ -447,8 +447,8 @@ function SessionApp({ roomCode, user }) {
             id: "enemy_" + Date.now(),
             name: enemy.name,
             resources: {
-              残り人数: { cur: enemy.life, max: enemy.life },
-              スペルカード: { cur: enemy.spellcard, max: 9 },
+              残り人数: { cur: enemy.life, max: 5 },
+              スペルカード: { cur: enemy.spellcard, max: 5 },
               攻撃力: { cur: enemy.attack, max: 99 },
               回避力: { cur: enemy.evade || 3, max: 3 },
               グレイズ: { cur: 0, max: 5 }
@@ -605,8 +605,8 @@ function SessionApp({ roomCode, user }) {
       id: `npc_final_${idx}`,
       name: en.name || `強敵${idx + 1}`,
       resources: {
-        残り人数: { cur: en.life, max: en.life },
-        スペルカード: { cur: en.spellcard, max: 9 },
+        残り人数: { cur: en.life, max: 5 },
+        スペルカード: { cur: en.spellcard, max: 5 },
         攻撃力: { cur: en.attack, max: 99 },
         回避力: { cur: en.evade || 3, max: 3 }
       },
