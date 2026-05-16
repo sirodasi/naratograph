@@ -861,7 +861,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       );
     }
 
-    if (available.length === 0 || b.lastSpellUsed) return null;
+    if (available.length === 0 || b.lastSpellUsed || spellPts <= 0 || !canDeclare) return null;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
@@ -872,10 +872,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ fontSize: 10, color: C.gold }}>残り {spellPts} 点</div>
         </div>
 
-        {spellPts <= 0 && <div style={{ fontSize: 10, color: C.textFaint, marginBottom: 6 }}>スペルカードの点数が足りません</div>}
-
         {available.map((spell, i) => {
-          const disabled = spellPts <= 0 || !canDeclare;
           const [expanded, setExpanded] = [false, () => {}];
           return (
             <div key={i} style={{ marginBottom: 6, border: `1px solid ${C.border}`, borderRadius: 4, overflow: "hidden" }}>
@@ -898,7 +895,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                     )}
                   </div>
                   <button
-                    disabled={disabled}
                     onClick={() => {
                       const needCount = spell.effects.some(e => e.count === -1);
                       if (needCount) {
@@ -908,10 +904,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                         declareSpell(spell, isPcAttacker, null);
                       }
                     }}
-                    style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: disabled ? "not-allowed" : "pointer",
-                      background: disabled ? "rgba(255,255,255,0.03)" : "rgba(200,160,64,0.2)",
-                      border: `1px solid ${disabled ? C.border : C.goldDim}`,
-                      color: disabled ? C.textFaint : C.gold, borderRadius: 3 }}
+                    style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                      background: "rgba(200,160,64,0.2)",
+                      border: `1px solid ${C.goldDim}`,
+                      color: C.gold, borderRadius: 3 }}
                   >宣言</button>
                 </div>
               </div>
