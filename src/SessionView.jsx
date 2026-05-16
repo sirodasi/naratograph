@@ -384,9 +384,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     animateDice(totalDice, `${isPc ? "PC" : "NPC"}ショット`, (results) => {
       upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
+      // ホーミングを試行して出目を可能なら書き換え
+      tryApplyHoming(attackerId, defenderId, results);
       // ロール直後の大威力を試行（成功すれば対象マスに追加で弾幕を配置）
       tryApplyBigPower(attackerId, defenderId, results);
       applyShot(defenderId, results);
+      // ワイドショットはショット適用後に配置を移動
+      tryApplyWideShot(attackerId, defenderId);
     });
   };
 
@@ -655,6 +659,95 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     return true;
   };
 
+  // ホーミング: ロール直後に1つの出目を任意の出目に変更して重複を作る等に利用
+  const tryApplyHoming = (attackerId, defenderId, diceResults) => {
+    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
+    if (!hasOfficialSkill(attacker, "ホーミング")) return false;
+    if (isDanmakuUsed(attackerId, "ホーミング")) return false;
+    if (!diceResults || diceResults.length === 0) return false;
+
+    const counts = {};
+    diceResults.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
+    const currentBest = Math.max(...Object.values(counts));
+
+    let bestGain = 0;
+    let bestIdx = -1;
+    let bestValue = null;
+
+    for (let i = 0; i < diceResults.length; i++) {
+      const original = diceResults[i];
+      for (let v = 1; v <= 6; v++) {
+        if (v === original) continue;
+        const simulated = { ...counts };
+        simulated[original] = (simulated[original] || 0) - 1;
+        simulated[v] = (simulated[v] || 0) + 1;
+        const newBest = Math.max(...Object.values(simulated));
+        const gain = newBest - currentBest;
+        if (gain > bestGain || (gain === bestGain && v > (bestValue || 0))) {
+          bestGain = gain;
+          bestIdx = i;
+          bestValue = v;
+        }
+      }
+    }
+
+    if (bestGain <= 0 || bestIdx === -1) return false;
+
+    // 適用
+    const old = diceResults[bestIdx];
+    diceResults[bestIdx] = bestValue;
+    markDanmakuUsed(attackerId, "ホーミング");
+    const att = attacker;
+    upd(p => ({ ...p, log: [`🔭 ${att.charName || att.name} の『ホーミング』が発動：出目 ${old} を ${bestValue} に変更しました。`, ...p.log] }));
+    return true;
+  };
+
+  // ワイドショット: 相手フィールドの空きマスに既存の弾幕を移動する
+  const tryApplyWideShot = (attackerId, defenderId) => {
+    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
+    if (!hasOfficialSkill(attacker, "ワイドショット")) return false;
+    if (isDanmakuUsed(attackerId, "ワイドショット")) return false;
+
+    const grid = b.grids?.[defenderId] ? [...b.grids[defenderId]] : [0,0,0,0,0,0];
+    const emptyIdxs = grid.map((v,i)=>v?null:i).filter(x=>x!==null);
+    const sourceIdxs = grid.map((v,i)=>v>0?i:null).filter(x=>x!==null);
+    if (emptyIdxs.length === 0 || sourceIdxs.length === 0) return false;
+
+    let newGrid = [...grid];
+    // 移動可能な弾がある限り、空きマスに弾を移す（大きい弾数のセルから優先）
+    for (const eIdx of emptyIdxs) {
+      // 再計算される最大ソースを探す
+      let maxIdx = -1;
+      let maxVal = 0;
+      for (let i = 0; i < newGrid.length; i++) {
+        if (newGrid[i] > maxVal) { maxVal = newGrid[i]; maxIdx = i; }
+      }
+      if (maxVal <= 0) break;
+      newGrid[maxIdx] = Math.max(0, newGrid[maxIdx] - 1);
+      newGrid[eIdx] = (newGrid[eIdx] || 0) + 1;
+    }
+
+    upd(p => ({ ...p, battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: newGrid } }, log: [`🔀 ${attacker.charName || attacker.name} の『ワイドショット』が発動：空きマスに弾幕を移動しました。`, ...p.log] }));
+    markDanmakuUsed(attackerId, "ワイドショット");
+    return true;
+  };
+
+  // 高速移動: 自身のいるマスに弾幕がない場合、任意のマスへ移動できる -> 自動では対戦相手と同じマスへ移動
+  const tryApplyHighSpeed = (attackerId, defenderId) => {
+    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
+    if (!hasOfficialSkill(attacker, "高速移動")) return false;
+    if (isDanmakuUsed(attackerId, "高速移動")) return false;
+    const pos = b.positions?.[attackerId];
+    if (!pos) return false;
+    const myGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
+    if ((myGrid[pos - 1] || 0) > 0) return false; // そのマスに弾幕がある場合は使用不可
+
+    const targetPos = b.positions?.[defenderId] || pos;
+    upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [attackerId]: targetPos } }, log: [`⚡ ${attacker.charName || attacker.name} の『高速移動』が発動：${targetPos}番マスへ移動しました。`, ...p.log] }));
+    markDanmakuUsed(attackerId, "高速移動");
+    return true;
+  };
+
   // 大威力: ロール直後に重複出目があれば1つ選んでそのマスに+1
   const tryApplyBigPower = (attackerId, defenderId, diceResults) => {
     const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
@@ -712,7 +805,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const handleProceedToShotRoll = (isPc, nextPhase) => {
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
-    // 弾消しはイントロで自動適用
+    // 高速移動→弾消しはイントロで自動適用
+    tryApplyHighSpeed(attackerId, defenderId);
     tryApplyErase(attackerId, defenderId);
     // 進行
     upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }));
