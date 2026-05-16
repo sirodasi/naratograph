@@ -399,15 +399,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   };
 
   // RANDOM エフェクトをダイスで処理
-  const resolveRandomEffects = (effects, attackerGridId, customCount, cb) => {
+  const resolveRandomEffects = (effects, defenderGridId, customCount, cb) => {
     const randoms = effects.filter(e => e.type === "RANDOM");
     if (randoms.length === 0) { cb({}); return; }
 
     const totalDice = randoms.reduce((sum, e) => sum + (e.count === -1 ? (customCount ?? 1) : e.count), 0);
     animateDice(totalDice, "スペルカード（ランダム配置）", res => {
-      const grid = [...(b.grids?.[attackerGridId] || [0,0,0,0,0,0])];
+      const grid = [...(b.grids?.[defenderGridId] || [0,0,0,0,0,0])];
       res.forEach(d => { grid[d - 1] = (grid[d - 1] || 0) + 1; });
-      cb({ [attackerGridId]: grid });
+      cb({ [defenderGridId]: grid });
     });
   };
 
@@ -453,7 +453,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }
 
     // 非ランダム効果を即座に適用
-    const updatedGrid = placeSpellBullets(attackerGrid, nonRandomEffects, attPos, defPos, customCount);
+    const defenderGrid = b.grids?.[defenderId] || [0,0,0,0,0,0];
+    const updatedGrid = placeSpellBullets(defenderGrid, nonRandomEffects, attPos, defPos, customCount);
 
     if (hasChoose) {
       // CHOOSE → 選択フェーズへ
@@ -462,8 +463,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         ...consumeSpell(p),
         battle: {
           ...p.battle,
-          grids: { ...p.battle.grids, [attackerId]: updatedGrid },
-          spellChoose: { attackerId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
+          grids: { ...p.battle.grids, [defenderGrid]: updatedGrid },
+          spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
           lastSpellUsed: spellCard.name,
         },
         log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
@@ -474,12 +475,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (hasRandom) {
       // ランダム配置のダイスロール
       upd(p => consumeSpell(p));
-      resolveRandomEffects(spellCard.effects, attackerId, customCount, gridPatch => {
+      resolveRandomEffects(spellCard.effects, defenderId, customCount, gridPatch => {
         upd(p => ({
           ...p,
           battle: {
             ...p.battle,
-            grids: { ...p.battle.grids, [attackerId]: updatedGrid.map((v, i) => v + (gridPatch[attackerId]?.[i] || 0)), },
+            grids: { ...p.battle.grids, [defenderId]: updatedGrid.map((v, i) => v + (gridPatch[defenderId]?.[i] || 0)), },
             lastSpellUsed: spellCard.name,
           },
           log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！`, ...p.log],
@@ -493,7 +494,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       ...consumeSpell(p),
       battle: {
         ...p.battle,
-        grids: { ...p.battle.grids, [attackerId]: updatedGrid },
+        grids: { ...p.battle.grids, [defenderId]: updatedGrid },
         lastSpellUsed: spellCard.name,
       },
       log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！`, ...p.log],
@@ -506,7 +507,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (!sc) return;
     if (sc.selected.includes(cell)) return;  // 同じマスは選べない
     const newSelected = [...sc.selected, cell];
-    const grid = [...(b.grids?.[sc.attackerId] || [0,0,0,0,0,0])];
+    const targetId = sc.defenderId || sc.attackerId;
+    const grid = [...(b.grids?.[targetId] || [0,0,0,0,0,0])];
     grid[cell - 1] = (grid[cell - 1] || 0) + 1;
 
     if (newSelected.length >= sc.remaining) {
@@ -515,7 +517,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         ...p,
         battle: {
           ...p.battle,
-          grids: { ...p.battle.grids, [sc.attackerId]: grid },
+          grids: { ...p.battle.grids, [targetId]: grid },
           spellChoose: null,
         },
       }));
@@ -524,7 +526,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         ...p,
         battle: {
           ...p.battle,
-          grids: { ...p.battle.grids, [sc.attackerId]: grid },
+          grids: { ...p.battle.grids, [targetId]: grid },
           spellChoose: { ...sc, selected: newSelected },
         },
       }));
