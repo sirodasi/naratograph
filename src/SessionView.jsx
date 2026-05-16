@@ -379,18 +379,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
 
-    // ショット直前の近接攻撃を試行
-    tryApplyProximity(attackerId, defenderId);
-
     animateDice(totalDice, `${isPc ? "PC" : "NPC"}ショット`, (results) => {
       upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
-      // ホーミングを試行して出目を可能なら書き換え
-      tryApplyHoming(attackerId, defenderId, results);
-      // ロール直後の大威力を試行（成功すれば対象マスに追加で弾幕を配置）
-      tryApplyBigPower(attackerId, defenderId, results);
+
+      if (hasOfficialSkill(attacker, "ホーミング") && !isDanmakuUsed(attackerId, "ホーミング")) {
+        const useHoming = window.confirm(`${attacker.charName || attacker.name} は『ホーミング』を使いますか？\n出目を1つ任意の出目に変更できます。`);
+        if (useHoming) tryApplyHoming(attackerId, defenderId, results);
+      }
+
+      if (hasOfficialSkill(attacker, "大威力") && !isDanmakuUsed(attackerId, "大威力")) {
+        const useBigPower = window.confirm(`${attacker.charName || attacker.name} は『大威力』を使いますか？\n2つ以上出た出目があれば1つ追加で弾幕を配置します。`);
+        if (useBigPower) tryApplyBigPower(attackerId, defenderId, results);
+      }
+
       applyShot(defenderId, results);
-      // ワイドショットはショット適用後に配置を移動
-      tryApplyWideShot(attackerId, defenderId);
     });
   };
 
@@ -803,12 +805,25 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   // ショットイントロからショットロールへ移る際にイントロ系スキルを適用してから進行する
   const handleProceedToShotRoll = (isPc, nextPhase) => {
+    const attacker = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
-    // 高速移動→弾消しはイントロで自動適用
-    tryApplyHighSpeed(attackerId, defenderId);
-    tryApplyErase(attackerId, defenderId);
-    // 進行
+
+    if (hasOfficialSkill(attacker, "近接攻撃") && !isDanmakuUsed(attackerId, "近接攻撃")) {
+      const useProximity = window.confirm(`${attacker.charName || attacker.name} は『近接攻撃』を使いますか？\nあなたと相手が同じマスなら、そのマスに弾幕を1つ追加します。`);
+      if (useProximity) tryApplyProximity(attackerId, defenderId);
+    }
+
+    if (hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動")) {
+      const useHighSpeed = window.confirm(`${attacker.charName || attacker.name} は『高速移動』を使いますか？\n現在の位置に弾幕がない場合、任意のマスへ移動できます。`);
+      if (useHighSpeed) tryApplyHighSpeed(attackerId, defenderId);
+    }
+
+    if (hasOfficialSkill(attacker, "弾消し") && !isDanmakuUsed(attackerId, "弾消し")) {
+      const useErase = window.confirm(`${attacker.charName || attacker.name} は『弾消し』を使いますか？\n対戦相手のフィールドから弾幕を1つ取り除きます。`);
+      if (useErase) tryApplyErase(attackerId, defenderId);
+    }
+
     upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }));
   };
 
@@ -1242,15 +1257,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   const renderShotAfter = (isPc) => {
     const nextPhase = isPc ? "npc_evade_intro" : "pc_evade_intro";
+    const attacker = isPc ? combatantPc : combatantNpc;
+    const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
+    const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
     const buttonStyle = btnFull(C.blueBg, C.blueBorder, C.blue);
-    
+    const canUseWideShot = hasOfficialSkill(attacker, "ワイドショット") && !isDanmakuUsed(attackerId, "ワイドショット");
+
     return (
       <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
         <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
         <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
 
         {renderSpellStep(isPc, "standard")}
+
+        {canUseWideShot && (
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => tryApplyWideShot(attackerId, defenderId)}
+              style={btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold)}>
+              『ワイドショット』を使う
+            </button>
+          </div>
+        )}
 
         {b.pendingSpell && (
           <div style={{ marginTop: 8, padding: "5px 8px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 4 }}>
