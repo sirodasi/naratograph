@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
-import { EDGES, ADJACENT_MAP } from "./data/gameData";
+import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall } from "./styles/colors";
 
 // ─── ユーティリティ ───────────────────────────────────────────────
@@ -616,7 +616,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   // --- 公式弾幕スキル: 使用管理と自動適用ヘルパー ---
   const hasOfficialSkill = (entity, skillName) => {
     if (!entity) return false;
-    return entity.dsType === "official" && entity.dsName === skillName;
+    // Prefer runtime `ds` object (from pcs/npcs). Fall back to legacy fields if present.
+    const dsName = (entity.ds && entity.ds.name) || entity.dsName || entity.skillName || (entity.ps && entity.ps.name) || null;
+    if (!dsName) return false;
+    // Confirm it's an official named skill and matches requested skillName
+    const isOfficial = OFFICIAL_DANMAKU_SKILLS.some(s => s.name === dsName);
+    return isOfficial && dsName === skillName;
   };
 
   const isDanmakuUsed = (attackerId, skillName) => {
@@ -814,10 +819,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       if (useProximity) tryApplyProximity(attackerId, defenderId);
     }
 
-    if (hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動")) {
-      const useHighSpeed = window.confirm(`${attacker.charName || attacker.name} は『高速移動』を使いますか？\n現在の位置に弾幕がない場合、任意のマスへ移動できます。`);
-      if (useHighSpeed) tryApplyHighSpeed(attackerId, defenderId);
-    }
+    // NOTE: 高速移動はショット後の処理へ移動（ホーミング→ワイドショット→高速移動 の順に処理）
 
     if (hasOfficialSkill(attacker, "弾消し") && !isDanmakuUsed(attackerId, "弾消し")) {
       const useErase = window.confirm(`${attacker.charName || attacker.name} は『弾消し』を使いますか？\n対戦相手のフィールドから弾幕を1つ取り除きます。`);
@@ -1263,6 +1265,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
     const buttonStyle = btnFull(C.blueBg, C.blueBorder, C.blue);
     const canUseWideShot = hasOfficialSkill(attacker, "ワイドショット") && !isDanmakuUsed(attackerId, "ワイドショット");
+    const canUseHighSpeed = hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動");
 
     return (
       <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
@@ -1276,6 +1279,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             <button onClick={() => tryApplyWideShot(attackerId, defenderId)}
               style={btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold)}>
               『ワイドショット』を使う
+            </button>
+          </div>
+        )}
+        {canUseHighSpeed && (
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => tryApplyHighSpeed(attackerId, defenderId)}
+              style={btnFull("rgba(120,180,255,0.08)", C.blueBorder, C.blue)}>
+              『高速移動』を使う
             </button>
           </div>
         )}
@@ -1944,7 +1955,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const resources     = pc.resources || INIT_RESOURCES();
   const items         = pc.items     || INIT_ITEMS();
   const badStatus     = pc.badStatus || [];
-  const skill         = pc.skillId ? PERSONALITY_SKILLS[pc.skillId] : null;
+  const skill         = pc.ps || null;
   const isCustomChar  = pc.charId?.startsWith("custom_");
   const hasActed      = (gs.actedPcs ||[]).includes(pc.uid);
   const isActing      = gs.currentScene?.pcUid === pc.uid;
@@ -2892,7 +2903,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       });
     }
 
-    const hasTag    = spotDetail.tags.some(t => (pc.tags || []).includes(t) || pc.charName === t || pc.skillName === t);
+    const hasTag    = spotDetail.tags.some(t => (pc.tags || []).includes(t) || pc.charName === t || (pc.ps && pc.ps.name === t));
     let diceCount   = 2 + (hasTag ? 1 : 0);
     if ((pc.badStatus || []).includes("怪我")) diceCount = Math.min(2, diceCount);
     
@@ -3509,7 +3520,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
             const anySuccess = Object.values(sc.rolls || {}).some(r => r.success);
             const allRolled = pcsHere.every(p => sc.rolls?.[p.uid]);
             
-            const hasTag = myPc && q?.specifiedTag && q.specifiedTag.split(/[、,]/).some(t => (myPc.tags ||[]).includes(t.trim()) || myPc.charName === t.trim() || myPc.skillName === t.trim());
+            const hasTag = myPc && q?.specifiedTag && q.specifiedTag.split(/[、,]/).some(t => (myPc.tags ||[]).includes(t.trim()) || myPc.charName === t.trim() || (myPc.ps && myPc.ps.name === t.trim()));
             const baseDice = 2 + (hasTag ? 1 : 0);
             const myDiceCount = sc.diceCounts?.[user?.uid] || baseDice;
 
