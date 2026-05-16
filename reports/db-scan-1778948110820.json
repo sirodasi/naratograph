@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-05-16T16:15:10.820Z",
+  "rooms": {
+    "7ML7G": {
+      "legacyFields": [
+        {
+          "path": "scenarioData.finalBattleEnemies[0]",
+          "keys": [
+            "dsName",
+            "dsType",
+            "dsDesc",
+            "dsCustomName"
+          ]
+        },
+        {
+          "path": "scenarioData.quests[1].enemy",
+          "keys": [
+            "dsType"
+          ]
+        },
+        {
+          "path": "players.l3E9y5AWsPaNSLJZxT4lCsoGTa42",
+          "keys": [
+            "skillId",
+            "skillName",
+            "ps"
+          ]
+        },
+        {
+          "path": "state.pcs[0]",
+          "keys": [
+            "skillName",
+            "skillId",
+            "ps"
+          ]
+        }
+      ]
+    }
+  },
+  "summary": {
+    "roomsWithLegacy": 1
+  }
+}
