@@ -689,7 +689,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         nextRei = target.resources.霊力?.max || 20;
         nextAtk = 1 + Math.floor(nextRei / 5);
       }
-      if (!isPc && newLives === 1) {
+      if (newLives === 1) {
         nextSpe = Math.min(target.resources.スペルカード?.max || 9, nextSpe + 1);
       }
 
@@ -702,9 +702,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             霊力: { ...target.resources.霊力, cur: nextRei },
             攻撃力: { ...target.resources.攻撃力, cur: nextAtk }
           } : {}),
-          ...(!isPc ? {
-            スペルカード: { ...target.resources.スペルカード, cur: nextSpe }
-          } : {})
+          スペルカード: { ...target.resources.スペルカード, cur: nextSpe }
         }
       };
 
@@ -728,7 +726,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         log: [
           `💥 ${target.charName || target.name} は被弾した！ 残り人数: ${newLives}`,
           isPc && newLives === 1 ? `🔥 霊力が最大まで回復した！` : null,
-          !isPc && newLives === 1 ? `🔮 ${target.name} はスペルカードを1点獲得した！` : null,
+          newLives === 1 ? `🔮 ${target.name} はスペルカードを1点獲得した！` : null,
           ...p.log
         ].filter(Boolean)
       };
