@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
-import { signOut, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
-import { BackstoryScreen, BattleView, BonusPhaseView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, getSpotByD66 } from "./SessionView";
+import { BackstoryScreen, BattleView, BonusPhaseView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildSpellCard } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 
@@ -424,8 +424,13 @@ function SessionApp({ roomCode, user }) {
           } : null),
           as:  p.as  ?? charData?.as  ?? null,
           ds:  p.ds  ?? charData?.ds  ?? null,
-          spellCards:          charData?.spellCards      ?? p.spellCards      ?? [],
-          growthSpellCard:     charData?.growthSpellCard ?? p.growthSpellCard ?? null,
+          spellCards: (charData?.spellCards ?? p.spellCards ?? []).map(s =>
+            typeof s === "string" ? buildSpellCard(s) : s
+          ),
+          growthSpellCard: (() => {
+            const raw = charData?.growthSpellCard ?? p.growthSpellCard ?? null;
+            return raw && typeof raw === "string" ? buildSpellCard(raw) : raw;
+          })(),
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
