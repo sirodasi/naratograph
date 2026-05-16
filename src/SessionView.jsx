@@ -834,6 +834,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const cardColor   = isPcAttacker ? C.blue : C.red;
     const borderColor = isPcAttacker ? C.blueBorder : C.redBorder;
 
+    print(spells, available, spellPts);
+
     // CHOOSE 選択中
     if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
       const remaining = b.spellChoose.remaining - b.spellChoose.selected.length;
