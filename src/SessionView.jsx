@@ -259,11 +259,22 @@ export function parseSpell(text) {
   };
 }
 
-// スペカテキストからフルオブジェクトを組み立てる
-export function buildSpellCard(text) {
+// スペカテキスト/スペルオブジェクトからフルオブジェクトを組み立てる
+export function buildSpellCard(card) {
+  if (!card) return null;
+
+  const text = typeof card === "string"
+    ? card
+    : card.text ?? card.desc ?? "";
+
   const nameMatch = text.match(/^(.+?[」])/);
+  const name = typeof card === "string"
+    ? (nameMatch ? nameMatch[1] : text.slice(0, 20))
+    : card.name ?? (nameMatch ? nameMatch[1] : text.slice(0, 20));
+
   return {
-    name:    nameMatch ? nameMatch[1] : text.slice(0, 20),
+    ...card,
+    name,
     text,
     ...parseSpell(text),
   };
@@ -827,7 +838,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const spellsRaw   = isPcAttacker
       ? [...(attacker?.spellCards || []), ...(attacker?.growthSpellUnlocked ? [attacker?.growthSpellCard] : [])]
       : [...(attacker?.spellCards || [])];
-    const spells      = spellsRaw.filter(Boolean).map(t => typeof t === "string" ? buildSpellCard(t) : t);
+    const spells      = spellsRaw.filter(Boolean).map(t => buildSpellCard(t));
     const available   = spells.filter(s => s.timing === timing);
     const spellPts    = attacker?.resources?.スペルカード?.cur || 0;
     const canDeclare  = isPcAttacker ? (isGm || user.uid === b.pcCombatant) : isGm;
