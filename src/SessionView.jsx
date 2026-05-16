@@ -4092,8 +4092,39 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                 <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant.resources.残り人数?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant.resources.スペルカード?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{npcCombatant.resources.攻撃力?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>グレイズ: <span style={{color:C.green}}>{npcCombatant.resources.グレイズ?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant.resources.回避力?.cur ?? 3}</span></div>
+                <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                  グレイズ: <span style={{color:C.green}}>{npcCombatant.resources.グレイズ?.cur ?? 0}点</span>
+                  {isGm && (npcCombatant.resources.グレイズ?.cur ?? 0) >= 5 && (
+                    <button
+                      onClick={() => upd(p => {
+                        const npc = p.battle.participants.npcs.find(n => n.id === b.npcCombatant);
+                        if (!npc) return p;
+                        const newGraze = (npc.resources.グレイズ?.cur || 0) - 5;
+                        const newSpe   = Math.min((npc.resources.スペルカード?.max || 9), (npc.resources.スペルカード?.cur || 0) + 1);
+                        return {
+                          ...p,
+                          battle: {
+                            ...p.battle,
+                            participants: {
+                              ...p.battle.participants,
+                              npcs: p.battle.participants.npcs.map(n => n.id !== b.npcCombatant ? n : {
+                                ...n,
+                                resources: {
+                                  ...n.resources,
+                                  グレイズ:     { ...n.resources.グレイズ,     cur: newGraze },
+                                  スペルカード: { ...n.resources.スペルカード, cur: newSpe   },
+                                },
+                              }),
+                            },
+                          },
+                          log: [`💠 ${npc.name} グレイズ5点消費 → スペルカード+1 (現在:${newSpe})`, ...p.log],
+                        };
+                      })}
+                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
+                    >G→SC</button>
+                  )}
+                </div>
+                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant.resources.回避力?.cur ?? 3}</span></div>
               </div>
             </div>
 
