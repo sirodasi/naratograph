@@ -925,7 +925,6 @@ export function ScenarioSelector({ value, onChange }) {
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:4 }}>
             <Chip label={`${selected.playerCountMin}〜${selected.playerCountMax}人`} color={C.blue}/>
             <Chip label={selected.difficulty} color={C.gold}/>
-            <Chip label={`クエスト${(selected.quests||[]).length}個`} color={C.purple}/>
             <Chip label={`リミット: ${selected.limit}`} color={C.textDim}/>
           </div>
           {selected.bannedChars?.length>0&&(
