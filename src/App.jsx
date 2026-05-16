@@ -10,6 +10,7 @@ import { C } from "./styles/colors";
 import {
   SPOTS, EDGES, NEWSPAPER,
   AREA_COLORS, CYCLES, CYCLE_COLORS,
+  OFFICIAL_DANMAKU_SKILLS,
 } from "./data/gameData";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
@@ -40,6 +41,32 @@ function getDistances(startSpotId) {
 // スポットIDからスポットオブジェクトを取得（古いセーブデータの roll 検索も対応）
 function getSpot(id) {
   return SPOTS.find(s => s.id === id) ?? SPOTS.find(s => s.roll == id) ?? null;
+}
+
+// シナリオデータの互換性チェックと正規化（旧仕様の dsType/dsName 等を nested ds に変換）
+function normalizeScenario(s) {
+  if (!s) return s;
+  const clone = { ...s };
+  clone.finalBattleEnemies = (s.finalBattleEnemies || []).map(en => {
+    if (!en) return en;
+    if (en.ds) return en; // 既に正規化済み
+    const type = en.dsType || (en.dsName ? "official" : (en.dsCustomName || en.dsDesc ? "custom" : "none"));
+    const name = en.dsName || en.dsCustomName || "";
+    const desc = en.dsDesc || (type === "official" ? (OFFICIAL_DANMAKU_SKILLS.find(x => x.name === en.dsName)?.desc || "") : en.dsDesc || "");
+    return { ...en, ds: { type, name, desc, customName: en.dsCustomName || "" } };
+  });
+  clone.quests = (s.quests || []).map(q => {
+    if (!q) return q;
+    const en = q.enemy;
+    if (!en) return q;
+    if (en.ds) return q;
+    const type = en.dsType || (en.dsName ? "official" : (en.dsCustomName || en.dsDesc ? "custom" : "none"));
+    const name = en.dsName || en.dsCustomName || "";
+    const desc = en.dsDesc || (type === "official" ? (OFFICIAL_DANMAKU_SKILLS.find(x => x.name === en.dsName)?.desc || "") : en.dsDesc || "");
+    const newEn = { ...en, ds: { type, name, desc, customName: en.dsCustomName || "" } };
+    return { ...q, enemy: newEn };
+  });
+  return clone;
 }
 
 // ─── 定数 ────────────────────────────────────────────────────────
@@ -318,6 +345,7 @@ function SessionApp({ roomCode, user }) {
           resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
           items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
           pcs:    (val.pcs || []).map(normalizePc),
+          scenarioData: normalizeScenario(val.scenarioData) ?? null,
           quests: val.quests || [],
           clues:  val.clues  || [],
           log:    val.log    || [],
@@ -329,7 +357,7 @@ function SessionApp({ roomCode, user }) {
             ...DEFAULT_GS,
             sessionPhase: "intro",
             limit:        r?.limit ?? r?.scenarioData?.limit ?? "3日目の夜",
-            scenarioData: r?.scenarioData ?? null,
+            scenarioData: normalizeScenario(r?.scenarioData) ?? null,
             pcs:          buildPcList(r),
           };
           set(gsRef, initGs).catch(console.error);
@@ -474,7 +502,7 @@ function SessionApp({ roomCode, user }) {
               回避力: { cur: enemy.evade || 3, max: 3 },
               グレイズ: { cur: 0, max: 5 }
             },
-            ds: { name: enemy.dsName || enemy.dsCustomName, desc: enemy.dsDesc },
+            ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
             spellCards: [
               { name: enemy.sc1name, desc: enemy.sc1effect },
               { name: enemy.sc2name, desc: enemy.sc2effect }
@@ -631,10 +659,7 @@ function SessionApp({ roomCode, user }) {
         攻撃力: { cur: en.attack, max: 99 },
         回避力: { cur: en.evade || 3, max: 3 }
       },
-      ds: { 
-        name: en.dsName || en.dsCustomName, 
-        desc: en.dsDesc 
-      },
+      ds: en.ds ?? { name: en.dsName || en.dsCustomName || "", desc: en.dsDesc || "" },
       spellCards: [
         { name: en.sc1name, desc: en.sc1effect },
         { name: en.sc2name, desc: en.sc2effect }
