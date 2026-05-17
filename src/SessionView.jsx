@@ -1148,7 +1148,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }
 
     // 使用可能なスペカも点数もなく宣言済みでもなければパネル不要
-    if (available.length === 0 && !b.lastSpellUsed && spellPts <= 0) return null;
+    if (available.length === 0 || !b.lastSpellUsed || spellPts <= 0 || !canDeclare) return null;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
