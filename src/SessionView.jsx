@@ -222,6 +222,16 @@ const EFFECT_PATTERNS = [
 
 const CONDITION_RE = /(?:[^。]*(?:できない|限り使用できない|場合にしか使用できない)[^。]*。?)/;
 
+// ─── 弾幕スキルユーティリティ（BattleView / BattleRightPanel 共用） ─────
+export function hasOfficialSkill(entity, skillName) {
+  if (!entity) return false;
+  const dsName = (entity.ds && entity.ds.name) || entity.dsName
+    || entity.skillName || (entity.ps && entity.ps.name) || null;
+  if (!dsName) return false;
+  const isOfficial = OFFICIAL_DANMAKU_SKILLS.some(s => s.name === dsName);
+  return isOfficial && dsName === skillName;
+}
+
 export function parseSpell(text) {
   // タイミング
   let timing = "standard";
@@ -622,16 +632,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }));
   };
 
-  // --- 公式弾幕スキル: 使用管理と自動適用ヘルパー ---
-  const hasOfficialSkill = (entity, skillName) => {
-    if (!entity) return false;
-    // Prefer runtime `ds` object (from pcs/npcs). Fall back to legacy fields if present.
-    const dsName = (entity.ds && entity.ds.name) || entity.dsName || entity.skillName || (entity.ps && entity.ps.name) || null;
-    if (!dsName) return false;
-    // Confirm it's an official named skill and matches requested skillName
-    const isOfficial = OFFICIAL_DANMAKU_SKILLS.some(s => s.name === dsName);
-    return isOfficial && dsName === skillName;
-  };
+  // hasOfficialSkill はモジュールレベル（226行）にエクスポート済み
 
   const isDanmakuUsed = (attackerId, skillName) => {
     return !!(b.usedDanmakuSkills && b.usedDanmakuSkills[attackerId] && b.usedDanmakuSkills[attackerId].includes(skillName));
