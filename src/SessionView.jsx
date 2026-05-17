@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { CharSprite, PERSONALITY_SKILLS } from "./Lobby";
+import { useState, useEffect } from "react";
+import { CharSprite } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall } from "./styles/colors";
@@ -317,23 +317,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   }, [b.phase, alivePcs.length, aliveNpcs.length, unactedPcs.length, unactedNpcs.length, b.actedPcs?.length, b.actedNpcs?.length, upd]);
 
   const applyShot = (targetUid, diceResults) => {
+    // diceResults を防御側フィールドに反映してフェーズを shot_after へ
+    // ★ 変更: executeShot がすでに phase を shot_after に変えているため
+    //   この関数はグリッド更新専用になった
     upd(p => {
       const currentGrid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
       diceResults.forEach(d => {
-        if (d >= 1 && d <= 6) {
-          currentGrid[d - 1] += 1;
-        }
+        if (d >= 1 && d <= 6) currentGrid[d - 1] += 1;
       });
-
       return {
         ...p,
         battle: {
           ...p.battle,
           grids: { ...p.battle.grids, [targetUid]: currentGrid },
-          phase: p.battle.phase === "npc_shot_roll" ? "npc_shot_after" : "pc_shot_after"
+          lastShotDice: null,  // 確定後にクリア
         }
       };
     });
+  };
+
+  // ショットを確定（スキル適用後）してグリッドに反映する
+  const confirmShot = () => {
+    const { lastShotDice, lastShotDefenderId } = b;
+    if (!lastShotDice || !lastShotDefenderId) return;
+    applyShot(lastShotDefenderId, lastShotDice);
   };
 
   const handleSupportFire = (userUid) => {
@@ -374,25 +381,27 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const executeShot = (isPc) => {
     const attacker = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
     const bonus = b.supportDice || 0;
-    const totalDice = attacker.resources.攻撃力.cur + bonus;
+    // ★ 使い魔スキル: ショットダイス数 -1
+    const hasFamiliar = hasOfficialSkill(attacker, "使い魔");
+    const totalDice = Math.max(1, attacker.resources.攻撃力.cur + bonus - (hasFamiliar ? 1 : 0));
 
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
 
     animateDice(totalDice, `${isPc ? "PC" : "NPC"}ショット`, (results) => {
-      upd(p => ({ ...p, battle: { ...p.battle, supportDice: 0 } }));
-
-      if (hasOfficialSkill(attacker, "ホーミング") && !isDanmakuUsed(attackerId, "ホーミング")) {
-        const useHoming = window.confirm(`${attacker.charName || attacker.name} は『ホーミング』を使いますか？\n出目を1つ任意の出目に変更できます。`);
-        if (useHoming) tryApplyHoming(attackerId, defenderId, results);
-      }
-
-      if (hasOfficialSkill(attacker, "大威力") && !isDanmakuUsed(attackerId, "大威力")) {
-        const useBigPower = window.confirm(`${attacker.charName || attacker.name} は『大威力』を使いますか？\n2つ以上出た出目があれば1つ追加で弾幕を配置します。`);
-        if (useBigPower) tryApplyBigPower(attackerId, defenderId, results);
-      }
-
-      applyShot(defenderId, results);
+      // ★ ダイス結果を lastShotDice に保存してshot_afterでスキルボタンを表示する
+      upd(p => ({
+        ...p,
+        battle: {
+          ...p.battle,
+          supportDice: 0,
+          lastShotDice:   results,
+          lastShotIsPc:   isPc,
+          lastShotAttackerId: attackerId,
+          lastShotDefenderId: defenderId,
+          phase: isPc ? "pc_shot_after" : "npc_shot_after",
+        }
+      }));
     });
   };
 
@@ -667,76 +676,87 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   };
 
   // ホーミング: ロール直後に1つの出目を任意の出目に変更して重複を作る等に利用
+  // ホーミング: PLが「変更するダイスのインデックス」と「変更後の値」を選択する
+  // → battle.homingSelect に選択状態を保存し、renderShotAfter でUIを出す
   const tryApplyHoming = (attackerId, defenderId, diceResults) => {
     const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
     if (!hasOfficialSkill(attacker, "ホーミング")) return false;
     if (isDanmakuUsed(attackerId, "ホーミング")) return false;
     if (!diceResults || diceResults.length === 0) return false;
-
-    const counts = {};
-    diceResults.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
-    const currentBest = Math.max(...Object.values(counts));
-
-    let bestGain = 0;
-    let bestIdx = -1;
-    let bestValue = null;
-
-    for (let i = 0; i < diceResults.length; i++) {
-      const original = diceResults[i];
-      for (let v = 1; v <= 6; v++) {
-        if (v === original) continue;
-        const simulated = { ...counts };
-        simulated[original] = (simulated[original] || 0) - 1;
-        simulated[v] = (simulated[v] || 0) + 1;
-        const newBest = Math.max(...Object.values(simulated));
-        const gain = newBest - currentBest;
-        if (gain > bestGain || (gain === bestGain && v > (bestValue || 0))) {
-          bestGain = gain;
-          bestIdx = i;
-          bestValue = v;
-        }
-      }
-    }
-
-    if (bestGain <= 0 || bestIdx === -1) return false;
-
-    // 適用
-    const old = diceResults[bestIdx];
-    diceResults[bestIdx] = bestValue;
-    markDanmakuUsed(attackerId, "ホーミング");
-    const att = attacker;
-    upd(p => ({ ...p, log: [`🔭 ${att.charName || att.name} の『ホーミング』が発動：出目 ${old} を ${bestValue} に変更しました。`, ...p.log] }));
+    // 選択UIを起動（step1: どのダイスを変えるか）
+    upd(p => ({ ...p, battle: { ...p.battle, homingSelect: { attackerId, defenderId, dice: diceResults, step: "pick_die", selectedDieIdx: null } } }));
     return true;
   };
 
-  // ワイドショット: 相手フィールドの空きマスに既存の弾幕を移動する
+  // ホーミング確定: 選択したダイスを新しい値で上書きして lastShotDice に反映
+  const confirmHoming = (newValue) => {
+    const hs = b.homingSelect;
+    if (!hs || hs.selectedDieIdx === null) return;
+    const newDice = [...hs.dice];
+    const old     = newDice[hs.selectedDieIdx];
+    newDice[hs.selectedDieIdx] = newValue;
+    const att = pcs.find(p => p.uid === hs.attackerId) || npcs.find(n => n.id === hs.attackerId);
+    markDanmakuUsed(hs.attackerId, "ホーミング");
+    upd(p => ({ ...p,
+      battle: { ...p.battle, lastShotDice: newDice, homingSelect: null },
+      log: [`🔭 ${att?.charName || att?.name} の「ホーミング」発動：出目 ${old} → ${newValue}`, ...p.log]
+    }));
+  };
+
+  // ワイドショット: PLが「移動先の空きマス」と「移動元（弾幕があるマス）」を
+  //   ペアで1つ以上選択する → battle.wideShotSelect に状態を保存
   const tryApplyWideShot = (attackerId, defenderId) => {
     const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
     if (!hasOfficialSkill(attacker, "ワイドショット")) return false;
     if (isDanmakuUsed(attackerId, "ワイドショット")) return false;
-
     const grid = b.grids?.[defenderId] ? [...b.grids[defenderId]] : [0,0,0,0,0,0];
-    const emptyIdxs = grid.map((v,i)=>v?null:i).filter(x=>x!==null);
-    const sourceIdxs = grid.map((v,i)=>v>0?i:null).filter(x=>x!==null);
-    if (emptyIdxs.length === 0 || sourceIdxs.length === 0) return false;
-
-    let newGrid = [...grid];
-    // 移動可能な弾がある限り、空きマスに弾を移す（大きい弾数のセルから優先）
-    for (const eIdx of emptyIdxs) {
-      // 再計算される最大ソースを探す
-      let maxIdx = -1;
-      let maxVal = 0;
-      for (let i = 0; i < newGrid.length; i++) {
-        if (newGrid[i] > maxVal) { maxVal = newGrid[i]; maxIdx = i; }
-      }
-      if (maxVal <= 0) break;
-      newGrid[maxIdx] = Math.max(0, newGrid[maxIdx] - 1);
-      newGrid[eIdx] = (newGrid[eIdx] || 0) + 1;
-    }
-
-    upd(p => ({ ...p, battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: newGrid } }, log: [`🔀 ${attacker.charName || attacker.name} の『ワイドショット』が発動：空きマスに弾幕を移動しました。`, ...p.log] }));
-    markDanmakuUsed(attackerId, "ワイドショット");
+    const hasEmpty  = grid.some(v => v === 0);
+    const hasBullet = grid.some(v => v > 0);
+    if (!hasEmpty || !hasBullet) return false;
+    // 選択UIを起動
+    upd(p => ({ ...p, battle: { ...p.battle,
+      wideShotSelect: { attackerId, defenderId, pendingGrid: [...grid], pairs: [], step: "pick_empty" }
+    }}));
     return true;
+  };
+
+  // ワイドショット: 空きマスを選択（step pick_empty → pick_source）
+  const wideShotPickEmpty = (emptyCell) => {
+    const ws = b.wideShotSelect;
+    if (!ws || ws.step !== "pick_empty") return;
+    upd(p => ({ ...p, battle: { ...p.battle,
+      wideShotSelect: { ...ws, step: "pick_source", selectedEmpty: emptyCell }
+    }}));
+  };
+
+  // ワイドショット: 移動元マスを選択してペアを確定
+  const wideShotPickSource = (sourceCell) => {
+    const ws = b.wideShotSelect;
+    if (!ws || ws.step !== "pick_source") return;
+    const newGrid = [...ws.pendingGrid];
+    newGrid[ws.selectedEmpty - 1] = (newGrid[ws.selectedEmpty - 1] || 0) + 1;
+    newGrid[sourceCell - 1]       = Math.max(0, (newGrid[sourceCell - 1] || 0) - 1);
+    const newPairs = [...ws.pairs, { from: sourceCell, to: ws.selectedEmpty }];
+    // まだ空きマスがあれば続けて選択できる、なければ完了
+    const stillEmpty = newGrid.some(v => v === 0);
+    const stillBullet = newGrid.some(v => v > 0);
+    upd(p => ({ ...p, battle: { ...p.battle,
+      wideShotSelect: { ...ws, pendingGrid: newGrid, pairs: newPairs,
+        step: stillEmpty && stillBullet ? "pick_empty" : "done",
+        selectedEmpty: null }
+    }}));
+  };
+
+  // ワイドショット確定
+  const confirmWideShot = () => {
+    const ws = b.wideShotSelect;
+    if (!ws || ws.pairs.length === 0) return;
+    const att = pcs.find(p => p.uid === ws.attackerId) || npcs.find(n => n.id === ws.attackerId);
+    markDanmakuUsed(ws.attackerId, "ワイドショット");
+    upd(p => ({ ...p,
+      battle: { ...p.battle, grids: { ...p.battle.grids, [ws.defenderId]: ws.pendingGrid }, wideShotSelect: null },
+      log: [`🔀 ${att?.charName || att?.name} の「ワイドショット」発動：${ws.pairs.map(pr => `${pr.from}→${pr.to}`).join(", ")}番マス`, ...p.log]
+    }));
   };
 
   // 高速移動: 自身のいるマスに弾幕がない場合、任意のマスへ移動できる -> 自動では対戦相手と同じマスへ移動
@@ -808,24 +828,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     return true;
   };
 
-  // ショットイントロからショットロールへ移る際にイントロ系スキルを適用してから進行する
+  // ショットロールへ進む（スキルはIntroのボタンで事前使用）
   const handleProceedToShotRoll = (isPc, nextPhase) => {
-    const attacker = isPc ? pcs.find(p => p.uid === b.pcCombatant) : npcs.find(n => n.id === b.npcCombatant);
-    const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
-    const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
-
-    if (hasOfficialSkill(attacker, "近接攻撃") && !isDanmakuUsed(attackerId, "近接攻撃")) {
-      const useProximity = window.confirm(`${attacker.charName || attacker.name} は『近接攻撃』を使いますか？\nあなたと相手が同じマスなら、そのマスに弾幕を1つ追加します。`);
-      if (useProximity) tryApplyProximity(attackerId, defenderId);
-    }
-
-    // NOTE: 高速移動はショット後の処理へ移動（ホーミング→ワイドショット→高速移動 の順に処理）
-
-    if (hasOfficialSkill(attacker, "弾消し") && !isDanmakuUsed(attackerId, "弾消し")) {
-      const useErase = window.confirm(`${attacker.charName || attacker.name} は『弾消し』を使いますか？\n対戦相手のフィールドから弾幕を1つ取り除きます。`);
-      if (useErase) tryApplyErase(attackerId, defenderId);
-    }
-
     upd(p => ({ ...p, battle: { ...p.battle, phase: nextPhase } }));
   };
 
@@ -1039,6 +1043,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           pcCombatant: null,
           npcCombatant: null,
           lastSpellUsed: null,
+          wallPass: null,
+          homingSelect: null,
+          wideShotSelect: null,
           usedDanmakuSkills: {},
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
@@ -1139,7 +1146,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       );
     }
 
-    if (available.length === 0 || b.lastSpellUsed || spellPts <= 0 || !canDeclare) return null;
+    // 使用可能なスペカも点数もなく宣言済みでもなければパネル不要
+    if (available.length === 0 && !b.lastSpellUsed && spellPts <= 0) return null;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
@@ -1267,29 +1275,159 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canUseWideShot = hasOfficialSkill(attacker, "ワイドショット") && !isDanmakuUsed(attackerId, "ワイドショット");
     const canUseHighSpeed = hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動");
 
+    const dice = b.lastShotDice || [];
+    const counts = {};
+    dice.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
+    const hasDupe    = Object.values(counts).some(c => c >= 2);
+    const defGrid    = b.grids?.[defenderId] || [0,0,0,0,0,0];
+    const hasEmpty   = defGrid.some(v => v === 0);
+    const hasBullet  = defGrid.some(v => v > 0);
+
+    // ホーミング・大威力はダイス直後のみ（dice が残っている間）
+    // 選択UI表示中は対応ボタンを隠す（二重起動防止）
+    const canHoming   = canProceed && dice.length > 0 && hasOfficialSkill(attacker, "ホーミング")   && !isDanmakuUsed(attackerId, "ホーミング") && !b.homingSelect;
+    const canBigPower = canProceed && dice.length > 0 && hasOfficialSkill(attacker, "大威力")     && !isDanmakuUsed(attackerId, "大威力");
+
     return (
       <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-        <div style={{ color: C.green, fontSize: 11, marginBottom: 4 }}>ショット完了</div>
-        <div style={{ color: C.textDim, fontSize: 10, marginBottom: 12 }}>観戦者は「かばう」を使用できます</div>
+        <div style={{ color: C.green, fontSize: 11, marginBottom: 6 }}>ショット完了</div>
+
+        {/* ダイス結果表示 */}
+        {dice.length > 0 && (
+          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 10 }}>
+            {dice.map((d, i) => (
+              <div key={i} style={{ width: 30, height: 30, background: "rgba(14,20,36,0.95)", border: `1px solid ${C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: C.blue, fontWeight: "bold" }}>{d}</div>
+            ))}
+          </div>
+        )}
+
+        {/* ⚡ 弾幕スキル（ダイス直後タイミング） */}
+        {/* ホーミング選択UI */}
+        {b.homingSelect && (() => {
+          const hs   = b.homingSelect;
+          const isOwner = isGm || user.uid === hs.attackerId;
+          if (!isOwner) return <div style={{ fontSize: 10, color: C.textDim }}>🔭 相手がホーミングを選択中…</div>;
+          if (hs.step === "pick_die") return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(100,181,246,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.blue, marginBottom: 6 }}>🔭 ホーミング — 変更するダイスを選んでください</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                {hs.dice.map((d, i) => (
+                  <button key={i} onClick={() => upd(p => ({ ...p, battle: { ...p.battle, homingSelect: { ...hs, step: "pick_value", selectedDieIdx: i } } }))}
+                    style={{ width: 34, height: 34, background: "rgba(14,20,36,0.95)", border: `2px solid ${C.blue}`, borderRadius: 5, fontSize: 16, color: C.blue, cursor: "pointer", fontWeight: "bold" }}>
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+          if (hs.step === "pick_value") return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(100,181,246,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.blue, marginBottom: 6 }}>🔭 ホーミング — {hs.dice[hs.selectedDieIdx]} を何に変えますか？</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 6 }}>
+                {[1,2,3,4,5,6].map(v => (
+                  <button key={v} onClick={() => confirmHoming(v)}
+                    disabled={v === hs.dice[hs.selectedDieIdx]}
+                    style={{ width: 32, height: 32, background: v === hs.dice[hs.selectedDieIdx] ? "rgba(255,255,255,0.02)" : "rgba(100,181,246,0.15)", border: `1px solid ${C.blueBorder}`, borderRadius: 4, fontSize: 14, color: v === hs.dice[hs.selectedDieIdx] ? C.textFaint : C.blue, cursor: v === hs.dice[hs.selectedDieIdx] ? "default" : "pointer", fontWeight: "bold" }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, homingSelect: { ...hs, step: "pick_die", selectedDieIdx: null } } }))}
+                style={{ fontSize: 9, color: C.textFaint, background: "none", border: "none", cursor: "pointer" }}>← 選び直す</button>
+            </div>
+          );
+          return null;
+        })()}
+
+        {/* ワイドショット選択UI */}
+        {b.wideShotSelect && (() => {
+          const ws  = b.wideShotSelect;
+          const isOwner = isGm || user.uid === ws.attackerId;
+          if (!isOwner) return <div style={{ fontSize: 10, color: C.textDim }}>🔀 相手がワイドショットを選択中…</div>;
+          const grid = ws.pendingGrid;
+          if (ws.step === "done") return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(206,147,216,0.1)", border: "1px solid #7b1fa2", borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 選択完了: {ws.pairs.map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={confirmWideShot} style={btnFull("rgba(206,147,216,0.2)", "#7b1fa2", C.purple, { flex: 1 })}>確定する</button>
+                <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, wideShotSelect: null } }))} style={btnFull("none", C.border, C.textFaint, { flex: 1 })}>キャンセル</button>
+              </div>
+            </div>
+          );
+          if (ws.step === "pick_empty") return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(206,147,216,0.1)", border: "1px solid #7b1fa2", borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 ワイドショット — 移動先の空きマスを選んでください</div>
+              {ws.pairs.length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>確定済み: {ws.pairs.map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>}
+              <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 6 }}>
+                {grid.map((v, i) => (
+                  <button key={i} onClick={() => v === 0 && wideShotPickEmpty(i + 1)}
+                    disabled={v !== 0}
+                    style={{ width: 34, height: 34, background: v === 0 ? "rgba(206,147,216,0.2)" : "rgba(255,255,255,0.03)", border: `2px solid ${v === 0 ? C.purple : C.border}`, borderRadius: 5, fontSize: 13, color: v === 0 ? C.purple : C.textFaint, cursor: v === 0 ? "pointer" : "default", fontWeight: "bold" }}>
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {ws.pairs.length > 0 && <button onClick={confirmWideShot} style={btnFull("rgba(206,147,216,0.15)", "#7b1fa2", C.purple, { flex: 1, fontSize: 10 })}>この内容で確定</button>}
+                <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, wideShotSelect: null } }))} style={btnFull("none", C.border, C.textFaint, { flex: 1, fontSize: 10 })}>キャンセル</button>
+              </div>
+            </div>
+          );
+          if (ws.step === "pick_source") return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(206,147,216,0.1)", border: "1px solid #7b1fa2", borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 ワイドショット — {ws.selectedEmpty}番マスに移す弾幕のマスを選んでください</div>
+              <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 6 }}>
+                {grid.map((v, i) => (
+                  <button key={i} onClick={() => v > 0 && wideShotPickSource(i + 1)}
+                    disabled={v === 0}
+                    style={{ width: 34, height: 34, background: v > 0 ? "rgba(206,147,216,0.2)" : "rgba(255,255,255,0.03)", border: `2px solid ${v > 0 ? "#e040fb" : C.border}`, borderRadius: 5, fontSize: 13, color: v > 0 ? "#e040fb" : C.textFaint, cursor: v > 0 ? "pointer" : "default", fontWeight: "bold" }}>
+                    {i + 1}{v > 0 ? `(${v})` : ""}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, wideShotSelect: { ...ws, step: "pick_empty", selectedEmpty: null } } }))}
+                style={{ fontSize: 9, color: C.textFaint, background: "none", border: "none", cursor: "pointer" }}>← 空きマス選択に戻る</button>
+            </div>
+          );
+          return null;
+        })()}
+
+        {(canHoming || canBigPower || canUseWideShot || canUseHighSpeed) && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1, marginBottom: 5 }}>⚡ 弾幕スキル</div>
+
+            {canHoming && (
+              <button onClick={() => { tryApplyHoming(attackerId, defenderId, dice); }}
+                style={{ ...btnFull("rgba(100,181,246,0.18)", C.blueBorder, C.blue), marginBottom: 4 }}>
+                🔭 ホーミング（出目を1つ変更）
+              </button>
+            )}
+            {canBigPower && (
+              <button onClick={() => tryApplyBigPower(attackerId, defenderId, dice)}
+                disabled={!hasDupe}
+                style={{ ...btnFull("rgba(255,183,77,0.18)", C.goldDim, C.gold, { opacity: hasDupe ? 1 : 0.35 }), marginBottom: 4 }}>
+                💥 大威力{hasDupe ? "" : "（重複出目なし）"}
+              </button>
+            )}
+            {canUseWideShot && !b.wideShotSelect && (
+              <button onClick={() => tryApplyWideShot(attackerId, defenderId)}
+                disabled={!hasEmpty || !hasBullet}
+                style={{ ...btnFull("rgba(206,147,216,0.18)", "#7b1fa2", C.purple, { opacity: hasEmpty && hasBullet ? 1 : 0.35 }), marginBottom: 4 }}>
+                🔀 ワイドショット{hasEmpty && hasBullet ? "" : "（条件未達）"}
+              </button>
+            )}
+            {canUseHighSpeed && (
+              <button onClick={() => tryApplyHighSpeed(attackerId, defenderId)}
+                style={{ ...btnFull("rgba(100,181,246,0.08)", C.blueBorder, C.blue), marginBottom: 4 }}>
+                ⚡ 高速移動
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={{ color: C.textDim, fontSize: 10, marginBottom: 8 }}>観戦者は「かばう」を使用できます</div>
 
         {renderSpellStep(isPc, "standard")}
-
-        {canUseWideShot && (
-          <div style={{ marginTop: 8 }}>
-            <button onClick={() => tryApplyWideShot(attackerId, defenderId)}
-              style={btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold)}>
-              『ワイドショット』を使う
-            </button>
-          </div>
-        )}
-        {canUseHighSpeed && (
-          <div style={{ marginTop: 8 }}>
-            <button onClick={() => tryApplyHighSpeed(attackerId, defenderId)}
-              style={btnFull("rgba(120,180,255,0.08)", C.blueBorder, C.blue)}>
-              『高速移動』を使う
-            </button>
-          </div>
-        )}
 
         {b.pendingSpell && (
           <div style={{ marginTop: 8, padding: "5px 8px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 4 }}>
@@ -1297,18 +1435,22 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           </div>
         )}
 
-        {canProceed && !b.spellChoose && (
+        {canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && (
           <button 
-            onClick={() => upd(p => ({
-              ...p,
-              battle: {
-                ...p.battle,
-                phase: nextPhase,
-                currentEvadeDice: nextPhase === "pc_evade_intro"
-                  ? getDefaultEvadeDice(combatantPc)
-                  : getDefaultEvadeDice(combatantNpc)
-              }
-            }))} 
+            onClick={() => {
+              // ショット確定（lastShotDice をグリッドに反映）してから回避ステップへ
+              confirmShot();
+              upd(p => ({
+                ...p,
+                battle: {
+                  ...p.battle,
+                  phase: nextPhase,
+                  currentEvadeDice: nextPhase === "pc_evade_intro"
+                    ? getDefaultEvadeDice(combatantPc)
+                    : getDefaultEvadeDice(combatantNpc)
+                }
+              }));
+            }}
             style={{ ...buttonStyle, marginTop: 8 }}
           >
             回避ステップへ進む
@@ -1375,6 +1517,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           </div>
         )}
       {renderSpellStep(!isPc, "evade")}
+
+      {/* ⚡ 壁抜け（防御側が回避ステップ中に使用） */}
+      {isPlayable && (() => {
+        const defenderId = isPc ? b.pcCombatant : b.npcCombatant;
+        const defender   = isPc ? combatantPc : combatantNpc;
+        const canWallPass = hasOfficialSkill(defender, "壁抜け") && !isDanmakuUsed(defenderId, "壁抜け") && !b.wallPass;
+        return canWallPass ? (
+          <button
+            onClick={() => {
+              markDanmakuUsed(defenderId, "壁抜け");
+              upd(p => ({ ...p,
+                battle: { ...p.battle, wallPass: true },
+                log: [`🧱 ${defender?.charName || defender?.name} の「壁抜け」が発動：1↔3番・4↔6番が隣接扱いになります。`, ...p.log]
+              }));
+            }}
+            style={{ ...btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold), marginTop: 6 }}>
+            🧱 壁抜け（1↔3・4↔6番を隣接扱い）
+          </button>
+        ) : b.wallPass ? (
+          <div style={{ fontSize: 9, color: C.gold, marginTop: 4 }}>🧱 壁抜け発動中</div>
+        ) : null;
+      })()}
       </div>
     );
   };
@@ -1407,6 +1571,45 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${cardBorder}`, textAlign: "center" }}>
         <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>{isPc ? "当たり判定ステップ" : "当たり判定ステップ(NPC)"}</div>
         {renderSpellStep(isPc, "hit")}
+
+        {/* ⚡ 不死身スキル */}
+        {!isSafe && (() => {
+          const defenderId = isPc ? b.pcCombatant : b.npcCombatant;
+          const defender   = isPc ? combatantPc : combatantNpc;
+          const canImmortal = hasOfficialSkill(defender, "不死身") && !isDanmakuUsed(defenderId, "不死身");
+          const reiryoku = (defender?.resources?.霊力?.cur || 0);
+          const canAfford = reiryoku >= 10;
+          return canImmortal ? (
+            <div style={{ marginBottom: 10, padding: "8px 10px", background: "rgba(255,100,100,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.red, marginBottom: 4 }}>💀 不死身 — 霊力10点消費で被弾を打ち消す</div>
+              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 6 }}>現在霊力: {reiryoku}点{!canAfford ? "（不足）" : ""}</div>
+              <button
+                disabled={!canAfford}
+                onClick={() => {
+                  markDanmakuUsed(defenderId, "不死身");
+                  const next = afterDefensePhase(!isPc);
+                  if (isPc) {
+                    upd(p => ({ ...p,
+                      pcs: p.pcs.map(x => x.uid !== defenderId ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: x.resources.霊力.cur - 10 } } }),
+                      battle: { ...p.battle, phase: next },
+                      log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-10）`, ...p.log]
+                    }));
+                  } else {
+                    upd(p => ({ ...p,
+                      battle: { ...p.battle, phase: next,
+                        participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== defenderId ? n : { ...n, resources: { ...n.resources, 霊力: { ...n.resources.霊力, cur: n.resources.霊力.cur - 10 } } }) }
+                      },
+                      log: [`🛡 ${combatantNpc?.name} の『不死身』が発動（霊力-10）`, ...p.log]
+                    }));
+                  }
+                }}
+                style={btnFull("rgba(192,57,43,0.25)", C.redBorder, C.red, { opacity: canAfford ? 1 : 0.35 })}>
+                🛡 不死身を発動する
+              </button>
+            </div>
+          ) : null;
+        })()}
+
         {isSafe ? (
           <div>
             <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
@@ -1695,6 +1898,39 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
             <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了確認</div>
             <div style={{ color: "#fff", fontSize: 11, marginBottom: 12 }}>敵の回避に成功しました。このラウンドを終了して次に進みます。</div>
+            {/* ⚡ 低速弾（ラウンド終了時：弾幕を1マス分保護） */}
+            {(() => {
+              const pcId  = b.pcCombatant;
+              const npcId = b.npcCombatant;
+              const showPcSlow  = (isGm || user.uid === pcId)  && hasOfficialSkill(combatantPc,  "低速弾") && !isDanmakuUsed(pcId,  "低速弾");
+              const showNpcSlow = isGm && hasOfficialSkill(combatantNpc, "低速弾") && !isDanmakuUsed(npcId, "低速弾");
+              const makeBtn = (owner, target, name, bg, border, col) => (
+                <button key={owner} onClick={() => {
+                    markDanmakuUsed(owner, "低速弾");
+                    const grid = [...(b.grids?.[target] || [0,0,0,0,0,0])];
+                    let maxIdx = -1, maxVal = -1;
+                    grid.forEach((v, i) => { if ((v||0) > maxVal) { maxVal = v; maxIdx = i; } });
+                    if (maxIdx >= 0 && maxVal > 0) {
+                      grid[maxIdx] += 1;  // cleanup の -1 と相殺して実質保護
+                      upd(p => ({ ...p,
+                        battle: { ...p.battle, grids: { ...p.battle.grids, [target]: grid } },
+                        log: [`🐌 ${name} の「低速弾」が発動：${maxIdx+1}番マスの弾幕を保持します。`, ...p.log]
+                      }));
+                    }
+                  }}
+                  style={{ ...btnFull(bg, border, col), marginBottom: 4 }}>
+                  🐌 低速弾（{name}）
+                </button>
+              );
+              return (showPcSlow || showNpcSlow) ? (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>⚡ 弾幕スキル（ラウンド終了時）</div>
+                  {showPcSlow  && makeBtn(pcId,  npcId, combatantPc?.charName  || "", "rgba(100,181,246,0.18)", C.blueBorder, C.blue)}
+                  {showNpcSlow && makeBtn(npcId, pcId,  combatantNpc?.name     || "", "rgba(255,100,100,0.18)", C.redBorder,  C.red)}
+                </div>
+              ) : null;
+            })()}
+
             {b.pendingSpell && (
               <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 5 }}>
                 <div style={{ fontSize: 11, color: "#ef9a9a", marginBottom: 4 }}>⏰ {b.pendingSpell.name} — ラウンド終了時の効果が発動します</div>
@@ -4501,6 +4737,25 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                 <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant.resources.スペルカード?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
                   グレイズ: <span style={{color:C.green}}>{pcCombatant.resources.グレイズ?.cur ?? 0}点</span>
+                  {/* ⚡ 弾貨スキル: グレイズ4点 → スペルカード1点 */}
+                  {hasOfficialSkill(combatantPc, "弾貨") && (pcCombatant.resources.グレイズ?.cur ?? 0) >= 4 && (
+                    <button
+                      onClick={() => upd(p => {
+                        const pc = p.pcs.find(x => x.uid === b.pcCombatant);
+                        if (!pc) return p;
+                        const ng = (pc.resources.グレイズ?.cur || 0) - 4;
+                        const ns = Math.min((pc.resources.スペルカード?.max || 9), (pc.resources.スペルカード?.cur || 0) + 1);
+                        return { ...p,
+                          pcs: p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, resources: { ...x.resources,
+                            グレイズ:     { ...x.resources.グレイズ,     cur: ng },
+                            スペルカード: { ...x.resources.スペルカード, cur: ns },
+                          }}),
+                          log: [`💎 ${pc.charName} 弾貨：G4→SC+1(${ns})`, ...p.log],
+                        };
+                      })}
+                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(100,181,246,0.2)", border: `1px solid ${C.blueBorder}`, color: C.blue, borderRadius: 3, cursor: "pointer" }}
+                    >弾貨(4G→SC)</button>
+                  )}
                   {(pcCombatant.resources.グレイズ?.cur ?? 0) >= 5 && (
                     <button
                       onClick={() => upd(p => {
