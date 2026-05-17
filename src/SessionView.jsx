@@ -4739,7 +4739,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                 <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
                   グレイズ: <span style={{color:C.green}}>{pcCombatant.resources.グレイズ?.cur ?? 0}点</span>
                   {/* ⚡ 弾貨スキル: グレイズ4点 → スペルカード1点 */}
-                  {hasOfficialSkill(combatantPc, "弾貨") && (pcCombatant.resources.グレイズ?.cur ?? 0) >= 4 && (
+                  {hasOfficialSkill(pcCombatant, "弾貨") && (pcCombatant.resources.グレイズ?.cur ?? 0) >= 4 && (
                     <button
                       onClick={() => upd(p => {
                         const pc = p.pcs.find(x => x.uid === b.pcCombatant);
