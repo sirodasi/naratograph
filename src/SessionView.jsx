@@ -1074,7 +1074,85 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ fontSize: 12, color: titleColor, letterSpacing: 4, marginBottom: 10 }}>{title}</div>
           <div style={{ fontSize: 32, color: "#fff", fontWeight: "bold", textShadow: `0 0 20px ${titleColor}55` }}>{combatant?.charName || combatant?.name}</div>
           <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
-          {canProceed && (
+          {/* 使い魔: 対戦者自身が援護射撃またはかばうを使える */}
+          {canProceed && hasOfficialSkill(isPc ? combatantPc : combatantNpc, "使い魔") && (() => {
+            const selfId    = isPc ? b.pcCombatant : b.npcCombatant;
+            const partnerId = isPc ? b.npcCombatant : b.pcCombatant;  // 使い魔では相手フィールド
+            const canSup  = !isDanmakuUsed(selfId, "使い魔_援護");
+            const canCov  = !isDanmakuUsed(selfId, "使い魔_かばう");
+            return (canSup || canCov) ? (
+              <div style={{ marginTop: 10, marginBottom: 4 }}>
+                <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>🐾 使い魔 — 援護射撃またはかばうを使用できます</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {canSup && (
+                    <button onClick={() => { handleSupportFire(selfId); markDanmakuUsed(selfId, "使い魔_援護"); }}
+                      style={btnFull("rgba(100,181,246,0.15)", C.blueBorder, C.blue, { flex: 1, fontSize: 10 })}>
+                      💠 援護射撃
+                    </button>
+                  )}
+                  {canCov && (
+                    <button onClick={() => { handleCover(selfId, partnerId); markDanmakuUsed(selfId, "使い魔_かばう"); }}
+                      style={btnFull("rgba(200,160,64,0.15)", C.goldDim, C.gold, { flex: 1, fontSize: 10 })}>
+                      🛡 かばう
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null;
+          })()}
+
+          {/* ⚡ ショット直前スキル（近接攻撃・弾消し） */}
+          {canProceed && (() => {
+            const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
+            const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
+            const attacker   = isPc ? combatantPc : combatantNpc;
+            const canProximity = hasOfficialSkill(attacker, "近接攻撃") && !isDanmakuUsed(attackerId, "近接攻撃");
+            const canErase     = hasOfficialSkill(attacker, "弾消し")   && !isDanmakuUsed(attackerId, "弾消し");
+            const defGrid      = b.grids?.[defenderId] || [0,0,0,0,0,0];
+            const hasBullet    = defGrid.some(v => v > 0);
+            const samePos      = b.positions?.[attackerId] === b.positions?.[defenderId];
+            return (canProximity || canErase) ? (
+              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6, width: 240 }}>
+                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>⚡ 弾幕スキル（ダイス直前）</div>
+                {canProximity && (
+                  <button onClick={() => tryApplyProximity(attackerId, defenderId)}
+                    disabled={!samePos}
+                    style={btnFull("rgba(255,100,100,0.18)", C.redBorder, C.red, { opacity: samePos ? 1 : 0.35 })}>
+                    💥 近接攻撃{samePos ? "" : "（同マスでない）"}
+                  </button>
+                )}
+                {canErase && !b.eraseSelect && (
+                  <button onClick={() => tryApplyErase(attackerId, defenderId)}
+                    disabled={!hasBullet}
+                    style={btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold, { opacity: hasBullet ? 1 : 0.35 })}>
+                    🧹 弾消し{hasBullet ? "" : "（弾幕なし）"}
+                  </button>
+                )}
+                {/* 弾消し選択UI */}
+                {b.eraseSelect && b.eraseSelect.attackerId === attackerId && (() => {
+                  const grid = b.grids?.[b.eraseSelect.targetFieldId] || [0,0,0,0,0,0];
+                  return (
+                    <div style={{ padding: 8, background: "rgba(200,160,64,0.12)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+                      <div style={{ fontSize: 9, color: C.gold, marginBottom: 5 }}>🧹 弾消し — 取り除くマスを選んでください</div>
+                      <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 5 }}>
+                        {grid.map((v, i) => (
+                          <button key={i} onClick={() => v > 0 && confirmErase(i + 1)}
+                            disabled={v === 0}
+                            style={{ width: 34, height: 34, background: v > 0 ? "rgba(200,160,64,0.2)" : "rgba(255,255,255,0.02)", border: `1px solid ${v > 0 ? C.gold : C.border}`, borderRadius: 4, fontSize: 13, color: v > 0 ? C.gold : C.textFaint, cursor: v > 0 ? "pointer" : "default" }}>
+                            {i + 1}{v > 0 ? `(${v})` : ""}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, eraseSelect: null } }))}
+                        style={{ fontSize: 9, color: C.textFaint, background: "none", border: "none", cursor: "pointer" }}>キャンセル</button>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : null;
+          })()}
+
+          {canProceed && !b.eraseSelect && (
             <button 
               onClick={() => handleProceedToShotRoll(isPc, nextPhase)}
               style={{ ...buttonStyle, marginTop: 30, width: 200 }}
