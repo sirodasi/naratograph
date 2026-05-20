@@ -835,30 +835,26 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     return true;
   };
 
-  // 弾消し: 任意タイミングだが自動化としてはショット開始前（intro）に相手フィールドから1つ除去
-  const tryApplyErase = (attackerId, defenderId) => {
-    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
-    if (!hasOfficialSkill(attacker, "弾消し")) return false;
-    if (isDanmakuUsed(attackerId, "弾消し")) return false;
+  // 弾消し: マス選択UIを開く
+  const openEraseSelect = (attackerId, defenderId) => {
+    upd(p => ({ ...p, battle: { ...p.battle, eraseSelect: { attackerId, targetFieldId: defenderId } } }));
+  };
 
-    // 対象フィールドのうち最大の弾数があるマスを1つ減らす
-    const grid = b.grids?.[defenderId] ? [...b.grids[defenderId]] : [0,0,0,0,0,0];
-    let maxCount = 0;
-    let maxIdx = -1;
-    grid.forEach((v, i) => { if ((v || 0) > maxCount) { maxCount = v; maxIdx = i; } });
-    if (maxCount <= 0) return false;
-
+  const confirmErase = (cellNum) => {
+    const es = b.eraseSelect;
+    if (!es) return;
     upd(p => {
-      const newGrid = [...(p.battle.grids?.[defenderId] || [0,0,0,0,0,0])];
-      newGrid[maxIdx] = Math.max(0, (newGrid[maxIdx] || 0) - 1);
+      const grid = [...(p.battle.grids[es.targetFieldId] || [0,0,0,0,0,0])];
+      if ((grid[cellNum - 1] || 0) <= 0) return p;
+      grid[cellNum - 1] -= 1;
+      const attacker = p.pcs.find(x => x.uid === es.attackerId) || p.battle.participants.npcs.find(n => n.id === es.attackerId);
       return {
         ...p,
-        battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: newGrid } },
-        log: [`🧹 ${attacker.charName || attacker.name} の『弾消し』が発動：${maxIdx + 1}番マスの弾幕を1つ取り除きました。`, ...p.log]
+        battle: { ...p.battle, grids: { ...p.battle.grids, [es.targetFieldId]: grid }, eraseSelect: null },
+        log: [`🧹 ${attacker?.charName || attacker?.name} の『弾消し』：${cellNum}番マスの弾幕を1つ取り除きました。`, ...p.log]
       };
     });
-    markDanmakuUsed(attackerId, "弾消し");
-    return true;
+    markDanmakuUsed(es.attackerId, "弾消し");
   };
 
   // ショットロールへ進む（スキルはIntroのボタンで事前使用）
@@ -1186,7 +1182,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   </button>
                 )}
                 {canErase && !b.eraseSelect && (
-                  <button onClick={() => tryApplyErase(attackerId, defenderId)}
+                  <button onClick={() => openEraseSelect(attackerId, defenderId)}
                     disabled={!hasBullet}
                     style={btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold, { opacity: hasBullet ? 1 : 0.35 })}>
                     🧹 弾消し{hasBullet ? "" : "（弾幕なし）"}
