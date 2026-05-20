@@ -876,6 +876,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur || 3;
 
+  const getEvadeNeighbors = (pos, wallPass) => {
+    const base = ADJACENT_MAP[pos] || [];
+    if (!wallPass) return base;
+    const extras = { 1: [3], 3: [1], 4: [6], 6: [4] };
+    return [...new Set([...base, ...(extras[pos] || [])])];
+  };
+
   const afterDefensePhase = (isAttackerPc) => {
     const attackerIsFirst = b.startOrder === "npc" ? !isAttackerPc : isAttackerPc;
     if (attackerIsFirst) {
@@ -923,6 +930,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const handleEvadeMove = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
     const oldPos = b.positions[combatantId];
+    if (!getEvadeNeighbors(oldPos, b.wallPass).includes(targetCellNum)) return;
     const bulletsCleared = b.grids[combatantId][oldPos - 1] || 0;
 
     upd(p => {
@@ -2101,7 +2109,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           let highlights = [];
           if (isGm) {
             if (isRecovery) highlights = [1, 2, 3, 4, 5, 6];
-            else if (isEvadeMove) highlights = ADJACENT_MAP[b.positions[n.id]] || [];
+            else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[n.id], b.wallPass);
           }
 
           return (
@@ -2222,11 +2230,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           const isEvadeMove = b.phase === "pc_evade_move" && isCombatant;
           
           const currentPos = b.positions?.[p.uid];
-          const neighbors = ADJACENT_MAP[currentPos] || [];
 
           let highlights = [];
           if (isRecovery) highlights = [1, 2, 3, 4, 5, 6];
-          else if (isEvadeMove) highlights = ADJACENT_MAP[b.positions[p.uid]] || [];
+          else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[p.uid], b.wallPass);
 
           return (
             <BattleGrid 
