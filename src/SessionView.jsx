@@ -352,33 +352,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }
   }, [b.phase, b.familiarAction, upd]);
 
-  const applyShot = (targetUid, diceResults) => {
-    // diceResults を防御側フィールドに反映してフェーズを shot_after へ
-    // ★ 変更: executeShot がすでに phase を shot_after に変えているため
-    //   この関数はグリッド更新専用になった
-    upd(p => {
-      const currentGrid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
-      diceResults.forEach(d => {
-        if (d >= 1 && d <= 6) currentGrid[d - 1] += 1;
-      });
-      return {
-        ...p,
-        battle: {
-          ...p.battle,
-          grids: { ...p.battle.grids, [targetUid]: currentGrid },
-          lastShotDice: null,  // 確定後にクリア
-        }
-      };
-    });
-  };
-
-  // ショットを確定（スキル適用後）してグリッドに反映する
-  const confirmShot = () => {
-    const { lastShotDice, lastShotDefenderId } = b;
-    if (!lastShotDice || !lastShotDefenderId) return;
-    applyShot(lastShotDefenderId, lastShotDice);
-  };
-
   const handleSupportFire = (userUid) => {
     upd(p => ({
       ...p,
@@ -444,19 +417,23 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
 
     animateDice(totalDice, `${isPc ? "PC" : "NPC"}ショット`, (results) => {
-      // ★ ダイス結果を lastShotDice に保存してshot_afterでスキルボタンを表示する
-      upd(p => ({
-        ...p,
-        battle: {
-          ...p.battle,
-          supportDice: 0,
-          lastShotDice:   results,
-          lastShotIsPc:   isPc,
-          lastShotAttackerId: attackerId,
-          lastShotDefenderId: defenderId,
-          phase: isPc ? "pc_shot_after" : "npc_shot_after",
-        }
-      }));
+      upd(p => {
+        const currentGrid = [...(p.battle.grids[defenderId] || [0,0,0,0,0,0])];
+        results.forEach(d => { if (d >= 1 && d <= 6) currentGrid[d - 1] += 1; });
+        return {
+          ...p,
+          battle: {
+            ...p.battle,
+            supportDice: 0,
+            lastShotDice: results,
+            lastShotIsPc: isPc,
+            lastShotAttackerId: attackerId,
+            lastShotDefenderId: defenderId,
+            grids: { ...p.battle.grids, [defenderId]: currentGrid },
+            phase: isPc ? "pc_shot_after" : "npc_shot_after",
+          }
+        };
+      });
     });
   };
 
@@ -732,7 +709,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     return true;
   };
 
-  // ホーミング確定: 選択したダイスを新しい値で上書きして lastShotDice に反映
+  // ホーミング確定: グリッドの弾幕を直接移動（旧マス-1 → 新マス+1）し lastShotDice も更新
   const confirmHoming = (newValue) => {
     const hs = b.homingSelect;
     if (!hs || hs.selectedDieIdx === null) return;
@@ -741,10 +718,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     newDice[hs.selectedDieIdx] = newValue;
     const att = pcs.find(p => p.uid === hs.attackerId) || npcs.find(n => n.id === hs.attackerId);
     markDanmakuUsed(hs.attackerId, "ホーミング");
-    upd(p => ({ ...p,
-      battle: { ...p.battle, lastShotDice: newDice, homingSelect: null },
-      log: [`🔭 ${att?.charName || att?.name} の「ホーミング」発動：出目 ${old} → ${newValue}`, ...p.log]
-    }));
+    upd(p => {
+      const grid = [...(p.battle.grids[hs.defenderId] || [0,0,0,0,0,0])];
+      if (grid[old - 1] > 0) grid[old - 1] -= 1;
+      grid[newValue - 1] += 1;
+      return {
+        ...p,
+        battle: {
+          ...p.battle,
+          lastShotDice: newDice,
+          grids: { ...p.battle.grids, [hs.defenderId]: grid },
+          homingSelect: null,
+        },
+        log: [`🔭 ${att?.charName || att?.name} の「ホーミング」発動：${old}番マス → ${newValue}番マスに弾幕を移動`, ...p.log]
+      };
+    });
   };
 
   // ワイドショット: PLが「移動先の空きマス」と「移動元（弾幕があるマス）」を
@@ -1694,12 +1682,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           return canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && !blocked && (
             <button
               onClick={() => {
-                confirmShot();
                 upd(p => ({
                   ...p,
                   battle: {
                     ...p.battle,
                     phase: nextPhase,
+                    lastShotDice: null,
                     currentEvadeDice: nextPhase === "pc_evade_intro"
                       ? getDefaultEvadeDice(combatantPc)
                       : getDefaultEvadeDice(combatantNpc)
