@@ -655,7 +655,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   };
 
   const isDanmakuUsed = (attackerId, skillName) => {
-    return !!(b.usedDanmakuSkills && b.usedDanmakuSkills[attackerId] && b.usedDanmakuSkills[attackerId].includes(skillName));
+    return !!(b.usedds && b.usedds[attackerId] && b.usedds[attackerId].includes(skillName));
   };
 
   const markDanmakuUsed = (attackerId, skillName) => {
@@ -664,9 +664,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       ...p,
       battle: {
         ...p.battle,
-        usedDanmakuSkills: {
-          ...(p.battle.usedDanmakuSkills || {}),
-          [attackerId]: [...((p.battle.usedDanmakuSkills || {})[attackerId] || []), skillName]
+        usedds: {
+          ...(p.battle.usedds || {}),
+          [attackerId]: [...((p.battle.usedds || {})[attackerId] || []), skillName]
         }
       }
     }));
@@ -769,8 +769,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     newGrid[ws.selectedEmpty - 1] = (newGrid[ws.selectedEmpty - 1] || 0) + 1;
     newGrid[sourceCell - 1]       = Math.max(0, (newGrid[sourceCell - 1] || 0) - 1);
     const newPairs = [...(ws.pairs || []), { from: sourceCell, to: ws.selectedEmpty }];
-    // まだ空きマスがあれば続けて選択できる、なければ完了
-    const stillEmpty = newGrid.some(v => v === 0);
+    // 移動元として使ったマスは目的地として選べないため除外して判定
+    const usedSources = newPairs.map(p => p.from);
+    const stillEmpty  = newGrid.some((v, i) => v === 0 && !usedSources.includes(i + 1));
     const stillBullet = newGrid.some(v => v > 0);
     upd(p => ({ ...p, battle: { ...p.battle,
       wideShotSelect: { ...ws, pendingGrid: newGrid, pairs: newPairs,
@@ -1078,7 +1079,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           wallPass: null,
           homingSelect: null,
           wideShotSelect: null,
-          usedDanmakuSkills: {},
+          usedds: {},
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
@@ -1496,13 +1497,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 ワイドショット — 移動先の空きマスを選んでください</div>
               {(ws.pairs || []).length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>確定済み: {(ws.pairs || []).map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>}
               <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 6 }}>
-                {grid.map((v, i) => (
-                  <button key={i} onClick={() => v === 0 && wideShotPickEmpty(i + 1)}
-                    disabled={v !== 0}
-                    style={{ width: 34, height: 34, background: v === 0 ? "rgba(206,147,216,0.2)" : "rgba(255,255,255,0.03)", border: `2px solid ${v === 0 ? C.purple : C.border}`, borderRadius: 5, fontSize: 13, color: v === 0 ? C.purple : C.textFaint, cursor: v === 0 ? "pointer" : "default", fontWeight: "bold" }}>
-                    {i + 1}
-                  </button>
-                ))}
+                {(() => {
+                  const usedSources = (ws.pairs || []).map(p => p.from);
+                  return grid.map((v, i) => {
+                    const isSelectable = v === 0 && !usedSources.includes(i + 1);
+                    return (
+                      <button key={i} onClick={() => isSelectable && wideShotPickEmpty(i + 1)}
+                        disabled={!isSelectable}
+                        style={{ width: 34, height: 34, background: isSelectable ? "rgba(206,147,216,0.2)" : "rgba(255,255,255,0.03)", border: `2px solid ${isSelectable ? C.purple : C.border}`, borderRadius: 5, fontSize: 13, color: isSelectable ? C.purple : C.textFaint, cursor: isSelectable ? "pointer" : "default", fontWeight: "bold" }}>
+                        {i + 1}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {(ws.pairs || []).length > 0 && <button onClick={confirmWideShot} style={btnFull("rgba(206,147,216,0.15)", "#7b1fa2", C.purple, { flex: 1, fontSize: 10 })}>この内容で確定</button>}
@@ -2000,6 +2007,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           npcCombatant: npcId,
           usedIntervention: {},
           familiarAction: null,
+          usedds: {},
+          homingSelect: null,
+          wideShotSelect: null,
+          eraseSelect: null,
+          spellChoose: null,
+          lastSpellUsed: null,
+          pendingSpell: null,
+          lastShotDice: null,
+          supportDice: 0,
           log: [`⚔️ ラウンド開始：${npcChar.name} vs ${pcChar.charName} （先攻: ${order === "pc" ? "PC" : "NPC"}）`, ...p.log]
         }
       }));
@@ -2111,7 +2127,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         })}
       </div>
 
-      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ background: "#080a14", border: `1px solid ${C.goldDim}`, color: C.gold, padding: "4px 20px", borderRadius: 20, fontSize: 12, fontWeight: "bold", boxShadow: "0 0 20px rgba(0,0,0,0.8)" }}>
           {b.phase.toUpperCase()}
         </div>
