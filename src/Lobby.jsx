@@ -415,9 +415,17 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 <input type="checkbox" checked={room.config?.useAdditionalActions || false} onChange={() => toggleExtraRule("useAdditionalActions")} />
                 探索終了時の追加行動
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 11 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 11 }}>
                 <input type="checkbox" checked={room.config?.useClueEvents || false} onChange={() => toggleExtraRule("useClueEvents")} />
                 手がかりイベント
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 11 }}>
+                <input type="checkbox" checked={room.config?.useRandomPlacement || false} onChange={() => toggleExtraRule("useRandomPlacement")} />
+                ランダム配置（弾幕ごっこ開始時の初期位置をD6で決定）
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 11 }}>
+                <input type="checkbox" checked={room.config?.useLastResort || false} onChange={() => toggleExtraRule("useLastResort")} />
+                喰らいボム（回避失敗時にSCを消費して追加判定）
               </label>
             </div>
           )}

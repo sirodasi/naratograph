@@ -1954,6 +1954,61 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ) : null;
         })()}
 
+        {/* ⚡ 喰らいボム（追加ルール） */}
+        {!isSafe && gs.config?.useLastResort && !(isPc ? b.pcLastResort : b.npcLastResort) && canApply && (
+          <div style={{ marginBottom: 10, padding: 10, background: "rgba(171,71,188,0.1)", border: "1px solid #7b1fa2", borderRadius: 5 }}>
+            <div style={{ fontSize: 10, color: C.purple, marginBottom: 4 }}>💜 喰らいボム</div>
+            <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>SCを1点消費してダイスを2つ振り足す。{count + 3}以上なら回避成功。</div>
+            <button
+              disabled={(target?.resources?.スペルカード?.cur || 0) < 1}
+              onClick={() => {
+                const targetValue = count + 3;
+                const defenderId = targetId;
+                animateDice(2, "喰らいボム", (res) => {
+                  const maxDie = Math.max(...res);
+                  const success = maxDie >= targetValue;
+                  const logMsg = `💜 ${target?.charName || target?.name} 喰らいボム！SC-1 (追加:${res.join(",")}) → ${success ? "回避成功！" : "失敗..."}`;
+                  upd(p => {
+                    const nextPhase = success
+                      ? (isPc ? "pc_evade_move" : "npc_evade_move")
+                      : (isPc ? "pc_hit_check" : "npc_hit_check");
+                    if (isPc) {
+                      return {
+                        ...p,
+                        pcs: p.pcs.map(x => x.uid !== defenderId ? x : {
+                          ...x,
+                          resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: x.resources.スペルカード.cur - 1 } }
+                        }),
+                        battle: { ...p.battle, phase: nextPhase, pcLastResort: true },
+                        log: [logMsg, ...p.log]
+                      };
+                    } else {
+                      return {
+                        ...p,
+                        battle: {
+                          ...p.battle,
+                          phase: nextPhase,
+                          npcLastResort: true,
+                          participants: {
+                            ...p.battle.participants,
+                            npcs: p.battle.participants.npcs.map(n => n.id !== defenderId ? n : {
+                              ...n,
+                              resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: n.resources.スペルカード.cur - 1 } }
+                            })
+                          }
+                        },
+                        log: [logMsg, ...p.log]
+                      };
+                    }
+                  });
+                });
+              }}
+              style={btnFull("rgba(171,71,188,0.2)", "#7b1fa2", C.purple, { opacity: (target?.resources?.スペルカード?.cur || 0) >= 1 ? 1 : 0.35 })}>
+              💜 喰らいボム（SC {target?.resources?.スペルカード?.cur || 0}点）{(target?.resources?.スペルカード?.cur || 0) < 1 ? "（SCなし）" : ""}
+            </button>
+          </div>
+        )}
+
         {isSafe ? (
           <div>
             <div style={{ color: C.green, fontSize: 14, fontWeight: "bold", marginBottom: 10 }}>回避成功（SAFE）</div>
@@ -2029,12 +2084,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             onClick={() => {
               const positions = {};
               const grids = {};
-              pcs.forEach(p => { 
-                positions[p.uid] = Math.floor(Math.random() * 6) + 1;
+              const useRandom = gs.config?.useRandomPlacement;
+              pcs.forEach(p => {
+                positions[p.uid] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
                 grids[p.uid] = [0,0,0,0,0,0];
               });
-              npcs.forEach(n => { 
-                positions[n.id] = Math.floor(Math.random() * 6) + 1;
+              npcs.forEach(n => {
+                positions[n.id] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
                 grids[n.id] = [0,0,0,0,0,0];
               });
 
@@ -2188,6 +2244,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           bigPowerSelect: null,
           slowBulletSelect: null,
           spellChoose: null,
+          pcLastResort: false,
+          npcLastResort: false,
           lastSpellUsed: null,
           pendingSpell: null,
           lastShotDice: null,
