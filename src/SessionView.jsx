@@ -533,7 +533,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         ...consumeSpell(p),
         battle: {
           ...p.battle,
-          grids: { ...p.battle.grids, [defenderGrid]: updatedGrid },
+          grids: { ...p.battle.grids, [defenderId]: updatedGrid },
           spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
           lastSpellUsed: spellCard.name,
         },
@@ -985,7 +985,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           currentEvadeDice: nextDice,
           phase: isPc
             ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false))
-            : (nextDice > 0 ? "npc_evade_intro" : "npc_hit_check")
+            : (nextDice > 0 ? "npc_evade_intro" : afterDefensePhase(true))
         },
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
@@ -1062,7 +1062,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         log: [
           `💥 ${target.charName || target.name} は被弾した！ 残り人数: ${newLives}`,
           isPc && newLives === 1 ? `🔥 霊力が最大まで回復した！` : null,
-          newLives === 1 ? `🔮 ${target.name} はスペルカードを1点獲得した！` : null,
+          newLives === 1 ? `🔮 ${target.charName || target.name} はスペルカードを1点獲得した！` : null,
           ...p.log
         ].filter(Boolean)
       };
