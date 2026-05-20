@@ -780,7 +780,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const newGrid = [...ws.pendingGrid];
     newGrid[ws.selectedEmpty - 1] = (newGrid[ws.selectedEmpty - 1] || 0) + 1;
     newGrid[sourceCell - 1]       = Math.max(0, (newGrid[sourceCell - 1] || 0) - 1);
-    const newPairs = [...ws.pairs, { from: sourceCell, to: ws.selectedEmpty }];
+    const newPairs = [...(ws.pairs || []), { from: sourceCell, to: ws.selectedEmpty }];
     // まだ空きマスがあれば続けて選択できる、なければ完了
     const stillEmpty = newGrid.some(v => v === 0);
     const stillBullet = newGrid.some(v => v > 0);
@@ -794,12 +794,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   // ワイドショット確定
   const confirmWideShot = () => {
     const ws = b.wideShotSelect;
-    if (!ws || ws.pairs.length === 0) return;
+    if (!ws || !(ws.pairs || []).length) return;
     const att = pcs.find(p => p.uid === ws.attackerId) || npcs.find(n => n.id === ws.attackerId);
     markDanmakuUsed(ws.attackerId, "ワイドショット");
     upd(p => ({ ...p,
       battle: { ...p.battle, grids: { ...p.battle.grids, [ws.defenderId]: ws.pendingGrid }, wideShotSelect: null },
-      log: [`🔀 ${att?.charName || att?.name} の「ワイドショット」発動：${ws.pairs.map(pr => `${pr.from}→${pr.to}`).join(", ")}番マス`, ...p.log]
+      log: [`🔀 ${att?.charName || att?.name} の「ワイドショット」発動：${(ws.pairs || []).map(pr => `${pr.from}→${pr.to}`).join(", ")}番マス`, ...p.log]
     }));
   };
 
@@ -1496,7 +1496,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           const grid = ws.pendingGrid;
           if (ws.step === "done") return (
             <div style={{ marginBottom: 10, padding: 10, background: "rgba(206,147,216,0.1)", border: "1px solid #7b1fa2", borderRadius: 5 }}>
-              <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 選択完了: {ws.pairs.map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>
+              <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 選択完了: {(ws.pairs || []).map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={confirmWideShot} style={btnFull("rgba(206,147,216,0.2)", "#7b1fa2", C.purple, { flex: 1 })}>確定する</button>
                 <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, wideShotSelect: null } }))} style={btnFull("none", C.border, C.textFaint, { flex: 1 })}>キャンセル</button>
@@ -1506,7 +1506,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           if (ws.step === "pick_empty") return (
             <div style={{ marginBottom: 10, padding: 10, background: "rgba(206,147,216,0.1)", border: "1px solid #7b1fa2", borderRadius: 5 }}>
               <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🔀 ワイドショット — 移動先の空きマスを選んでください</div>
-              {ws.pairs.length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>確定済み: {ws.pairs.map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>}
+              {(ws.pairs || []).length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>確定済み: {(ws.pairs || []).map(pr => `${pr.from}→${pr.to}`).join(", ")}</div>}
               <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 6 }}>
                 {grid.map((v, i) => (
                   <button key={i} onClick={() => v === 0 && wideShotPickEmpty(i + 1)}
@@ -1517,7 +1517,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                 ))}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                {ws.pairs.length > 0 && <button onClick={confirmWideShot} style={btnFull("rgba(206,147,216,0.15)", "#7b1fa2", C.purple, { flex: 1, fontSize: 10 })}>この内容で確定</button>}
+                {(ws.pairs || []).length > 0 && <button onClick={confirmWideShot} style={btnFull("rgba(206,147,216,0.15)", "#7b1fa2", C.purple, { flex: 1, fontSize: 10 })}>この内容で確定</button>}
                 <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, wideShotSelect: null } }))} style={btnFull("none", C.border, C.textFaint, { flex: 1, fontSize: 10 })}>キャンセル</button>
               </div>
             </div>
