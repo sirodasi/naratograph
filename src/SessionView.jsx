@@ -811,31 +811,44 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     markDanmakuUsed(hs.attackerId, "高速移動");
   };
 
-  // 大威力: ロール直後に重複出目があれば1つ選んでそのマスに+1
-  const tryApplyBigPower = (attackerId, defenderId, diceResults) => {
-    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
-    if (!hasOfficialSkill(attacker, "大威力")) return false;
-    if (isDanmakuUsed(attackerId, "大威力")) return false;
-    if (!diceResults || diceResults.length === 0) return false;
-
+  // 大威力: 重複出目があれば選択してそのマスに+1（複数種類の重複は選択UI）
+  const openBigPowerSelect = (attackerId, defenderId, diceResults) => {
     const counts = {};
     diceResults.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
-    const dupes = Object.entries(counts).filter(([v, c]) => c >= 2).map(([v]) => parseInt(v, 10));
-    if (dupes.length === 0) return false;
+    const dupValues = Object.entries(counts).filter(([, c]) => c >= 2).map(([v]) => Number(v));
+    if (dupValues.length === 0) return;
+    if (dupValues.length === 1) {
+      const value = dupValues[0];
+      upd(p => {
+        const grid = [...(p.battle.grids?.[defenderId] || [0,0,0,0,0,0])];
+        grid[value - 1] = (grid[value - 1] || 0) + 1;
+        const att = p.pcs.find(x => x.uid === attackerId) || p.battle.participants.npcs.find(n => n.id === attackerId);
+        return {
+          ...p,
+          battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: grid } },
+          log: [`💥 ${att?.charName || att?.name} の『大威力』：出目 ${value} のマスに弾幕が1つ追加されました。`, ...p.log]
+        };
+      });
+      markDanmakuUsed(attackerId, "大威力");
+    } else {
+      upd(p => ({ ...p, battle: { ...p.battle, bigPowerSelect: { attackerId, defenderId, dupValues } } }));
+    }
+  };
 
-    // 選択: 最大の出目重複を優先
-    const chosen = Math.max(...dupes);
+  const confirmBigPower = (value) => {
+    const bp = b.bigPowerSelect;
+    if (!bp) return;
     upd(p => {
-      const grid = [...(p.battle.grids?.[defenderId] || [0,0,0,0,0,0])];
-      grid[chosen - 1] = (grid[chosen - 1] || 0) + 1;
+      const grid = [...(p.battle.grids?.[bp.defenderId] || [0,0,0,0,0,0])];
+      grid[value - 1] = (grid[value - 1] || 0) + 1;
+      const att = p.pcs.find(x => x.uid === bp.attackerId) || p.battle.participants.npcs.find(n => n.id === bp.attackerId);
       return {
         ...p,
-        battle: { ...p.battle, grids: { ...p.battle.grids, [defenderId]: grid } },
-        log: [`💥 ${attacker.charName || attacker.name} の『大威力』が発動：出目 ${chosen} のマスに弾幕が1つ追加されました。`, ...p.log]
+        battle: { ...p.battle, grids: { ...p.battle.grids, [bp.defenderId]: grid }, bigPowerSelect: null },
+        log: [`💥 ${att?.charName || att?.name} の『大威力』：出目 ${value} のマスに弾幕が1つ追加されました。`, ...p.log]
       };
     });
-    markDanmakuUsed(attackerId, "大威力");
-    return true;
+    markDanmakuUsed(bp.attackerId, "大威力");
   };
 
   // 弾消し: マス選択UIを開く
@@ -1433,7 +1446,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     // ホーミング・大威力はダイス直後のみ（dice が残っている間）
     // 選択UI表示中は対応ボタンを隠す（二重起動防止）
     const canHoming   = canProceed && dice.length > 0 && hasOfficialSkill(attacker, "ホーミング")   && !isDanmakuUsed(attackerId, "ホーミング") && !b.homingSelect;
-    const canBigPower = canProceed && dice.length > 0 && hasOfficialSkill(attacker, "大威力")     && !isDanmakuUsed(attackerId, "大威力");
+    const canBigPower = canProceed && dice.length > 0 && hasOfficialSkill(attacker, "大威力")     && !isDanmakuUsed(attackerId, "大威力") && !b.bigPowerSelect;
 
     return (
       <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
@@ -1484,6 +1497,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             </div>
           );
           return null;
+        })()}
+
+        {/* 大威力選択UI */}
+        {b.bigPowerSelect && b.bigPowerSelect.attackerId === attackerId && (() => {
+          const bp = b.bigPowerSelect;
+          const isOwner = isGm || user.uid === bp.attackerId;
+          if (!isOwner) return <div style={{ fontSize: 10, color: C.textDim }}>💥 相手が大威力を選択中…</div>;
+          return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(255,183,77,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.gold, marginBottom: 6 }}>💥 大威力 — 追加するマスを選んでください</div>
+              <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 5 }}>
+                {bp.dupValues.map(v => (
+                  <button key={v} onClick={() => confirmBigPower(v)}
+                    style={{ width: 34, height: 34, background: "rgba(255,183,77,0.2)", border: `1px solid ${C.gold}`, borderRadius: 4, fontSize: 14, color: C.gold, cursor: "pointer", fontWeight: "bold" }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, bigPowerSelect: null } }))}
+                style={{ fontSize: 9, color: C.textFaint, background: "none", border: "none", cursor: "pointer" }}>キャンセル</button>
+            </div>
+          );
         })()}
 
         {/* ワイドショット選択UI */}
@@ -1580,7 +1615,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               </button>
             )}
             {canBigPower && (
-              <button onClick={() => tryApplyBigPower(attackerId, defenderId, dice)}
+              <button onClick={() => openBigPowerSelect(attackerId, defenderId, dice)}
                 disabled={!hasDupe}
                 style={{ ...btnFull("rgba(255,183,77,0.18)", C.goldDim, C.gold, { opacity: hasDupe ? 1 : 0.35 }), marginBottom: 4 }}>
                 💥 大威力{hasDupe ? "" : "（重複出目なし）"}
@@ -1720,7 +1755,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           const isNpcCoverDecision = isPc && b.startOrder === "pc" && hasNpcFamiliar && b.familiarAction === null;
           const isNpcAutoFamiliarCover = isPc && hasNpcFamiliar && b.familiarAction === "skip_to_cover";
           const blocked = isCoverDecision || isAutoFamiliarCover || isNpcCoverDecision || isNpcAutoFamiliarCover;
-          return canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && !b.highSpeedSelect && !blocked && (
+          return canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && !b.highSpeedSelect && !b.bigPowerSelect && !blocked && (
             <button
               onClick={() => {
                 upd(p => ({
@@ -2046,6 +2081,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           wideShotSelect: null,
           eraseSelect: null,
           highSpeedSelect: null,
+          bigPowerSelect: null,
           spellChoose: null,
           lastSpellUsed: null,
           pendingSpell: null,
