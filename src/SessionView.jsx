@@ -792,20 +792,23 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }));
   };
 
-  // 高速移動: 自身のいるマスに弾幕がない場合、任意のマスへ移動できる -> 自動では対戦相手と同じマスへ移動
-  const tryApplyHighSpeed = (attackerId, defenderId) => {
-    const attacker = pcs.find(p => p.uid === attackerId) || npcs.find(n => n.id === attackerId);
-    if (!hasOfficialSkill(attacker, "高速移動")) return false;
-    if (isDanmakuUsed(attackerId, "高速移動")) return false;
-    const pos = b.positions?.[attackerId];
-    if (!pos) return false;
-    const myGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
-    if ((myGrid[pos - 1] || 0) > 0) return false; // そのマスに弾幕がある場合は使用不可
+  // 高速移動: 自身のいるマスに弾幕がない場合、任意のマスへ移動できる
+  const openHighSpeedSelect = (attackerId) => {
+    upd(p => ({ ...p, battle: { ...p.battle, highSpeedSelect: { attackerId } } }));
+  };
 
-    const targetPos = b.positions?.[defenderId] || pos;
-    upd(p => ({ ...p, battle: { ...p.battle, positions: { ...p.battle.positions, [attackerId]: targetPos } }, log: [`⚡ ${attacker.charName || attacker.name} の『高速移動』が発動：${targetPos}番マスへ移動しました。`, ...p.log] }));
-    markDanmakuUsed(attackerId, "高速移動");
-    return true;
+  const confirmHighSpeed = (cellNum) => {
+    const hs = b.highSpeedSelect;
+    if (!hs) return;
+    upd(p => {
+      const attacker = p.pcs.find(x => x.uid === hs.attackerId) || p.battle.participants.npcs.find(n => n.id === hs.attackerId);
+      return {
+        ...p,
+        battle: { ...p.battle, positions: { ...p.battle.positions, [hs.attackerId]: cellNum }, highSpeedSelect: null },
+        log: [`⚡ ${attacker?.charName || attacker?.name} の『高速移動』：${cellNum}番マスへ移動しました。`, ...p.log]
+      };
+    });
+    markDanmakuUsed(hs.attackerId, "高速移動");
   };
 
   // 大威力: ロール直後に重複出目があれば1つ選んでそのマスに+1
@@ -1415,7 +1418,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
     const buttonStyle = btnFull(C.blueBg, C.blueBorder, C.blue);
     const canUseWideShot = hasOfficialSkill(attacker, "ワイドショット") && !isDanmakuUsed(attackerId, "ワイドショット");
-    const canUseHighSpeed = hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動");
+    const attackerPos = b.positions?.[attackerId];
+    const attackerCellEmpty = attackerPos ? (b.grids?.[attackerId]?.[attackerPos - 1] || 0) === 0 : true;
+    const canUseHighSpeed = canProceed && hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動") && attackerCellEmpty && !b.highSpeedSelect;
 
     const dice = b.lastShotDice || [];
     const counts = {};
@@ -1540,6 +1545,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           return null;
         })()}
 
+        {/* 高速移動選択UI */}
+        {b.highSpeedSelect && b.highSpeedSelect.attackerId === attackerId && (() => {
+          const hs = b.highSpeedSelect;
+          const isOwner = isGm || user.uid === hs.attackerId;
+          if (!isOwner) return <div style={{ fontSize: 10, color: C.textDim }}>⚡ 相手が高速移動を選択中…</div>;
+          const curPos = b.positions?.[hs.attackerId];
+          return (
+            <div style={{ marginBottom: 10, padding: 10, background: "rgba(100,181,246,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: C.blue, marginBottom: 6 }}>⚡ 高速移動 — 移動先を選んでください</div>
+              <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 5 }}>
+                {[1,2,3,4,5,6].map(num => (
+                  <button key={num} onClick={() => confirmHighSpeed(num)}
+                    disabled={num === curPos}
+                    style={{ width: 34, height: 34, background: num === curPos ? "rgba(255,255,255,0.02)" : "rgba(100,181,246,0.15)", border: `1px solid ${num === curPos ? C.border : C.blueBorder}`, borderRadius: 4, fontSize: 14, color: num === curPos ? C.textFaint : C.blue, cursor: num === curPos ? "default" : "pointer", fontWeight: "bold" }}>
+                    {num}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, highSpeedSelect: null } }))}
+                style={{ fontSize: 9, color: C.textFaint, background: "none", border: "none", cursor: "pointer" }}>キャンセル</button>
+            </div>
+          );
+        })()}
+
         {(canHoming || canBigPower || canUseWideShot || canUseHighSpeed) && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1, marginBottom: 5 }}>⚡ 弾幕スキル</div>
@@ -1565,9 +1594,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               </button>
             )}
             {canUseHighSpeed && (
-              <button onClick={() => tryApplyHighSpeed(attackerId, defenderId)}
-                style={{ ...btnFull("rgba(100,181,246,0.08)", C.blueBorder, C.blue), marginBottom: 4 }}>
-                ⚡ 高速移動
+              <button onClick={() => openHighSpeedSelect(attackerId)}
+                disabled={!attackerCellEmpty}
+                style={{ ...btnFull("rgba(100,181,246,0.18)", C.blueBorder, C.blue, { opacity: attackerCellEmpty ? 1 : 0.35 }), marginBottom: 4 }}>
+                ⚡ 高速移動{attackerCellEmpty ? "" : "（現在地に弾幕あり）"}
               </button>
             )}
           </div>
@@ -1690,7 +1720,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           const isNpcCoverDecision = isPc && b.startOrder === "pc" && hasNpcFamiliar && b.familiarAction === null;
           const isNpcAutoFamiliarCover = isPc && hasNpcFamiliar && b.familiarAction === "skip_to_cover";
           const blocked = isCoverDecision || isAutoFamiliarCover || isNpcCoverDecision || isNpcAutoFamiliarCover;
-          return canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && !blocked && (
+          return canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && !b.highSpeedSelect && !blocked && (
             <button
               onClick={() => {
                 upd(p => ({
@@ -2015,6 +2045,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           homingSelect: null,
           wideShotSelect: null,
           eraseSelect: null,
+          highSpeedSelect: null,
           spellChoose: null,
           lastSpellUsed: null,
           pendingSpell: null,
