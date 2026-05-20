@@ -930,7 +930,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
       const currentEntity = isPc ? p.pcs.find(x => x.uid === combatantId) : p.battle.participants.npcs.find(n => n.id === combatantId);
       const currentGraze = currentEntity.resources.グレイズ?.cur || 0;
-      const nextGraze = Math.min(currentEntity.resources.グレイズ?.max || 5, currentGraze + bulletsCleared);
+      const nextGraze = currentGraze + bulletsCleared;
       const currentDice = p.battle.currentEvadeDice ?? getDefaultEvadeDice(currentEntity);
       const nextDice = Math.max(0, currentDice - 1);
 
@@ -1107,7 +1107,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ fontSize: 32, color: "#fff", fontWeight: "bold", textShadow: `0 0 20px ${titleColor}55` }}>{combatant?.charName || combatant?.name}</div>
           <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
           {/* 使い魔: PC先攻のショット直前に援護射撃 or スキップ（→後でかばう自動発動）を確認 */}
-          {canProceed && isPc && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null && (
+          {canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null && (
             <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: C.blue, marginBottom: 4 }}>🐾 使い魔 — 援護射撃する？</div>
               <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>スキップすると後でかばうが自動発動します</div>
@@ -1125,12 +1125,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               </div>
             </div>
           )}
-          {isPc && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_cover" && (
+          {canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_cover" && (
             <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ かばうを後で自動発動します</div>
           )}
 
           {/* 使い魔: NPC先攻のショット直前に援護射撃 or スキップ（→後でかばう自動発動）を確認 */}
-          {canProceed && !isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === null && (
+          {canProceed && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === null && (
             <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: C.red, marginBottom: 4 }}>🐾 使い魔 — 援護射撃する？</div>
               <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>スキップすると後でかばうが自動発動します</div>
@@ -1152,7 +1152,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               </div>
             </div>
           )}
-          {!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === "skip_to_cover" && (
+          {canProceed && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === "skip_to_cover" && (
             <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ かばうを後で自動発動します</div>
           )}
 
