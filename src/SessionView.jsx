@@ -2059,6 +2059,86 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     );
   }
 
+  if (b.phase === "result") {
+    const isVictory  = b.result === "pc_win";
+    const isMass     = b.type === "mass";
+    const questId    = b.questId;
+    const relatedQ   = questId ? (gs.quests || []).find(q => String(q.id) === String(questId)) : null;
+
+    const finishBattle = () => {
+      upd(p => {
+        let nextQuests = p.quests || [];
+
+        if (isVictory && questId) {
+          nextQuests = nextQuests.map(q => String(q.id) === String(questId) ? { ...q, solved: true } : q);
+          const allScenarioQuests = p.scenarioData?.quests || [];
+          allScenarioQuests.forEach(scQ => {
+            if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(questId)) {
+              if (!nextQuests.find(nq => String(nq.id) === String(scQ.id))) {
+                nextQuests.push({ ...scQ, revealed: true, solved: false, clues: 0 });
+              }
+            }
+          });
+        }
+
+        const nextSessionPhase = (isVictory && isMass) ? "end" : "explore";
+        const logLine = isVictory
+          ? (isMass ? "🏆 最終決戦制覇！セッション終了！" : `🏆 弾幕ごっこ勝利！クエスト「${relatedQ?.name || ""}」が解決されました。`)
+          : (isMass ? "💀 最終決戦敗北...セッション終了。" : "💀 弾幕ごっこ敗北...探索フェイズへ戻ります。");
+
+        return {
+          ...p,
+          quests: nextQuests,
+          sessionPhase: nextSessionPhase,
+          battle: { ...p.battle, active: false },
+          log: [logLine, ...p.log]
+        };
+      });
+    };
+
+    const borderColor = isVictory ? C.gold : C.red;
+    const titleColor  = isVictory ? C.gold : C.red;
+    const title       = isVictory
+      ? (isMass ? "🏆 最終決戦制覇！" : "🎉 勝利！")
+      : (isMass ? "💀 最終決戦敗北..." : "💀 敗北...");
+
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+        <div style={{ background: "#0c1020", border: `2px solid ${borderColor}`, padding: 36, borderRadius: 10, maxWidth: 480, width: "90%", textAlign: "center" }}>
+          <div style={{ fontSize: 22, color: titleColor, fontWeight: "bold", marginBottom: 16, letterSpacing: 2 }}>{title}</div>
+
+          {isVictory && !isMass && relatedQ && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
+              <div style={{ fontSize: 11, color: C.gold, marginBottom: 4 }}>クエスト解決</div>
+              <div style={{ fontSize: 13, color: "#fff" }}>「{relatedQ.name}」</div>
+            </div>
+          )}
+
+          {isVictory && isMass && (
+            <div style={{ marginBottom: 14, fontSize: 12, color: C.textDim, lineHeight: 1.7 }}>
+              全ての強敵を撃破しました。<br />セッションが終了します。
+            </div>
+          )}
+
+          {!isVictory && (
+            <div style={{ marginBottom: 14, fontSize: 12, color: C.textDim }}>
+              {isMass ? "最終決戦に敗れました。セッションが終了します。" : "残念でした。探索フェイズへ戻ります。"}
+            </div>
+          )}
+
+          {isGm ? (
+            <button onClick={finishBattle}
+              style={btnFull(isVictory ? C.goldBg : C.redBg, isVictory ? C.goldDim : C.redBorder, isVictory ? C.gold : C.red)}>
+              {isMass ? "セッション終了" : "探索フェイズへ戻る"}
+            </button>
+          ) : (
+            <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (b.phase === "round_start") {
     const checkReset = () => {
       let nextActedPcs = b.actedPcs || [];
@@ -2248,6 +2328,61 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         )}
 
         {(b.phase === "pc_dropout" || b.phase === "npc_dropout") && renderDropout(b.phase === "pc_dropout")}
+
+        {b.phase === "cleanup" && (() => {
+          const allNpcsDead = aliveNpcs.length === 0;
+          const allPcsDead  = alivePcs.length === 0;
+
+          if (allNpcsDead) return (
+            <div style={{ background: "rgba(0,0,0,0.9)", padding: 20, borderRadius: 8, border: `2px solid ${C.gold}`, textAlign: "center" }}>
+              <div style={{ color: C.gold, fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>🎉 PC陣営の勝利！</div>
+              <div style={{ color: "#fff", fontSize: 11, marginBottom: 16 }}>全ての敵を撃破しました。</div>
+              {isGm && (
+                <button
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "result", result: "pc_win" } }))}
+                  style={btnFull(C.goldBg, C.goldDim, C.gold)}
+                >
+                  結果画面へ
+                </button>
+              )}
+              {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>}
+            </div>
+          );
+
+          if (allPcsDead) return (
+            <div style={{ background: "rgba(0,0,0,0.9)", padding: 20, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
+              <div style={{ color: C.red, fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>💀 NPC陣営の勝利...</div>
+              <div style={{ color: "#fff", fontSize: 11, marginBottom: 16 }}>全てのPCが脱落しました。</div>
+              {isGm && (
+                <button
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "result", result: "npc_win" } }))}
+                  style={btnFull(C.redBg, C.redBorder, C.red)}
+                >
+                  結果画面へ
+                </button>
+              )}
+              {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>}
+            </div>
+          );
+
+          return (
+            <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
+              <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了処理</div>
+              <div style={{ color: "#fff", fontSize: 11, marginBottom: 6 }}>
+                脱落者が出ましたが、戦闘は続きます。
+              </div>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 14 }}>
+                残存PC: {alivePcs.length}人 ／ 残存NPC: {aliveNpcs.length}体
+              </div>
+              {isGm && (
+                <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
+                  次ラウンドへ ⏭️
+                </button>
+              )}
+              {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMが次ラウンドを開始するのを待っています...</div>}
+            </div>
+          );
+        })()}
 
         {b.phase === "round_end_check" && (
           <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
@@ -2494,6 +2629,59 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── SessionEndView ───────────────────────────────────────────────
+export function SessionEndView({ gs, upd, isGm }) {
+  const isVictory = gs.battle?.result === "pc_win";
+  const pcs = gs.pcs || [];
+
+  return (
+    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+      <div style={{ background: "#0c1020", border: `2px solid ${isVictory ? C.gold : C.red}`, padding: 36, borderRadius: 10, maxWidth: 520, width: "90%", textAlign: "center" }}>
+        <div style={{ fontSize: 24, color: isVictory ? C.gold : C.red, fontWeight: "bold", marginBottom: 8, letterSpacing: 4 }}>
+          {isVictory ? "CLEAR" : "GAME OVER"}
+        </div>
+        <div style={{ fontSize: 13, color: C.textDim, marginBottom: 24 }}>
+          {isVictory ? "最終決戦を制覇しました。セッション終了です。" : "最終決戦に敗れました。セッション終了です。"}
+        </div>
+
+        {/* PC一覧サマリー */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 24 }}>
+          {pcs.map(pc => {
+            const lives = pc.resources?.残り人数?.cur ?? 0;
+            const spells = pc.resources?.スペルカード?.cur ?? 0;
+            const graze = pc.resources?.グレイズ?.cur ?? 0;
+            const isDead = lives <= 0;
+            return (
+              <div key={pc.uid} style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${isDead ? C.redBorder : C.border}`, borderRadius: 6, padding: "10px 14px", minWidth: 100 }}>
+                <div style={{ fontSize: 12, color: isDead ? C.red : C.text, fontWeight: "bold", marginBottom: 6 }}>{pc.charName}</div>
+                <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.8 }}>
+                  <div>残り人数: <span style={{ color: lives > 0 ? C.green : C.red }}>{lives}</span></div>
+                  <div>スペカ: <span style={{ color: C.blue }}>{spells}</span></div>
+                  <div>グレイズ: <span style={{ color: C.gold }}>{graze}</span></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {isGm && (
+          <button
+            onClick={() => {
+              if (window.confirm("セッションを終了しますか？ルームが閉じられます。")) {
+                upd(p => ({ ...p, sessionPhase: "ended", log: ["📖 セッション終了。", ...p.log] }));
+              }
+            }}
+            style={{ padding: "10px 24px", background: isVictory ? C.goldBg : C.redBg, border: `1px solid ${isVictory ? C.goldDim : C.redBorder}`, borderRadius: 6, color: isVictory ? C.gold : C.red, fontSize: 13, cursor: "pointer", letterSpacing: 1 }}
+          >
+            セッション終了
+          </button>
+        )}
+        {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMがセッションを終了するのを待っています...</div>}
       </div>
     </div>
   );

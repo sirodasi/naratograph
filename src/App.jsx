@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
-import { BackstoryScreen, BattleView, BonusPhaseView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildSpellCard } from "./SessionView";
+import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildSpellCard } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 
@@ -764,7 +764,9 @@ function SessionApp({ roomCode, user }) {
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        {gs.sessionPhase === "battle_bonus" ? (
+        {gs.sessionPhase === "end" ? (
+          <SessionEndView gs={gs} upd={upd} isGm={mode === "gm"} />
+        ) : gs.sessionPhase === "battle_bonus" ? (
           <BonusPhaseView
             gs={gs} upd={upd} user={user} isGm={mode === "gm"}
             animateDice={animateDice}
