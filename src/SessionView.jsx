@@ -1072,6 +1072,27 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const applyPcHit = (pcUid) => applyHit(true, pcUid);
   const applyNpcHit = (npcId) => applyHit(false, npcId);
 
+  // 低速弾: マス選択UIを開く（count>=2 のマスのみ保護可能）
+  const openSlowBulletSelect = (ownerId, targetId) => {
+    upd(p => ({ ...p, battle: { ...p.battle, slowBulletSelect: { ownerId, targetId } } }));
+  };
+
+  const confirmSlowBullet = (cellNum) => {
+    const sb = b.slowBulletSelect;
+    if (!sb) return;
+    upd(p => {
+      const grid = [...(p.battle.grids[sb.targetId] || [0,0,0,0,0,0])];
+      grid[cellNum - 1] = (grid[cellNum - 1] || 0) + 1;
+      const owner = p.pcs.find(x => x.uid === sb.ownerId) || p.battle.participants.npcs.find(n => n.id === sb.ownerId);
+      return {
+        ...p,
+        battle: { ...p.battle, grids: { ...p.battle.grids, [sb.targetId]: grid }, slowBulletSelect: null },
+        log: [`🐌 ${owner?.charName || owner?.name} の『低速弾』：${cellNum}番マスの弾幕を保護しました。`, ...p.log]
+      };
+    });
+    markDanmakuUsed(sb.ownerId, "低速弾");
+  };
+
   const handleCleanup = () => {
     upd(p => {
       const currentB = p.battle;
@@ -1099,6 +1120,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           wallPass: null,
           homingSelect: null,
           wideShotSelect: null,
+          slowBulletSelect: null,
           usedds: {},
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
@@ -2082,6 +2104,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           eraseSelect: null,
           highSpeedSelect: null,
           bigPowerSelect: null,
+          slowBulletSelect: null,
           spellChoose: null,
           lastSpellUsed: null,
           pendingSpell: null,
@@ -2234,31 +2257,52 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             {(() => {
               const pcId  = b.pcCombatant;
               const npcId = b.npcCombatant;
-              const showPcSlow  = (isGm || user.uid === pcId)  && hasOfficialSkill(combatantPc,  "低速弾") && !isDanmakuUsed(pcId,  "低速弾");
-              const showNpcSlow = isGm && hasOfficialSkill(combatantNpc, "低速弾") && !isDanmakuUsed(npcId, "低速弾");
-              const makeBtn = (owner, target, name, bg, border, col) => (
-                <button key={owner} onClick={() => {
-                    markDanmakuUsed(owner, "低速弾");
-                    const grid = [...(b.grids?.[target] || [0,0,0,0,0,0])];
-                    let maxIdx = -1, maxVal = -1;
-                    grid.forEach((v, i) => { if ((v||0) > maxVal) { maxVal = v; maxIdx = i; } });
-                    if (maxIdx >= 0 && maxVal > 0) {
-                      grid[maxIdx] += 1;  // cleanup の -1 と相殺して実質保護
-                      upd(p => ({ ...p,
-                        battle: { ...p.battle, grids: { ...p.battle.grids, [target]: grid } },
-                        log: [`🐌 ${name} の「低速弾」が発動：${maxIdx+1}番マスの弾幕を保持します。`, ...p.log]
-                      }));
-                    }
-                  }}
-                  style={{ ...btnFull(bg, border, col), marginBottom: 4 }}>
-                  🐌 低速弾（{name}）
-                </button>
-              );
+              const noSelect = !b.slowBulletSelect;
+              const showPcSlow  = noSelect && (isGm || user.uid === pcId)  && hasOfficialSkill(combatantPc,  "低速弾") && !isDanmakuUsed(pcId,  "低速弾");
+              const showNpcSlow = noSelect && isGm && hasOfficialSkill(combatantNpc, "低速弾") && !isDanmakuUsed(npcId, "低速弾");
+
+              // 選択UI
+              if (b.slowBulletSelect) {
+                const sb = b.slowBulletSelect;
+                const isOwner = isGm || user.uid === sb.ownerId;
+                const targetGrid = b.grids?.[sb.targetId] || [0,0,0,0,0,0];
+                if (!isOwner) return <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>🐌 相手が低速弾を選択中…</div>;
+                return (
+                  <div style={{ marginBottom: 10, padding: 10, background: "rgba(100,200,100,0.08)", border: `1px solid ${C.greenBorder}`, borderRadius: 5 }}>
+                    <div style={{ fontSize: 10, color: C.green, marginBottom: 6 }}>🐌 低速弾 — 保護するマスを選んでください（count≥2 のマスのみ有効）</div>
+                    <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 5 }}>
+                      {targetGrid.map((v, i) => {
+                        const canProtect = (v || 0) >= 2;
+                        return (
+                          <button key={i} onClick={() => canProtect && confirmSlowBullet(i + 1)}
+                            disabled={!canProtect}
+                            style={{ width: 34, height: 34, background: canProtect ? "rgba(100,200,100,0.2)" : "rgba(255,255,255,0.02)", border: `1px solid ${canProtect ? C.greenBorder : C.border}`, borderRadius: 4, fontSize: 13, color: canProtect ? C.green : C.textFaint, cursor: canProtect ? "pointer" : "default" }}>
+                            {i + 1}{v > 0 ? `(${v})` : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, slowBulletSelect: null } }))}
+                      style={{ fontSize: 9, color: C.textFaint, background: "none", border: "none", cursor: "pointer" }}>キャンセル</button>
+                  </div>
+                );
+              }
+
               return (showPcSlow || showNpcSlow) ? (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>⚡ 弾幕スキル（ラウンド終了時）</div>
-                  {showPcSlow  && makeBtn(pcId,  npcId, combatantPc?.charName  || "", "rgba(100,181,246,0.18)", C.blueBorder, C.blue)}
-                  {showNpcSlow && makeBtn(npcId, pcId,  combatantNpc?.name     || "", "rgba(255,100,100,0.18)", C.redBorder,  C.red)}
+                  {showPcSlow && (
+                    <button onClick={() => openSlowBulletSelect(pcId, npcId)}
+                      style={{ ...btnFull("rgba(100,181,246,0.18)", C.blueBorder, C.blue), marginBottom: 4 }}>
+                      🐌 低速弾（{combatantPc?.charName || ""}）
+                    </button>
+                  )}
+                  {showNpcSlow && (
+                    <button onClick={() => openSlowBulletSelect(npcId, pcId)}
+                      style={{ ...btnFull("rgba(255,100,100,0.18)", C.redBorder, C.red), marginBottom: 4 }}>
+                      🐌 低速弾（{combatantNpc?.name || ""}）
+                    </button>
+                  )}
                 </div>
               ) : null;
             })()}
@@ -2277,7 +2321,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                 )}
               </div>
             )}
-            {(isGm || user.uid === b.pcCombatant) && !b.pendingSpell && (
+            {(isGm || user.uid === b.pcCombatant) && !b.pendingSpell && !b.slowBulletSelect && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
           </div>
