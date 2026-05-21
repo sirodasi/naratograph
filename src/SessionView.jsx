@@ -440,7 +440,7 @@ export function buildSpellCard(card) {
     : card.name ?? (nameMatch ? nameMatch[1] : text.slice(0, 20));
 
   const parsed = parseSpell(text);
-  const structured = getSpellCardEffect(name) || null;
+  const structured = getSpellCardEffect((typeof card === "object" ? card.ref : null) || name) || null;
 
   // 構造化データの timing が round_end なら effectTiming に反映
   if (structured?.timing === "round_end") parsed.effectTiming = "round_end";
@@ -4772,8 +4772,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                                   },
                                   ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
                                   spellCards: [
-                                    { name: enemy.sc1name, desc: enemy.sc1effect },
-                                    { name: enemy.sc2name, desc: enemy.sc2effect }
+                                    { name: enemy.sc1name, desc: enemy.sc1effect, ref: enemy.sc1ref || "" },
+                                    { name: enemy.sc2name, desc: enemy.sc2effect, ref: enemy.sc2ref || "" }
                                   ].filter(s => s.name)
                                 }]
                               }

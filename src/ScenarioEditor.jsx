@@ -35,17 +35,16 @@ const AUTO_NOTE   = {
   manual:  "✕ GMが手動で処理してください",
 };
 
-function SpellCardEditor({ label, name, effect, mode = "custom", onChange, warn = false }) {
-  const structured = name ? SPELL_CARD_EFFECTS[name] : null;
+function SpellCardEditor({ label, name, effect, mode = "custom", cardRef = "", onChange, warn = false }) {
+  const structured = cardRef ? SPELL_CARD_EFFECTS[cardRef] : null;
 
   const handleModeChange = (m) => {
-    onChange({ name: "", effect: "", mode: m });
+    onChange({ name: "", effect: "", mode: m, ref: "" });
   };
 
-  const handleSelect = (cardName) => {
-    const eff = SPELL_CARD_EFFECTS[cardName];
-    const effText = eff ? (eff.steps || []).map(summarizeStep).join(" / ") + (eff.note ? `\n${eff.note}` : "") : "";
-    onChange({ name: cardName, effect: effText, mode: "existing" });
+  const handleSelectRef = (refKey) => {
+    // 効果を選択 → 名前はデフォルトでカード名をセット（あとから自由に変更可）
+    onChange({ name: refKey, effect: "", mode: "existing", ref: refKey });
   };
 
   return (
@@ -72,8 +71,10 @@ function SpellCardEditor({ label, name, effect, mode = "custom", onChange, warn 
 
       {mode === "existing" ? (
         <div>
-          <select style={{ ...iBase, marginBottom: 4 }} value={name || ""} onChange={e => handleSelect(e.target.value)}>
-            <option value="">スペルカードを選択…</option>
+          {/* 効果選択 */}
+          <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 2 }}>効果</div>
+          <select style={{ ...iBase, marginBottom: 6 }} value={cardRef || ""} onChange={e => handleSelectRef(e.target.value)}>
+            <option value="">効果を選択…</option>
             {["full", "partial", "manual"].map(al => {
               const cards = SPELL_CARD_LIST.filter(c => c.auto === al);
               if (!cards.length) return null;
@@ -84,7 +85,16 @@ function SpellCardEditor({ label, name, effect, mode = "custom", onChange, warn 
               );
             })}
           </select>
-          {name && structured && (
+          {/* 名前（自由入力） */}
+          <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 2 }}>スペルカード名（自由に変更可）</div>
+          <input
+            style={{ ...iBase, marginBottom: cardRef ? 4 : 0 }}
+            value={name || ""}
+            onChange={e => onChange({ name: e.target.value, effect, mode: "existing", ref: cardRef })}
+            placeholder="スペルカード名（任意）"
+          />
+          {/* 効果プレビュー */}
+          {cardRef && structured && (
             <div style={{ padding: "5px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 3, fontSize: 9, lineHeight: 1.7 }}>
               <span style={{ color: AUTO_COLOR[structured.auto], fontWeight: "bold" }}>
                 ● {AUTO_LABEL[structured.auto]}
@@ -108,13 +118,13 @@ function SpellCardEditor({ label, name, effect, mode = "custom", onChange, warn 
           <input
             style={{ ...iBase, marginBottom: 4 }}
             value={name || ""}
-            onChange={e => onChange({ name: e.target.value, effect, mode: "custom" })}
+            onChange={e => onChange({ name: e.target.value, effect, mode: "custom", ref: "" })}
             placeholder="スペルカード名（任意）"
           />
           <textarea
             style={{ ...iBase, height: 44, resize: "vertical" }}
             value={effect || ""}
-            onChange={e => onChange({ name, effect: e.target.value, mode: "custom" })}
+            onChange={e => onChange({ name, effect: e.target.value, mode: "custom", ref: "" })}
             placeholder="効果テキスト（任意）"
           />
           {name && (
@@ -134,10 +144,16 @@ function Chip({label,color="#c8a040"}) {
   return <span style={{display:"inline-block",padding:"1px 7px",background:`${color}18`,border:`1px solid ${color}50`,borderRadius:10,fontSize:9,color,marginRight:4,marginBottom:2}}>{label}</span>;
 }
 
-// ── スペルカード効果リスト（選択UI用） ──────────────────
-const SPELL_CARD_LIST = Object.entries(SPELL_CARD_EFFECTS).map(([name, data]) => ({
-  name, auto: data.auto, steps: data.steps || [], note: data.note || "",
-}));
+// ── スペルカード効果リスト（選択UI用・効果重複を除外） ──
+const _seenEffects = new Set();
+const SPELL_CARD_LIST = Object.entries(SPELL_CARD_EFFECTS)
+  .map(([name, data]) => ({ name, auto: data.auto, steps: data.steps || [], note: data.note || "", timing: data.timing || "" }))
+  .filter(c => {
+    const key = JSON.stringify(c.steps) + "|" + c.timing;
+    if (_seenEffects.has(key)) return false;
+    _seenEffects.add(key);
+    return true;
+  });
 
 function summarizeStep(s) {
   const c = typeof s.count === "object" ? "X" : (s.count ?? 1);
@@ -186,8 +202,8 @@ const EMPTY_ENEMY = () => ({
   spellcard: 1,    // スペルカード
   attack: 5,       // 攻撃力
   ds: { type: "none", name: "", desc: "", customName: "" },
-  sc1name: "", sc1effect: "", sc1mode: "custom",
-  sc2name: "", sc2effect: "", sc2mode: "custom",
+  sc1name: "", sc1effect: "", sc1mode: "custom", sc1ref: "",
+  sc2name: "", sc2effect: "", sc2mode: "custom", sc2ref: "",
 });
 
 const EMPTY_QUEST = () => ({
@@ -451,9 +467,10 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   <SpellCardEditor
                     label="スペルカード①（任意）"
                     name={en.sc1name || ""} effect={en.sc1effect || ""} mode={sc1mode}
+                    cardRef={en.sc1ref || ""}
                     warn={sc1partial}
-                    onChange={({ name, effect, mode }) => onChange({
-                      ...quest, enemy: { ...en, sc1name: name, sc1effect: effect, sc1mode: mode }
+                    onChange={({ name, effect, mode, ref }) => onChange({
+                      ...quest, enemy: { ...en, sc1name: name, sc1effect: effect, sc1mode: mode, sc1ref: ref || "" }
                     })}
                   />
                 </div>
@@ -463,9 +480,10 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   <SpellCardEditor
                     label="スペルカード②（任意）"
                     name={en.sc2name || ""} effect={en.sc2effect || ""} mode={sc2mode}
+                    cardRef={en.sc2ref || ""}
                     warn={sc2partial}
-                    onChange={({ name, effect, mode }) => onChange({
-                      ...quest, enemy: { ...en, sc2name: name, sc2effect: effect, sc2mode: mode }
+                    onChange={({ name, effect, mode, ref }) => onChange({
+                      ...quest, enemy: { ...en, sc2name: name, sc2effect: effect, sc2mode: mode, sc2ref: ref || "" }
                     })}
                   />
                 </div>
@@ -779,14 +797,16 @@ function ScenarioForm({ initial, onSave, onCancel }) {
                       name={en.sc1name || ""}
                       effect={en.sc1effect || ""}
                       mode={sc1mode}
-                      onChange={({ name, effect, mode }) => updateFinalEnemy(i, { ...en, sc1name: name, sc1effect: effect, sc1mode: mode })}
+                      cardRef={en.sc1ref || ""}
+                      onChange={({ name, effect, mode, ref }) => updateFinalEnemy(i, { ...en, sc1name: name, sc1effect: effect, sc1mode: mode, sc1ref: ref || "" })}
                     />
                     <SpellCardEditor
                       label="スペルカード②（任意）"
                       name={en.sc2name || ""}
                       effect={en.sc2effect || ""}
                       mode={sc2mode}
-                      onChange={({ name, effect, mode }) => updateFinalEnemy(i, { ...en, sc2name: name, sc2effect: effect, sc2mode: mode })}
+                      cardRef={en.sc2ref || ""}
+                      onChange={({ name, effect, mode, ref }) => updateFinalEnemy(i, { ...en, sc2name: name, sc2effect: effect, sc2mode: mode, sc2ref: ref || "" })}
                     />
                   </div>
                 </div>

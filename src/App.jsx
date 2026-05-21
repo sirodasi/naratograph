@@ -513,8 +513,8 @@ function SessionApp({ roomCode, user }) {
             },
             ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
             spellCards: [
-              { name: enemy.sc1name, desc: enemy.sc1effect },
-              { name: enemy.sc2name, desc: enemy.sc2effect }
+              { name: enemy.sc1name, desc: enemy.sc1effect, ref: enemy.sc1ref || "" },
+              { name: enemy.sc2name, desc: enemy.sc2effect, ref: enemy.sc2ref || "" }
             ].filter(s => s.name)
           }]
         }
@@ -670,8 +670,8 @@ function SessionApp({ roomCode, user }) {
       },
       ds: en.ds ?? { name: en.dsName || en.dsCustomName || "", desc: en.dsDesc || "" },
       spellCards: [
-        { name: en.sc1name, desc: en.sc1effect },
-        { name: en.sc2name, desc: en.sc2effect }
+        { name: en.sc1name, desc: en.sc1effect, ref: en.sc1ref || "" },
+        { name: en.sc2name, desc: en.sc2effect, ref: en.sc2ref || "" }
       ].filter(s => s.name)
     }));
 
