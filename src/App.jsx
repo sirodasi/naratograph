@@ -442,9 +442,13 @@ function SessionApp({ roomCode, user }) {
   }
 
   const upd = useCallback((fn) => {
+    let fired = false;
     setGs(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
-      set(ref(db, gsPath), next).catch(console.error);
+      if (!fired) {
+        fired = true;
+        set(ref(db, gsPath), next).catch(console.error);
+      }
       return next;
     });
   }, [gsPath]);

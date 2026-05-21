@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CharSprite } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
@@ -170,9 +170,15 @@ const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6",
 // ─── BackstoryScreen ──────────────────────────────────────────────
 export function BackstoryScreen({ gs, isGm, onProceed }) {
   const [visible, setVisible] = useState(false);
+  const proceeding = useRef(false);
   useEffect(() => { setTimeout(() => setVisible(true), 100); },[]);
+  const handleClick = () => {
+    if (!isGm || proceeding.current) return;
+    proceeding.current = true;
+    onProceed();
+  };
   return (
-    <div style={{ background: "#04060a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", cursor: "pointer", padding: "40px 60px", boxSizing: "border-box" }} onClick={isGm ? onProceed : undefined}>
+    <div style={{ background: "#04060a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", cursor: "pointer", padding: "40px 60px", boxSizing: "border-box" }} onClick={handleClick}>
       <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } } @keyframes pulse { 0%,100% { opacity: 0.5 } 50% { opacity: 1 } }`}</style>
       <div style={{ maxWidth: 760, animation: "fadeIn 1.2s ease", opacity: visible ? 1 : 0, transition: "opacity 1s" }}>
         <div style={{ fontSize: 11, color: "#4a6080", letterSpacing: 4, textAlign: "center", marginBottom: 16 }}>{gs.scenarioData?.name || "シナリオ"}</div>
@@ -4824,12 +4830,13 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     if (!sceneSelect) return;
     const targetPc = gs.pcs.find(p => p.uid === sceneSelect);
     if (!targetPc) return;
+    const selectedUid = sceneSelect;
+    setSceneSelect(""); // upd()より先にクリアして二重起動を防ぐ
     upd(p => ({
       ...p,
-      currentScene: { pcUid: sceneSelect, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2 },
+      currentScene: { pcUid: selectedUid, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2 },
       log:[`🎬 ${targetPc.charName} のシーンが開始された`, ...p.log],
     }));
-    setSceneSelect("");
   };
 
   const unactedPcs = (gs.pcs || []).filter(pc => !(gs.actedPcs ||[]).includes(pc.uid));
