@@ -20,7 +20,7 @@ const C = {
 };
 const iBase = { padding:"5px 8px", fontSize:11, background:"rgba(255,255,255,0.04)",
   border:`1px solid ${C.border}`, color:C.text, borderRadius:3, boxSizing:"border-box", width:"100%" };
-const taBase = { ...iBase, resize:"vertical", fontFamily:"serif" };
+const taBase = { ...iBase, resize:"vertical", fontFamily:"'Noto Serif JP', serif" };
 function SecTitle({children}) {
   return <div style={{fontSize:9,color:C.textFaint,letterSpacing:2,borderBottom:`1px solid #111828`,paddingBottom:3,marginBottom:8,marginTop:12}}>{children}</div>;
 }
@@ -384,7 +384,7 @@ function ScenarioForm({ initial, onSave, onCancel }) {
   };
 
   return (
-    <div style={{ background:BG, minHeight:"100vh", fontFamily:"serif", color:C.text, padding:16 }}>
+    <div style={{ background:BG, minHeight:"100vh", fontFamily:"'Noto Serif JP', serif", color:C.text, padding:16 }}>
       <style>{`::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a} button:hover{opacity:0.85} input,textarea,select{outline:none}`}</style>
 
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
@@ -763,7 +763,7 @@ function ProfilePage({ onClose }) {
   const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"]];
 
   return(
-    <div style={{background:BG,minHeight:"100vh",fontFamily:"serif",color:C.text,padding:16}}>
+    <div style={{background:BG,minHeight:"100vh",fontFamily:"'Noto Serif JP', serif",color:C.text,padding:16}}>
       <style>{`::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1a1e2a} button:hover{opacity:0.85} input{outline:none}`}</style>
 
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>

@@ -1,31 +1,33 @@
 export const C = {
-  bg:          "#06080f",
-  card:        "rgba(255,255,255,0.03)",
-  border:      "#1a2535",
- 
-  gold:        "#c8a040",
-  goldDim:     "#8b6914",
-  goldBg:      "rgba(200,160,64,0.12)",
- 
-  red:         "#e07060",
-  redBg:       "rgba(192,57,43,0.18)",
-  redBorder:   "#8b1a1a",
- 
-  blue:        "#64b5f6",
-  blueBg:      "rgba(25,118,210,0.15)",
-  blueBorder:  "#0d47a1",
- 
+  bg:          "#07050e",
+  card:        "rgba(255,255,255,0.04)",
+  border:      "#1e1430",
+
+  gold:        "#d4a838",
+  goldDim:     "#9a7828",
+  goldBg:      "rgba(212,168,56,0.12)",
+
+  red:         "#d05040",
+  redBg:       "rgba(155,32,32,0.20)",
+  redBorder:   "#7a1818",
+
+  blue:        "#7090e0",
+  blueBg:      "rgba(45,50,170,0.16)",
+  blueBorder:  "#28288a",
+
   green:       "#4caf50",
   greenBg:     "rgba(27,94,32,0.15)",
   greenBorder: "#1b5e20",
- 
-  purple:      "#ce93d8",
- 
+
+  purple:      "#c090e0",
+
+  sakura:      "#e8a0b8",
+
   text:        "#c8b89a",
-  textDim:     "#8a9aaa",
-  textFaint:   "#5a6575",
+  textDim:     "#9288b0",
+  textFaint:   "#584868",
 };
- 
+
 export const btn = (bg, border, color, extra = {}) => ({
   cursor:      "pointer",
   borderRadius: 4,
@@ -38,13 +40,13 @@ export const btn = (bg, border, color, extra = {}) => ({
   color,
   ...extra,
 });
- 
+
 export const iStyle = {
   padding:    "5px 8px",
   fontSize:   12,
   background: "rgba(255,255,255,0.04)",
-  border:     `1px solid #1a2535`,
-  color:      "#c8b89a",
+  border:     `1px solid ${C.border}`,
+  color:      C.text,
   borderRadius: 3,
   width:      "100%",
   boxSizing:  "border-box",

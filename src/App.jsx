@@ -155,7 +155,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         </div>
         {gs.sceneText && (
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px" }}>
-            <div style={{ fontSize: 14, color: "#c8b89a", lineHeight: 2.1, fontFamily: "serif", whiteSpace: "pre-wrap" }}>{gs.sceneText}</div>
+            <div style={{ fontSize: 14, color: "#c8b89a", lineHeight: 2.1, fontFamily: "'Noto Serif JP', serif", whiteSpace: "pre-wrap" }}>{gs.sceneText}</div>
           </div>
         )}
       </div>
@@ -725,7 +725,7 @@ function SessionApp({ roomCode, user }) {
   // ─── レンダリング ────────────────────────────────────────────
 
   if (!mode) return (
-    <div style={{ background: "#040608", color: "#c8b89a", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "serif" }}>
+    <div style={{ background: "#040608", color: "#c8b89a", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 22, color: "#c8a040", letterSpacing: 4, marginBottom: 20 }}>幻想ナラトグラフ</div>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
@@ -737,7 +737,7 @@ function SessionApp({ roomCode, user }) {
   );
 
   if (!synced) return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#3a4a5a", fontFamily: "serif", fontSize: 12 }}>Firebase に接続中…</div>
+    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#3a4a5a", fontFamily: "'Noto Serif JP', serif", fontSize: 12 }}>Firebase に接続中…</div>
   );
 
   if (gs.sessionPhase === "intro") {
@@ -747,7 +747,7 @@ function SessionApp({ roomCode, user }) {
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "serif" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Noto Serif JP', serif" }}>
       <style>{`
         ::-webkit-scrollbar { width: 3px }
         ::-webkit-scrollbar-thumb { background: #1a1e2a }
@@ -837,7 +837,7 @@ function SessionApp({ roomCode, user }) {
 }
 
 const LoadingScreen = ({ message, color = "#3a4a5a" }) => (
-  <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color, fontFamily: "serif", fontSize: 12 }}>{message}</div>
+  <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color, fontFamily: "'Noto Serif JP', serif", fontSize: 12 }}>{message}</div>
 );
 
 export default function App() {

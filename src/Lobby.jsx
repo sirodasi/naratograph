@@ -61,7 +61,7 @@ function LoginScreen() {
   };
 
   return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "serif", color: C.text }}>
+    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
       <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } } button:hover { opacity: 0.82 }`}</style>
       <div style={{ textAlign: "center", animation: "fadeUp 0.5s ease" }}>
         <div style={{ fontSize: 9, letterSpacing: 7, color: C.textFaint, marginBottom: 6 }}>TRPG SESSION SUPPORT</div>
@@ -90,7 +90,7 @@ function UsernameSetup({ user, onDone }) {
   };
 
   return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "serif", color: C.text }}>
+    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
       <div style={{ textAlign: "center", maxWidth: 320 }}>
         <div style={{ fontSize: 20, color: C.gold, letterSpacing: 3, marginBottom: 4 }}>幻想ナラトグラフ</div>
         <div style={{ fontSize: 11, color: C.textDim, marginBottom: 24 }}>セッションで使用する名前を設定してください</div>
@@ -156,7 +156,7 @@ function Lobby({ user, displayName, onProfile }) {
   };
 
   return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "serif", color: C.text }}>
+    <div style={{ background: "#040608", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
       <style>{`button:hover { opacity: 0.82 }`}</style>
 
       <div style={{ textAlign: "center", marginBottom: 32 }}>
@@ -354,7 +354,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
 
   // ローカルスタイル定数
   const S = {
-    root: { background: C.bg, minHeight: "100vh", fontFamily: "serif", color: C.text, padding: 16 },
+    root: { background: C.bg, minHeight: "100vh", fontFamily: "'Noto Serif JP', serif", color: C.text, padding: 16 },
     card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: 16, marginBottom: 12 },
     h2:   { fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 10 },
     sec:  { fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8, marginTop: 6 },
@@ -717,7 +717,7 @@ export default function LobbyRoot() {
   }, [roomFromUrl, user]);
 
   if (user === undefined) return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.textFaint, fontFamily: "serif", fontSize: 12 }}>接続中…</div>
+    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.textFaint, fontFamily: "'Noto Serif JP', serif", fontSize: 12 }}>接続中…</div>
   );
   if (!user) return <LoginScreen />;
   if (!displayName) return (
@@ -730,7 +730,7 @@ export default function LobbyRoot() {
   // URLに部屋コードあり
   if (roomFromUrl) {
     if (roomPhase === null) return (
-      <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.textFaint, fontFamily: "serif", fontSize: 12 }}>部屋情報を取得中…</div>
+      <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.textFaint, fontFamily: "'Noto Serif JP', serif", fontSize: 12 }}>部屋情報を取得中…</div>
     );
     if (roomPhase === "prep") return <PrepRoom roomCode={roomFromUrl} user={user} displayName={displayName} isGm={isGm} />;
     // explore 以降は App.jsx の SessionApp が担当
