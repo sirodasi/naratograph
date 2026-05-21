@@ -3,6 +3,8 @@ import { CharSprite } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
+import { getSpellCardEffect } from "./data/spellCardEffects";
+import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps } from "./data/effectHandlers";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
@@ -437,11 +439,18 @@ export function buildSpellCard(card) {
     ? (nameMatch ? nameMatch[1] : text.slice(0, 20))
     : card.name ?? (nameMatch ? nameMatch[1] : text.slice(0, 20));
 
+  const parsed = parseSpell(text);
+  const structured = getSpellCardEffect(name) || null;
+
+  // 構造化データの timing が round_end なら effectTiming に反映
+  if (structured?.timing === "round_end") parsed.effectTiming = "round_end";
+
   return {
     ...card,
     name,
     text,
-    ...parseSpell(text),
+    ...parsed,
+    structured,
   };
 }
 
@@ -650,6 +659,83 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ...n, resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: Math.max(0, (n.resources.スペルカード?.cur || 0) - 1) } }
         })}}};
 
+    const attackerName = isPcAttacker ? combatantPc?.charName : combatantNpc?.name;
+
+    // ── 構造化データによる自動処理（auto: "full"） ────────────────────────
+    const structured = spellCard.structured;
+    if (structured?.auto === "full" && structured.steps?.length > 0) {
+      // round_end: pendingSpell として保存し、ラウンド終了時に applyPendingSpell で処理
+      if (structured.timing === "round_end") {
+        upd(p => ({
+          ...consumeSpell(p),
+          battle: { ...p.battle, pendingSpell: { ...spellCard, attackerId, defenderId, attPos, defPos } },
+          log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
+        }));
+        return;
+      }
+
+      // 全ステップを処理（決定論的ステップは即時適用、ランダムステップはダイス後）
+      let defGrid = [...(b.grids?.[defenderId] || [0,0,0,0,0,0])];
+      let atkGrid = [...(b.grids?.[attackerId] || [0,0,0,0,0,0])];
+      const randomHints = [];
+      let totalDice = 0;
+      let hasChoiceStep = false;
+
+      for (const step of structured.steps) {
+        const result = applyStep(step, defGrid, atkGrid, attPos, defPos);
+        defGrid = result.defGrid;
+        atkGrid = result.atkGrid;
+        if (result.needsChoice) { hasChoiceStep = true; break; }
+        if (result.needsDice) {
+          randomHints.push(result);
+          totalDice += result.diceCount;
+        }
+      }
+
+      if (!hasChoiceStep && randomHints.length === 0) {
+        // 完全決定論的
+        upd(p => ({
+          ...consumeSpell(p),
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
+            lastSpellUsed: spellCard.name,
+          },
+          log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+        }));
+        return;
+      }
+
+      if (!hasChoiceStep && totalDice > 0) {
+        // ランダムステップあり: deterministic 部分は適用済み、残りはダイス
+        const snapDef = defGrid;
+        const snapAtk = atkGrid;
+        upd(p => consumeSpell(p));
+        animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
+          let finalDef = [...snapDef];
+          let offset = 0;
+          for (const hint of randomHints) {
+            const batch = res.slice(offset, offset + hint.diceCount);
+            offset += hint.diceCount;
+            const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
+            finalDef = nextDef;
+          }
+          upd(p => ({
+            ...p,
+            battle: {
+              ...p.battle,
+              grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
+              lastSpellUsed: spellCard.name,
+            },
+            log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+          }));
+        });
+        return;
+      }
+      // hasChoiceStep は以下の既存ロジックへフォールスルー
+    }
+
+    // ── 既存のテキスト解析ベース処理 ─────────────────────────────────────
     const nonRandomEffects = spellCard.effects.filter(e => e.type !== "RANDOM" && e.type !== "CHOOSE");
     const hasRandom = spellCard.effects.some(e => e.type === "RANDOM");
     const hasChoose = spellCard.effects.some(e => e.type === "CHOOSE");
@@ -658,8 +744,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (spellCard.effectTiming === "round_end") {
       upd(p => ({
         ...consumeSpell(p),
-        battle: { ...p.battle, pendingSpell: { ...spellCard, attackerId, defenderPos: defPos } },
-        log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
+        battle: { ...p.battle, pendingSpell: { ...spellCard, attackerId, defenderId, attPos, defPos, defenderPos: defPos } },
+        log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
       }));
       return;
     }
@@ -673,7 +759,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           lastSpellUsed: spellCard.name,
           manualSpell: { ...spellCard, attackerId, defenderId, defenderPos: defPos }
         },
-        log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
+        log: [`🔮 ${attackerName}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
       }));
       return;
     }
@@ -693,7 +779,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
           lastSpellUsed: spellCard.name,
         },
-        log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
+        log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
       }));
       return;
     }
@@ -709,13 +795,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             grids: { ...p.battle.grids, [defenderId]: updatedGrid.map((v, i) => v + (gridPatch[defenderId]?.[i] || 0)), },
             lastSpellUsed: spellCard.name,
           },
-          log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！`, ...p.log],
+          log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
         }));
       });
       return;
     }
 
-    // 完全自動
+    // 完全自動（テキスト解析）
     upd(p => ({
       ...consumeSpell(p),
       battle: {
@@ -723,7 +809,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         grids: { ...p.battle.grids, [defenderId]: updatedGrid },
         lastSpellUsed: spellCard.name,
       },
-      log: [`🔮 ${isPcAttacker ? combatantPc?.charName : combatantNpc?.name}：${spellCard.name}！`, ...p.log],
+      log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
     }));
   };
 
@@ -763,8 +849,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const applyPendingSpell = () => {
     const ps = b.pendingSpell;
     if (!ps) return;
+
+    // 構造化データがある場合はステップを適用
+    if (ps.structured?.auto === "full" && ps.structured.steps?.length > 0) {
+      let defGrid = [...(b.grids?.[ps.defenderId] || [0,0,0,0,0,0])];
+      let atkGrid = [...(b.grids?.[ps.attackerId] || [0,0,0,0,0,0])];
+      for (const step of ps.structured.steps) {
+        const result = applyStep(step, defGrid, atkGrid, ps.attPos || 1, ps.defPos || 1);
+        defGrid = result.defGrid;
+        atkGrid = result.atkGrid;
+      }
+      upd(p => ({
+        ...p,
+        battle: {
+          ...p.battle,
+          grids: { ...p.battle.grids, [ps.defenderId]: defGrid, [ps.attackerId]: atkGrid },
+          pendingSpell: null,
+        },
+        log: [`⏰ ${ps.name} の効果が発動した`, ...p.log],
+      }));
+      return;
+    }
+
+    // 既存の処理（テキスト解析ベースまたは手動）
     const grid = b.grids?.[ps.attackerId] || [0,0,0,0,0,0];
-    // manual のものはテキスト表示のみ（グリッド変更なし）
     upd(p => ({
       ...p,
       battle: {
