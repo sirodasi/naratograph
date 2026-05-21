@@ -1253,13 +1253,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canProceed = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
 
     return (
-      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
-        <div style={{ textAlign: "center", animation: "fadeUp 0.8s ease" }}>
-          <SpellCard color={titleColor} style={{ marginBottom: 16, display: "inline-block", minWidth: 260 }}>
-            <div style={{ textAlign: "center", padding: "12px 28px" }}>
-              <div style={{ fontSize: 9, color: titleColor, letterSpacing: 6, marginBottom: 10 }}>{title}</div>
-              <div style={{ fontSize: 30, color: "#fff", fontWeight: 700, textShadow: `0 0 28px ${titleColor}66` }}>{combatant?.charName || combatant?.name}</div>
-              <div style={{ fontSize: 12, color: C.textDim, marginTop: 8, letterSpacing: 2 }}>のショットステップ</div>
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", animation: "fadeUp 0.6s ease", width: "100%", maxWidth: 460 }}>
+          <SpellCard color={titleColor} style={{ marginBottom: 14, minWidth: 260 }}>
+            <div style={{ textAlign: "center", padding: "10px 24px" }}>
+              <div style={{ fontSize: 9, color: titleColor, letterSpacing: 6, marginBottom: 8 }}>{title}</div>
+              <div style={{ fontSize: 26, color: "#fff", fontWeight: 700, textShadow: `0 0 24px ${titleColor}66` }}>{combatant?.charName || combatant?.name}</div>
+              <div style={{ fontSize: 11, color: C.textDim, marginTop: 6, letterSpacing: 2 }}>のショットステップ</div>
             </div>
           </SpellCard>
           {/* 使い魔: PC先攻のショット直前に援護射撃 or スキップ（→後でかばう自動発動）を確認 */}
@@ -2478,10 +2478,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   }
 
   return (
-    <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: 20, boxSizing: "border-box", gap: 30 }}>
+    <div style={{ width: "100%", minHeight: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
       <BattleDiceTray diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} label={gs.dice?.label} />
-      
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 15, flexWrap: "wrap", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 20 }}>
+
+      {/* フェーズバッジ（最上部・グリッドと重ならない） */}
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "rgba(8,6,18,0.95)",
+          border: `1px solid ${C.goldDim}`,
+          color: C.gold,
+          padding: "5px 22px",
+          borderRadius: 2,
+          fontSize: 11,
+          fontWeight: "bold",
+          letterSpacing: 3,
+          boxShadow: `0 0 18px ${C.gold}22`,
+        }}>
+          <span style={{ color: C.textDim, fontSize: 9, letterSpacing: 2 }}>Rd.{b.round || 1}</span>
+          <span style={{ color: C.goldDim }}>◆</span>
+          <span>{PHASE_LABELS[b.phase] || b.phase}</span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 15, flexWrap: "wrap" }}>
         {npcs.map(n => {
           const isCombatant = b.npcCombatant === n.id;
           
@@ -2520,24 +2540,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         })}
       </div>
 
-      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 10,
-          background: "rgba(8,6,18,0.95)",
-          border: `1px solid ${C.goldDim}`,
-          color: C.gold,
-          padding: "5px 18px",
-          borderRadius: 2,
-          fontSize: 11,
-          fontWeight: "bold",
-          letterSpacing: 3,
-          boxShadow: `0 0 20px rgba(0,0,0,0.8), 0 0 12px ${C.gold}22`,
-        }}>
-          <span style={{ color: C.textDim, fontSize: 9, letterSpacing: 2 }}>Rd.{b.round || 1}</span>
-          <span style={{ color: C.goldDim }}>◆</span>
-          <span>{PHASE_LABELS[b.phase] || b.phase}</span>
-        </div>
+      {/* 装飾セパレータ（NPC ↔ パネル間） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 8px" }}>
+        <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${C.goldDim}66, transparent)` }} />
+        <span style={{ color: C.goldDim, fontSize: 10 }}>◆</span>
+        <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${C.goldDim}66, transparent)` }} />
+      </div>
 
+      {/* 中央フェーズパネル */}
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 520, display: "flex", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
         {(b.phase === "pc_shot_intro" || b.phase === "npc_shot_intro") && renderShotIntro(b.phase === "pc_shot_intro")}
 
         {(b.phase === "pc_shot_roll" || b.phase === "npc_shot_roll") && renderShotRoll(b.phase === "pc_shot_roll")}
@@ -2688,9 +2700,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             )}
           </SpellCard>
         )}
+        </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", gap: 20 }}>
+      {/* 装飾セパレータ（パネル ↔ PC 間） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 8px" }}>
+        <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${C.goldDim}66, transparent)` }} />
+        <span style={{ color: C.goldDim, fontSize: 10 }}>◆</span>
+        <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${C.goldDim}66, transparent)` }} />
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center", gap: 20, flexWrap: "wrap" }}>
         {pcs.map(p => {
           const isCombatant = b.pcCombatant === p.uid;
           const isMyTurn = p.uid === user.uid || isGm;

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { db, auth } from "./firebase";
 import { ref, onValue, set, update, push, remove } from "firebase/database";
 import { btn } from "./styles/colors";
-import { OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
+import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
 
 // キャラクター名一覧（選択不可設定用・循環import回避のため独立定義）
 const CHAR_NAMES = ["博麗霊夢", "霧雨魔理沙", "チルノ", "紅美鈴", "パチュリー・ノーレッジ", "十六夜咲夜", "レミリア・スカーレット", "フランドール・スカーレット", "アリス・マーガトロイド", "魂魄妖夢", "西行寺幽々子", "八雲藍", "八雲紫", "伊吹萃香", "鈴仙・優曇華院・イナバ", "八意永琳", "蓬莱山輝夜", "藤原妹紅", "射命丸文", "風見幽香", "小野塚小町", "河城にとり", "東風谷早苗", "八坂神奈子", "洩矢諏訪子", "比那名居天子", "星熊勇儀", "古明地さとり", "火焔猫燐", "霊烏路空", "古明地こいし", "ナズーリン", "多々良小傘", "村紗水蜜", "聖白蓮", "封獣ぬえ", "姫海棠はたて", "霍青娥", "物部布都", "豊聡耳神子", "二ツ岩マミゾウ", "秦こころ", "鬼人正邪", "少名針妙丸", "宇佐見菫子", "茨木華扇", "ドレミー・スイート", "クラウンピース", "高麗野あうん", "摩多羅隠岐奈", "依神女苑", "依神紫苑", "庭渡久侘歌", "吉弔八千慧", "埴安神袿姫", "驪駒早鬼", "管牧典", "天弓千亦", "饕餮尤魔", "日白残無"];
@@ -214,8 +214,11 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   <input style={iBase} value={quest.specifiedTag} onChange={e => upd("specifiedTag",e.target.value)} placeholder="例: 妖怪・巫女"/>
                 </div>
                 <div>
-                  <Label>解決場所（スポットID）</Label>
-                  <input style={iBase} value={quest.location} onChange={e => upd("location",e.target.value)} placeholder="例: 11"/>
+                  <Label>解決場所</Label>
+                  <select style={iBase} value={quest.location || ""} onChange={e => upd("location", e.target.value)}>
+                    <option value="">スポットを選択…</option>
+                    {SPOTS.map(s => <option key={s.id} value={s.id}>{s.name}（{s.id}）</option>)}
+                  </select>
                 </div>
               </div>
             </div>
@@ -313,8 +316,11 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
 
                 {/* 解決場所 */}
                 <div style={{ marginTop:8 }}>
-                  <Label>解決場所（スポットID）</Label>
-                  <input style={{...iBase,width:80}} value={quest.location} onChange={e => upd("location",e.target.value)} placeholder="例: 11"/>
+                  <Label>解決場所</Label>
+                  <select style={iBase} value={quest.location || ""} onChange={e => upd("location", e.target.value)}>
+                    <option value="">スポットを選択…</option>
+                    {SPOTS.map(s => <option key={s.id} value={s.id}>{s.name}（{s.id}）</option>)}
+                  </select>
                 </div>
               </div>
             );

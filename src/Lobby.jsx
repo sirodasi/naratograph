@@ -532,12 +532,14 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(78px,1fr))", gap: 5, marginBottom: 16, maxHeight: 380, overflowY: "auto" }}>
                 {CHARACTERS.map(c => {
                   const taken = Object.values(room.players || {}).some(p => p.charId === c.id && p.uid !== user.uid);
+                  const banned = (room.scenarioData?.bannedChars || []).includes(c.name);
+                  const disabled = taken || banned;
                   const isSel = selectedChar?.id === c.id;
                   return (
                     <div
                       key={c.id}
-                      onClick={() => { if (!taken) setSelectedChar(isSel ? null : c); }}
-                      style={{ border: `2px solid ${isSel ? C.gold : taken ? "#1e2535" : "rgba(255,255,255,0.05)"}`, borderRadius: 5, padding: 4, cursor: taken ? "not-allowed" : "pointer", background: isSel ? C.goldBg : taken ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.02)", opacity: taken ? 0.35 : 1, textAlign: "center" }}
+                      onClick={() => { if (!disabled) setSelectedChar(isSel ? null : c); }}
+                      style={{ border: `2px solid ${isSel ? C.gold : disabled ? "#1e2535" : "rgba(255,255,255,0.05)"}`, borderRadius: 5, padding: 4, cursor: disabled ? "not-allowed" : "pointer", background: isSel ? C.goldBg : disabled ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.02)", opacity: disabled ? 0.35 : 1, textAlign: "center" }}
                     >
                       <CharSprite spriteRow={c.spriteRow} spriteCol={c.spriteCol} size={66} style={{ margin: "0 auto" }} />
                       <div style={{ fontSize: 8, color: isSel ? C.gold : C.textDim, marginTop: 2, lineHeight: 1.3 }}>{c.name}</div>
