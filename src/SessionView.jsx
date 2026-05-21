@@ -411,12 +411,16 @@ export function parseSpell(text) {
   // 宣言条件（テキスト抽出のみ、自動チェックはしない）
   const condition = extractCondition(text);
 
+  // 本文から条件文を取り除いたもの（重複表示の防止に使う）
+  const textBody = condition ? text.replace(condition, "").trim() : text;
+
   return {
     timing,
     effectTiming,
     effects,
     manual: effects.length === 0,  // キーワードなし → 手動
     condition,
+    textBody,
   };
 }
 
@@ -1481,7 +1485,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 11, color: spell.manual ? C.textDim : C.gold, marginBottom: 2 }}>{spell.name}</div>
-                    <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.text}</div>
+                    <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.textBody || spell.text}</div>
                     {spell.condition && (
                       <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
                     )}
@@ -1563,7 +1567,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ flex: 1, minWidth: 240 }}>
             <div style={{ fontSize: 11, color: C.gold, marginBottom: 4 }}>🛠️ 手動スペル処理</div>
             <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>{spell.name}</div>
-            <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.text}</div>
+            <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.textBody || spell.text}</div>
+            {spell.condition && (
+              <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
+            )}
             <div style={{ fontSize: 9, color: C.textDim, marginTop: 4 }}>
               PC/NPC の移動と弾幕数を調整できます。
             </div>
@@ -2755,7 +2762,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             {b.pendingSpell && (
               <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 5 }}>
                 <div style={{ fontSize: 11, color: "#ef9a9a", marginBottom: 4 }}>⏰ {b.pendingSpell.name} — ラウンド終了時の効果が発動します</div>
-                <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{b.pendingSpell.text}</div>
+                <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{b.pendingSpell.textBody || b.pendingSpell.text}</div>
+                {b.pendingSpell.condition && (
+                  <div style={{ fontSize: 9, color: C.red, marginBottom: 6 }}>⚠ {b.pendingSpell.condition}</div>
+                )}
                 {b.pendingSpell.manual && (
                   <div style={{ fontSize: 9, color: "#5a6070", marginBottom: 6 }}>★ GMが手動で効果を処理してください</div>
                 )}
