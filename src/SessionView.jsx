@@ -337,6 +337,7 @@ export function hasOfficialSkill(entity, skillName) {
   const dsName = (entity.ds && entity.ds.name) || entity.dsName
     || entity.skillName || (entity.ps && entity.ps.name) || null;
   if (!dsName) return false;
+  console.log(dsName);
   const isOfficial = OFFICIAL_DANMAKU_SKILLS.some(s => s.name === dsName);
   return isOfficial && dsName === skillName;
 }
@@ -1312,32 +1313,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ かばうを後で自動発動します</div>
           )}
 
-          {/* 使い魔: NPC先攻のショット宣言前にPC側の使い魔も行動宣言 */}
-          {!isPc && (isGm || user.uid === b.pcCombatant) && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null && (
-            <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
-              <div style={{ fontSize: 10, color: C.blue, marginBottom: 4 }}>🐾 使い魔 ─ {combatantPc?.charName}</div>
-              <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>NPC射撃後にかばう、またはPC攻撃時に援護射撃</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_cover" } }))}
-                  style={btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold, { flex: 1, fontSize: 10 })}>
-                  🛡 後でかばう
-                </button>
-                <button
-                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_support" } }))}
-                  style={btnFull("rgba(100,181,246,0.18)", C.blueBorder, C.blue, { flex: 1, fontSize: 10 })}>
-                  💠 後で援護射撃
-                </button>
-              </div>
-            </div>
-          )}
-          {!isPc && (isGm || user.uid === b.pcCombatant) && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_cover" && (
-            <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ {combatantPc?.charName} の使い魔は後でかばいます</div>
-          )}
-          {!isPc && (isGm || user.uid === b.pcCombatant) && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_support" && (
-            <div style={{ fontSize: 9, color: C.blue, marginTop: 8 }}>✅ {combatantPc?.charName} の使い魔は後で援護射撃します</div>
-          )}
-
           {/* ⚡ ショット直前スキル（近接攻撃） */}
           {canProceed && (() => {
             const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
@@ -1346,8 +1321,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             const canProximity = hasOfficialSkill(attacker, "近接攻撃") && !isDanmakuUsed(attackerId, "近接攻撃");
             const samePos      = b.positions?.[attackerId] === b.positions?.[defenderId];
             return canProximity ? (
-              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6, width: 240 }}>
-                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1 }}>⚡ 弾幕スキル（ダイス直前）</div>
+              <div style={{ margin: "16px auto 0", display: "flex", flexDirection: "column", gap: 6, width: 240 }}>
+                <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 1, textAlign: "left" }}>⚡ 弾幕スキル（ダイス直前）</div>
                 <button onClick={() => tryApplyProximity(attackerId, defenderId)}
                   disabled={!samePos}
                   style={btnFull("rgba(255,100,100,0.18)", C.redBorder, C.red, { opacity: samePos ? 1 : 0.35 })}>
