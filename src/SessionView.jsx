@@ -2144,10 +2144,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ? (isMass ? "🏆 最終決戦制覇！セッション終了！" : `🏆 弾幕ごっこ勝利！クエスト「${relatedQ?.name || ""}」が解決されました。`)
           : (isMass ? "💀 最終決戦敗北...セッション終了。" : "💀 弾幕ごっこ敗北...探索フェイズへ戻ります。");
 
+        const scenePcUid = p.battle?.scenePcUid;
+        const nextActedPcs = scenePcUid && !(p.actedPcs || []).includes(scenePcUid)
+          ? [...(p.actedPcs || []), scenePcUid]
+          : (p.actedPcs || []);
+
         return {
           ...p,
           quests: nextQuests,
           sessionPhase: nextSessionPhase,
+          actedPcs: nextActedPcs,
           battle: { ...p.battle, active: false },
           log: [logLine, ...p.log]
         };
@@ -4383,6 +4389,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                               type: "normal",
                               phase: "setup",
                               questId: q.id,
+                              scenePcUid: p.currentScene?.pcUid,
                               participants: {
                                 npcs: [{
                                   id: "enemy_" + Date.now(),
