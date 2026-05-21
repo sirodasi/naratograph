@@ -3,6 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, update, push, remove } from "firebase/database";
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
+import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
 
 // キャラクター名一覧（選択不可設定用・循環import回避のため独立定義）
 const CHAR_NAMES = ["博麗霊夢", "霧雨魔理沙", "チルノ", "紅美鈴", "パチュリー・ノーレッジ", "十六夜咲夜", "レミリア・スカーレット", "フランドール・スカーレット", "アリス・マーガトロイド", "魂魄妖夢", "西行寺幽々子", "八雲藍", "八雲紫", "伊吹萃香", "鈴仙・優曇華院・イナバ", "八意永琳", "蓬莱山輝夜", "藤原妹紅", "射命丸文", "風見幽香", "小野塚小町", "河城にとり", "東風谷早苗", "八坂神奈子", "洩矢諏訪子", "比那名居天子", "星熊勇儀", "古明地さとり", "火焔猫燐", "霊烏路空", "古明地こいし", "ナズーリン", "多々良小傘", "村紗水蜜", "聖白蓮", "封獣ぬえ", "姫海棠はたて", "霍青娥", "物部布都", "豊聡耳神子", "二ツ岩マミゾウ", "秦こころ", "鬼人正邪", "少名針妙丸", "宇佐見菫子", "茨木華扇", "ドレミー・スイート", "クラウンピース", "高麗野あうん", "摩多羅隠岐奈", "依神女苑", "依神紫苑", "庭渡久侘歌", "吉弔八千慧", "埴安神袿姫", "驪駒早鬼", "管牧典", "天弓千亦", "饕餮尤魔", "日白残無"];
@@ -24,11 +25,158 @@ const taBase = { ...iBase, resize:"vertical", fontFamily:"'Noto Serif JP', serif
 function SecTitle({children}) {
   return <div style={{fontSize:9,color:C.textFaint,letterSpacing:2,borderBottom:`1px solid #111828`,paddingBottom:3,marginBottom:8,marginTop:12}}>{children}</div>;
 }
+
+// ── スペルカードエディタ ──────────────────────────────
+const AUTO_COLOR  = { full: C.green, partial: "#f9a825", manual: C.red };
+const AUTO_LABEL  = { full: "完全自動", partial: "一部自動", manual: "GM手動" };
+const AUTO_NOTE   = {
+  full:    "✓ 弾幕ごっこ中に自動で処理されます",
+  partial: "⚠ プレイヤーの入力が一部必要です",
+  manual:  "✕ GMが手動で処理してください",
+};
+
+function SpellCardEditor({ label, name, effect, mode = "custom", onChange, warn = false }) {
+  const structured = name ? SPELL_CARD_EFFECTS[name] : null;
+
+  const handleModeChange = (m) => {
+    onChange({ name: "", effect: "", mode: m });
+  };
+
+  const handleSelect = (cardName) => {
+    const eff = SPELL_CARD_EFFECTS[cardName];
+    const effText = eff ? (eff.steps || []).map(summarizeStep).join(" / ") + (eff.note ? `\n${eff.note}` : "") : "";
+    onChange({ name: cardName, effect: effText, mode: "existing" });
+  };
+
+  return (
+    <div style={{ padding: 8, background: "rgba(0,0,0,0.2)", borderRadius: 4, border: `1px solid ${warn ? "#f9a825" : C.border}` }}>
+      {/* ヘッダー: ラベル + モード切替 */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ fontSize: 9, color: warn ? "#f9a825" : C.textFaint }}>
+          {label}{warn && " ⚠ 名前または効果が未入力"}
+        </div>
+        <div style={{ display: "flex", gap: 3 }}>
+          {[["existing", "既存から選択"], ["custom", "カスタム"]].map(([m, lbl]) => (
+            <button key={m} onClick={() => handleModeChange(m)}
+              style={{ ...btn(
+                mode === m ? "rgba(200,160,64,0.2)" : "transparent",
+                mode === m ? C.goldDim : C.border,
+                mode === m ? C.gold : C.textFaint,
+                { padding: "2px 8px", fontSize: 9 }
+              )}}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === "existing" ? (
+        <div>
+          <select style={{ ...iBase, marginBottom: 4 }} value={name || ""} onChange={e => handleSelect(e.target.value)}>
+            <option value="">スペルカードを選択…</option>
+            {["full", "partial", "manual"].map(al => {
+              const cards = SPELL_CARD_LIST.filter(c => c.auto === al);
+              if (!cards.length) return null;
+              return (
+                <optgroup key={al} label={`── ${AUTO_LABEL[al]} ──`}>
+                  {cards.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </optgroup>
+              );
+            })}
+          </select>
+          {name && structured && (
+            <div style={{ padding: "5px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 3, fontSize: 9, lineHeight: 1.7 }}>
+              <span style={{ color: AUTO_COLOR[structured.auto], fontWeight: "bold" }}>
+                ● {AUTO_LABEL[structured.auto]}
+              </span>
+              {structured.steps?.length > 0 && (
+                <div style={{ color: C.textDim, marginTop: 2 }}>
+                  弾幕: {structured.steps.map(summarizeStep).join(" / ")}
+                </div>
+              )}
+              {structured.note && (
+                <div style={{ color: C.textFaint, marginTop: 2 }}>備考: {structured.note}</div>
+              )}
+              <div style={{ color: AUTO_COLOR[structured.auto], marginTop: 3 }}>
+                {AUTO_NOTE[structured.auto]}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <input
+            style={{ ...iBase, marginBottom: 4 }}
+            value={name || ""}
+            onChange={e => onChange({ name: e.target.value, effect, mode: "custom" })}
+            placeholder="スペルカード名（任意）"
+          />
+          <textarea
+            style={{ ...iBase, height: 44, resize: "vertical" }}
+            value={effect || ""}
+            onChange={e => onChange({ name, effect: e.target.value, mode: "custom" })}
+            placeholder="効果テキスト（任意）"
+          />
+          {name && (
+            <div style={{ fontSize: 9, color: "#f9a825", marginTop: 3 }}>
+              ※カスタム効果のためGMが手動で処理してください
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 function Label({children}) {
   return <div style={{fontSize:9,color:C.textDim,marginBottom:2,marginTop:6}}>{children}</div>;
 }
 function Chip({label,color="#c8a040"}) {
   return <span style={{display:"inline-block",padding:"1px 7px",background:`${color}18`,border:`1px solid ${color}50`,borderRadius:10,fontSize:9,color,marginRight:4,marginBottom:2}}>{label}</span>;
+}
+
+// ── スペルカード効果リスト（選択UI用） ──────────────────
+const SPELL_CARD_LIST = Object.entries(SPELL_CARD_EFFECTS).map(([name, data]) => ({
+  name, auto: data.auto, steps: data.steps || [], note: data.note || "",
+}));
+
+function summarizeStep(s) {
+  const c = typeof s.count === "object" ? "X" : (s.count ?? 1);
+  const after = (s.after || []).map(a => {
+    if (a.type === "vertical_of_placed")    return `→上下×${a.count}`;
+    if (a.type === "horizontal_of_placed")  return `→左右×${a.count}`;
+    if (a.type === "all_neighbors_of_placed") return `→隣接全×${a.count}`;
+    if (a.type === "double_each_placed")    return `→配置マス+${a.count}`;
+    if (a.type === "add_to_placed")         return `→配置マス+${a.count}`;
+    if (a.type === "remove_attacker_mirror") return `→自フィールド同番-${a.count}`;
+    return "";
+  }).filter(Boolean).join(" ");
+  let base = "";
+  switch (s.type) {
+    case "self":                       base = `自機×${c}`; break;
+    case "enemy":                      base = `敵機×${c}`; break;
+    case "random":                     base = `ランダム×${c}`; break;
+    case "adjacent_enemy":             base = `隣接マス全て×${c}`; break;
+    case "designated":                 base = `指定×${c}`; break;
+    case "mirrored_adj_self":          base = `自機同番隣接×${c}`; break;
+    case "fixed_cells":                base = `固定マス(${(s.cells||[]).join(",")})×${c}`; break;
+    case "fill_empty_cells":           base = `空きマス全て×${c}`; break;
+    case "move_all_vertical":          base = "全弾幕→上下移動"; break;
+    case "shift_cells_up1":            base = "全弾幕→+1シフト"; break;
+    case "mirror_bullet_counts":       base = "弾幕数反転(1↔3)"; break;
+    case "double_single_bullets":      base = "1個マス→2個"; break;
+    case "clear_all_then_random":      base = `全除去→ランダム×${s.multiplier||1}倍`; break;
+    case "clear_enemy_adj_then_random":base = `敵隣除去→ランダム×${s.multiplier||1}倍`; break;
+    case "clear_enemy_adj_then_enemy": base = "敵隣除去→敵機に配置"; break;
+    case "clear_mirrored_adj_then_random": base = `自機同番隣除去→ランダム×${s.multiplier||1}倍`; break;
+    case "enemy_cross_h":              base = `敵横+縦×${c}`; break;
+    case "non_adjacent_to_mirrored":   base = `自機同番隣接以外×${c}`; break;
+    case "self_if_same_cell":          base = `同マス時のみ自機×${c}`; break;
+    case "clear_enemy_cell":           base = "敵機マス全除去"; break;
+    case "choice_fixed":               base = `選択列×${c}`; break;
+    case "random_2d_exclude_then_fill":base = "2D除外→残マス×1"; break;
+    default:                           base = s.type; break;
+  }
+  return after ? `${base} ${after}` : base;
 }
 
 // ── デフォルト値 ─────────────────────────────────────
@@ -38,8 +186,8 @@ const EMPTY_ENEMY = () => ({
   spellcard: 1,    // スペルカード
   attack: 5,       // 攻撃力
   ds: { type: "none", name: "", desc: "", customName: "" },
-  sc1name: "", sc1effect: "",
-  sc2name: "", sc2effect: "",
+  sc1name: "", sc1effect: "", sc1mode: "custom",
+  sc2name: "", sc2effect: "", sc2mode: "custom",
 });
 
 const EMPTY_QUEST = () => ({
@@ -227,10 +375,12 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
           {/* 弾幕ごっこ */}
           {quest.solutionType==="弾幕ごっこ" && (()=> {
             const en = quest.enemy || EMPTY_ENEMY();
-            const sc1ok = !!(en.sc1name && en.sc1effect);
-            const sc1partial = !!(en.sc1name || en.sc1effect) && !sc1ok;
-            const sc2ok = !!(en.sc2name && en.sc2effect);
-            const sc2partial = !!(en.sc2name || en.sc2effect) && !sc2ok;
+            const sc1mode = en.sc1mode || "custom";
+            const sc2mode = en.sc2mode || "custom";
+            const sc1ok = sc1mode === "existing" ? !!en.sc1name : !!(en.sc1name && en.sc1effect);
+            const sc1partial = sc1mode === "custom" && !!(en.sc1name || en.sc1effect) && !sc1ok;
+            const sc2ok = sc2mode === "existing" ? !!en.sc2name : !!(en.sc2name && en.sc2effect);
+            const sc2partial = sc2mode === "custom" && !!(en.sc2name || en.sc2effect) && !sc2ok;
             return (
               <div style={{ padding:12, background:C.redBg, border:`1px solid ${C.redBorder}60`, borderRadius:4 }}>
                 {/* 基本ステータス */}
@@ -297,21 +447,27 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                 )}
 
                 {/* スペルカード① */}
-                <div style={{ marginTop:8, padding:8, background:"rgba(0,0,0,0.2)", borderRadius:4, border:`1px solid ${sc1partial?"#f9a825":C.border}` }}>
-                  <div style={{ fontSize:9, color: sc1partial?"#f9a825":C.textFaint, marginBottom:4 }}>
-                    スペルカード①（任意・名前と効果は両方必要）{sc1partial&&" ⚠ どちらか一方が未入力"}
-                  </div>
-                  <input style={{...iBase,marginBottom:4}} value={en.sc1name||""} onChange={e => updEnemy("sc1name",e.target.value)} placeholder="スペルカード名（任意）"/>
-                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc1effect||""} onChange={e => updEnemy("sc1effect",e.target.value)} placeholder="効果テキスト（任意）"/>
+                <div style={{ marginTop: 8 }}>
+                  <SpellCardEditor
+                    label="スペルカード①（任意）"
+                    name={en.sc1name || ""} effect={en.sc1effect || ""} mode={sc1mode}
+                    warn={sc1partial}
+                    onChange={({ name, effect, mode }) => onChange({
+                      ...quest, enemy: { ...en, sc1name: name, sc1effect: effect, sc1mode: mode }
+                    })}
+                  />
                 </div>
 
                 {/* スペルカード② */}
-                <div style={{ marginTop:6, padding:8, background:"rgba(0,0,0,0.2)", borderRadius:4, border:`1px solid ${sc2partial?"#f9a825":C.border}` }}>
-                  <div style={{ fontSize:9, color: sc2partial?"#f9a825":C.textFaint, marginBottom:4 }}>
-                    スペルカード②（任意・名前と効果は両方必要）{sc2partial&&" ⚠ どちらか一方が未入力"}
-                  </div>
-                  <input style={{...iBase,marginBottom:4}} value={en.sc2name||""} onChange={e => updEnemy("sc2name",e.target.value)} placeholder="スペルカード名（任意）"/>
-                  <textarea style={{...iBase,height:44,resize:"vertical"}} value={en.sc2effect||""} onChange={e => updEnemy("sc2effect",e.target.value)} placeholder="効果テキスト（任意）"/>
+                <div style={{ marginTop: 6 }}>
+                  <SpellCardEditor
+                    label="スペルカード②（任意）"
+                    name={en.sc2name || ""} effect={en.sc2effect || ""} mode={sc2mode}
+                    warn={sc2partial}
+                    onChange={({ name, effect, mode }) => onChange({
+                      ...quest, enemy: { ...en, sc2name: name, sc2effect: effect, sc2mode: mode }
+                    })}
+                  />
                 </div>
 
                 {/* 解決場所 */}
@@ -361,8 +517,10 @@ function ScenarioForm({ initial, onSave, onCancel }) {
     const badQuests = (sc.quests||[]).filter(q => {
       const en = q.enemy;
       if(q.solutionType!=="弾幕ごっこ"||!en) return false;
-      const sc1partial = !!(en.sc1name||en.sc1effect) && !(en.sc1name&&en.sc1effect);
-      const sc2partial = !!(en.sc2name||en.sc2effect) && !(en.sc2name&&en.sc2effect);
+      const m1 = en.sc1mode || "custom";
+      const m2 = en.sc2mode || "custom";
+      const sc1partial = m1 === "custom" && !!(en.sc1name||en.sc1effect) && !(en.sc1name&&en.sc1effect);
+      const sc2partial = m2 === "custom" && !!(en.sc2name||en.sc2effect) && !(en.sc2name&&en.sc2effect);
       return sc1partial||sc2partial;
     });
     if(badQuests.length>0){
@@ -555,8 +713,8 @@ function ScenarioForm({ initial, onSave, onCancel }) {
           
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {(sc.finalBattleEnemies || []).map((en, i) => {
-              const sc1ok = !!(en.sc1name && en.sc1effect);
-              const sc2ok = !!(en.sc2name && en.sc2effect);
+              const sc1mode = en.sc1mode || "custom";
+              const sc2mode = en.sc2mode || "custom";
               
               return (
                 <div key={i} style={{ padding: 12, background: "rgba(192,57,43,0.05)", borderRadius: 5, border: `1px solid ${C.redBorder}40`, position: "relative" }}>
@@ -615,17 +773,21 @@ function ScenarioForm({ initial, onSave, onCancel }) {
                   </div>
 
                   {/* スペルカード設定 */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <div style={{ background: "rgba(0,0,0,0.15)", padding: 6, borderRadius: 3 }}>
-                      <div style={{ fontSize: 8, color: sc1ok ? C.gold : C.textFaint, marginBottom: 4 }}>スペルカード①</div>
-                      <input style={{ ...iBase, marginBottom: 4, fontSize: 10 }} value={en.sc1name} onChange={e => updateFinalEnemy(i, { ...en, sc1name: e.target.value })} placeholder="名前" />
-                      <textarea style={{ ...iBase, height: 40, fontSize: 9 }} value={en.sc1effect} onChange={e => updateFinalEnemy(i, { ...en, sc1effect: e.target.value })} placeholder="効果説明" />
-                    </div>
-                    <div style={{ background: "rgba(0,0,0,0.15)", padding: 6, borderRadius: 3 }}>
-                      <div style={{ fontSize: 8, color: sc2ok ? C.gold : C.textFaint, marginBottom: 4 }}>スペルカード②</div>
-                      <input style={{ ...iBase, marginBottom: 4, fontSize: 10 }} value={en.sc2name} onChange={e => updateFinalEnemy(i, { ...en, sc2name: e.target.value })} placeholder="名前" />
-                      <textarea style={{ ...iBase, height: 40, fontSize: 9 }} value={en.sc2effect} onChange={e => updateFinalEnemy(i, { ...en, sc2effect: e.target.value })} placeholder="効果説明" />
-                    </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <SpellCardEditor
+                      label="スペルカード①（任意）"
+                      name={en.sc1name || ""}
+                      effect={en.sc1effect || ""}
+                      mode={sc1mode}
+                      onChange={({ name, effect, mode }) => updateFinalEnemy(i, { ...en, sc1name: name, sc1effect: effect, sc1mode: mode })}
+                    />
+                    <SpellCardEditor
+                      label="スペルカード②（任意）"
+                      name={en.sc2name || ""}
+                      effect={en.sc2effect || ""}
+                      mode={sc2mode}
+                      onChange={({ name, effect, mode }) => updateFinalEnemy(i, { ...en, sc2name: name, sc2effect: effect, sc2mode: mode })}
+                    />
                   </div>
                 </div>
               );
