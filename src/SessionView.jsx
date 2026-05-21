@@ -1312,6 +1312,32 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ かばうを後で自動発動します</div>
           )}
 
+          {/* 使い魔: NPC先攻のショット宣言前にPC側の使い魔も行動宣言 */}
+          {!isPc && (isGm || user.uid === b.pcCombatant) && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null && (
+            <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: C.blue, marginBottom: 4 }}>🐾 使い魔 ─ {combatantPc?.charName}</div>
+              <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>NPC射撃後にかばう、またはPC攻撃時に援護射撃</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_cover" } }))}
+                  style={btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold, { flex: 1, fontSize: 10 })}>
+                  🛡 後でかばう
+                </button>
+                <button
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_support" } }))}
+                  style={btnFull("rgba(100,181,246,0.18)", C.blueBorder, C.blue, { flex: 1, fontSize: 10 })}>
+                  💠 後で援護射撃
+                </button>
+              </div>
+            </div>
+          )}
+          {!isPc && (isGm || user.uid === b.pcCombatant) && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_cover" && (
+            <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ {combatantPc?.charName} の使い魔は後でかばいます</div>
+          )}
+          {!isPc && (isGm || user.uid === b.pcCombatant) && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_support" && (
+            <div style={{ fontSize: 9, color: C.blue, marginTop: 8 }}>✅ {combatantPc?.charName} の使い魔は後で援護射撃します</div>
+          )}
+
           {/* ⚡ ショット直前スキル（近接攻撃） */}
           {canProceed && (() => {
             const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
@@ -1333,7 +1359,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
           {canProceed &&
             !(isPc && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null) &&
-            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === null) && (
+            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === null) &&
+            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null) && (
             <button
               onClick={() => handleProceedToShotRoll(isPc, nextPhase)}
               style={{ ...buttonStyle, marginTop: 30, width: 200 }}
