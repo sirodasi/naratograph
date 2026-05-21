@@ -2538,7 +2538,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   }
 
   return (
-    <div style={{ width: "100%", minHeight: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
+    <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
       <BattleDiceTray diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} label={gs.dice?.label} />
 
       {/* フェーズバッジ（最上部・グリッドと重ならない） */}
