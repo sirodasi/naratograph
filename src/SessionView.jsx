@@ -4368,9 +4368,47 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                         行為判定を開始する
                       </button>
                     )}
-                    {q?.solutionType === "弾幕ごっこ" && (
-                      <div style={{ fontSize: 11, color: C.red }}>弾幕ごっこは未実装です</div>
-                    )}
+                    {q?.solutionType === "弾幕ごっこ" && (() => {
+                      const enemy = q.enemy;
+                      if (!enemy) return (
+                        <div style={{ fontSize: 11, color: C.red }}>敵データが設定されていません</div>
+                      );
+                      return (
+                        <button onClick={() => {
+                          upd(p => ({
+                            ...p,
+                            currentScene: null,
+                            battle: {
+                              active: true,
+                              type: "normal",
+                              phase: "setup",
+                              questId: q.id,
+                              participants: {
+                                npcs: [{
+                                  id: "enemy_" + Date.now(),
+                                  name: enemy.name,
+                                  resources: {
+                                    残り人数: { cur: enemy.life,     max: 5 },
+                                    スペルカード: { cur: enemy.spellcard, max: 5 },
+                                    攻撃力:    { cur: enemy.attack,   max: 99 },
+                                    回避力:    { cur: enemy.evade || 3, max: 3 },
+                                    グレイズ:  { cur: 0,             max: 5 }
+                                  },
+                                  ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
+                                  spellCards: [
+                                    { name: enemy.sc1name, desc: enemy.sc1effect },
+                                    { name: enemy.sc2name, desc: enemy.sc2effect }
+                                  ].filter(s => s.name)
+                                }]
+                              }
+                            },
+                            log: [`⚖️ クエスト「${q.name}」解決のため弾幕ごっこを開始！`, ...p.log]
+                          }));
+                        }} style={btnFull(C.redBg, C.redBorder, C.red)}>
+                          ⚔️ 弾幕ごっこを開始する
+                        </button>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
