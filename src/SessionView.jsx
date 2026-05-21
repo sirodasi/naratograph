@@ -6,11 +6,11 @@ import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
-export function SpellCard({ color = C.gold, title, headerRight, children, style = {}, contentStyle = {} }) {
+export function SpellCard({ color = C.gold, title, headerRight, children, style = {}, contentStyle = {}, onClick }) {
   const dim = color + "44";
   const glow = color + "1a";
   return (
-    <div style={{
+    <div onClick={onClick} style={{
       position: "relative",
       border: `1px solid ${color}`,
       borderRadius: 2,
@@ -1192,9 +1192,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
         <div style={{ textAlign: "center", animation: "fadeUp 0.8s ease" }}>
-          <div style={{ fontSize: 12, color: titleColor, letterSpacing: 4, marginBottom: 10 }}>{title}</div>
-          <div style={{ fontSize: 32, color: "#fff", fontWeight: "bold", textShadow: `0 0 20px ${titleColor}55` }}>{combatant?.charName || combatant?.name}</div>
-          <div style={{ fontSize: 14, color: C.textDim, marginTop: 10 }}>のショットステップ</div>
+          <SpellCard color={titleColor} style={{ marginBottom: 16, display: "inline-block", minWidth: 260 }}>
+            <div style={{ textAlign: "center", padding: "12px 28px" }}>
+              <div style={{ fontSize: 9, color: titleColor, letterSpacing: 6, marginBottom: 10 }}>{title}</div>
+              <div style={{ fontSize: 30, color: "#fff", fontWeight: 700, textShadow: `0 0 28px ${titleColor}66` }}>{combatant?.charName || combatant?.name}</div>
+              <div style={{ fontSize: 12, color: C.textDim, marginTop: 8, letterSpacing: 2 }}>のショットステップ</div>
+            </div>
+          </SpellCard>
           {/* 使い魔: PC先攻のショット直前に援護射撃 or スキップ（→後でかばう自動発動）を確認 */}
           {canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === null && (
             <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
@@ -2797,17 +2801,16 @@ export function SessionEndView({ gs, upd, isGm }) {
 }
 
 // ─── ConfirmModal ─────────────────────────────────────────────────
-export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行する", okColor = "#e07060" }) {
+export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行する", okColor = C.red }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
-      <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 22, maxWidth: 360, width: "90%" }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 13, color: C.gold, marginBottom: 8 }}>{title}</div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
+      <SpellCard color={okColor} title={`◆ ${title}`} style={{ maxWidth: 360, width: "90%" }} onClick={e => e.stopPropagation()}>
         {body && <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 16, whiteSpace: "pre-wrap" }}>{body}</div>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onOk}     style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 3, background: `${okColor}20`, border: `1px solid ${okColor}80`, color: okColor, fontSize: 12 }}>{okLabel}</button>
-          <button onClick={onCancel} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.03)", border: "1px solid #1e2535", color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          <button onClick={onOk}     style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: `${okColor}20`, border: `1px solid ${okColor}80`, color: okColor, fontSize: 12 }}>{okLabel}</button>
+          <button onClick={onCancel} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
         </div>
-      </div>
+      </SpellCard>
     </div>
   );
 }
@@ -2818,17 +2821,16 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
   if (!data) return null;
   const canUse = data.canUse(pc);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
-      <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 340, width: "90%" }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 13, color: C.gold, marginBottom: 4 }}>【{itemName}】を使用する</div>
-        <div style={{ fontSize: 10, color: "#5a7090", marginBottom: 4 }}>タイミング: {data.timing}</div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
+      <SpellCard color={C.gold} title={`✦ 【${itemName}】を使用する`} style={{ maxWidth: 340, width: "90%" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4, letterSpacing: 2 }}>タイミング: {data.timing}</div>
         <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 14 }}>{data.desc}</div>
         {!canUse && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>使用条件を満たしていません</div>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => canUse && onConfirm()} disabled={!canUse} style={{ flex: 1, padding: "8px", cursor: canUse ? "pointer" : "not-allowed", borderRadius: 3, background: canUse ? "rgba(200,160,64,0.2)" : "rgba(255,255,255,0.02)", border: canUse ? "1px solid #8b6914" : "1px solid #1e2535", color: canUse ? C.gold : "#2a3545", fontSize: 12 }}>使用する</button>
-          <button onClick={onCancel} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.03)", border: "1px solid #1e2535", color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          <button onClick={() => canUse && onConfirm()} disabled={!canUse} style={{ flex: 1, padding: "8px", cursor: canUse ? "pointer" : "not-allowed", borderRadius: 2, background: canUse ? C.goldBg : "rgba(255,255,255,0.02)", border: canUse ? `1px solid ${C.goldDim}` : `1px solid ${C.border}`, color: canUse ? C.gold : C.textFaint, fontSize: 12 }}>使用する</button>
+          <button onClick={onCancel} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
         </div>
-      </div>
+      </SpellCard>
     </div>
   );
 }
@@ -2837,18 +2839,14 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
 function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel }) {
   const typeColor = SKILL_TYPE_COLOR[skillType] || C.text;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
-      <div style={{ background: "#0c1020", border: "1px solid #1e2d45", borderRadius: 6, padding: 20, maxWidth: 360, width: "90%" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{ padding: "2px 7px", background: `${typeColor}18`, border: `1px solid ${typeColor}50`, borderRadius: 10, fontSize: 9, color: typeColor }}>{skillType}</span>
-          <span style={{ fontSize: 13, color: C.gold }}>《{skillName}》を発動する</span>
-        </div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
+      <SpellCard color={typeColor} title={`✦ 《${skillName}》を発動する`} headerRight={<span style={{ padding: "2px 8px", background: `${typeColor}18`, border: `1px solid ${typeColor}50`, borderRadius: 10, fontSize: 9, color: typeColor }}>{skillType}</span>} style={{ maxWidth: 360, width: "90%" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 14 }}>{desc}</div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onConfirm} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 3, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold, fontSize: 12 }}>発動する</button>
-          <button onClick={onCancel}  style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.03)", border: "1px solid #1e2535", color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          <button onClick={onConfirm} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, fontSize: 12 }}>発動する</button>
+          <button onClick={onCancel}  style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
         </div>
-      </div>
+      </SpellCard>
     </div>
   );
 }
@@ -2894,7 +2892,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const itemKeys = Object.keys(INIT_ITEMS());
 
   return (
-    <div style={{ border: `1px solid ${isActing ? C.blue : expanded ? "#2a3545" : C.border}`, borderRadius: 5, marginBottom: 6, overflow: "hidden", transition: "border 0.2s" }}>
+    <div style={{ border: `1px solid ${isActing ? C.blue : C.border}`, borderRadius: 2, marginBottom: 6, overflow: "hidden", transition: "border 0.2s, box-shadow 0.2s", boxShadow: isActing ? `0 0 16px ${C.blue}28` : "none", background: isActing ? `${C.blue}06` : "transparent" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", background: isActing ? C.blueBg : expanded ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.01)" }} onClick={() => setExpanded(v => !v)}>
         <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -2914,7 +2912,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
 
       {expanded && (
         <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>リソース</div>
+          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>リソース</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginBottom: 10 }}>
             {resKeys.map(k => {
               const r = resources[k] || { cur: 0, max: 1 };
@@ -2933,7 +2931,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             })}
           </div>
 
-          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>アイテム</div>
+          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>アイテム</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
             {itemKeys.map(k => {
               const count  = items[k] || 0;
@@ -2966,7 +2964,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
 
           {badStatus.length > 0 && (
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>変調</div>
+              <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>変調</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {badStatus.map(bs => {
                   const bData = Object.values(BAD_STATUS_TABLE).find(x => x.name === bs);
@@ -2983,7 +2981,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
           )}
 
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
+            <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>絆</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {(pc.bonds || []).map(b => {
                 const isFrom = b.endsWith("からの絆");
@@ -3002,7 +3000,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             </div>
           </div>
 
-          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
+          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
           {skill && (
             <div style={{ marginBottom: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -4958,14 +4956,14 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
             <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
               {TABS.map(([id, label]) => (
-                <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : "#1e2535", borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
+                <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
               ))}
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
               {tab === "progress" && (
                 <div>
-                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>クエスト</div>
+                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>クエスト</div>
                   {(gs.quests ||[]).length === 0 ? (
                     <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
                   ) : (
@@ -5052,7 +5050,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
                   {!isIntro && (gs.clues ||[]).length > 0 && (
                     <>
-                      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
+                      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>手がかり配置済み</div>
                       {gs.clues.map(id => (
                         <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, padding: "2px 0" }}>
                           <span style={{ color: "#00bcd4" }}>💡[{getSpot(id)?.roll}] {getSpot(id)?.name}</span>
@@ -5063,10 +5061,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                   )}
                   {gs.newspaper && !isIntro && (
                     <>
-                      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>本日の新聞</div>
-                      <div style={{ padding: "6px 8px", background: "rgba(25,50,90,0.15)", border: "1px solid #1e3a5a", borderRadius: 4, cursor: "pointer" }} onClick={() => setPaperModal(gs.newspaper)}>
-                        <div style={{ fontSize: 9, color: "#3a5070" }}>[{gs.newspaper.roll}]</div>
-                        <div style={{ fontSize: 11, color: "#60c0f0" }}>{gs.newspaper.title}</div>
+                      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6, marginTop: 10 }}>本日の新聞</div>
+                      <div style={{ padding: "6px 10px", background: C.blueBg, border: `1px solid ${C.blueBorder}`, borderRadius: 2, cursor: "pointer", borderLeft: `3px solid ${C.blue}` }} onClick={() => setPaperModal(gs.newspaper)}>
+                        <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 2 }}>[{gs.newspaper.roll}]</div>
+                        <div style={{ fontSize: 11, color: C.blue }}>{gs.newspaper.title}</div>
                       </div>
                     </>
                   )}
@@ -5074,7 +5072,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                     <div style={{ marginTop: 12, textAlign: "center" }}>
                       <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 4 }}>
                         {gs.dice.results.map((d, i) => (
-                          <div key={i} style={{ width: 40, height: 40, border: "2px solid #1e3a5a", borderRadius: 5, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#60c0f0", fontWeight: "bold", animation: gs.dice.rolling ? "rollSpin 0.25s ease infinite" : "none" }}>{d}</div>
+                          <div key={i} style={{ width: 44, height: 44, border: `2px solid ${gs.dice.rolling ? C.gold : C.goldDim}`, borderRadius: 3, background: "rgba(8,6,18,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: C.gold, fontWeight: "bold", animation: gs.dice.rolling ? "rollSpin 0.25s ease infinite" : "none", boxShadow: gs.dice.rolling ? `0 0 14px ${C.gold}50` : "none" }}>{d}</div>
                         ))}
                       </div>
                       {!gs.dice?.rolling && <div style={{ fontSize: 16, color: C.gold }}>{gs.dice?.results.join("")}</div>}
@@ -5104,7 +5102,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
               {tab === "scene" && isGm && (
                 <div>
-                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
+                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
                   <button onClick={() => upd(p => ({ ...p, sceneMode: !p.sceneMode }))} style={{ width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer", marginBottom: 8, background: gs.sceneMode ? "rgba(121,134,203,0.2)" : "rgba(255,255,255,0.03)", border: gs.sceneMode ? "1px solid #7986cb60" : `1px solid ${C.border}`, color: gs.sceneMode ? "#9fa8da" : C.textFaint, fontSize: 12 }}>
                     {gs.sceneMode ? "🎭 描写モード ON（クリックで解除）" : "🎭 描写モードを開始"}
                   </button>
@@ -5177,9 +5175,19 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
               {tab === "log" && (
                 <div>
-                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
-                  {(gs.log ||[]).length === 0 && <div style={{ fontSize: 10, color: "#2a3545" }}>なし</div>}
-                  {(gs.log ||[]).map((e, i) => <div key={i} style={{ fontSize: 10, color: "#6a7a8a", padding: "3px 0", borderBottom: "1px solid #0c0f18" }}>{e}</div>)}
+                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
+                  {(gs.log ||[]).length === 0 && <div style={{ fontSize: 10, color: C.textFaint }}>なし</div>}
+                  {(gs.log ||[]).map((e, i) => {
+                    const lc = /^(🏆|🎉)/.test(e) ? C.gold
+                      : /^💀/.test(e) ? C.red
+                      : /^(🔮|💜)/.test(e) ? C.purple
+                      : /^✨/.test(e) ? C.green
+                      : /^(💡|🔍)/.test(e) ? "#00bcd4"
+                      : /^(🛡|💠)/.test(e) ? C.blue
+                      : /^⚖️/.test(e) ? C.gold
+                      : C.textDim;
+                    return <div key={i} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1 }}>{e}</div>;
+                  })}
                 </div>
               )}
             </div>
@@ -5594,7 +5602,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
             )}
 
             <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 2, marginBottom: 4 }}>陣営状況</div>
+              <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 2, marginBottom: 4 }}>陣営状況</div>
               {gs.pcs.map(p => {
                 const isDead = (p.resources?.残り人数?.cur || 0) <= 0;
                 const isCombatant = p.uid === b.pcCombatant;
