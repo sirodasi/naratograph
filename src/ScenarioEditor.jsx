@@ -104,6 +104,11 @@ function SpellCardEditor({ label, name, effect, mode = "custom", cardRef = "", o
                   弾幕: {structured.steps.map(summarizeStep).join(" / ")}
                 </div>
               )}
+              {structured.effects?.length > 0 && (
+                <div style={{ color: C.textDim, marginTop: 2 }}>
+                  効果: {structured.effects.map(summarizeEffect).join(" / ")}
+                </div>
+              )}
               {structured.note && (
                 <div style={{ color: C.textFaint, marginTop: 2 }}>備考: {structured.note}</div>
               )}
@@ -147,9 +152,13 @@ function Chip({label,color="#c8a040"}) {
 // ── スペルカード効果リスト（選択UI用・効果重複を除外） ──
 const _seenEffects = new Set();
 const SPELL_CARD_LIST = Object.entries(SPELL_CARD_EFFECTS)
-  .map(([name, data]) => ({ name, auto: data.auto, steps: data.steps || [], note: data.note || "", timing: data.timing || "" }))
+  .map(([name, data]) => ({
+    name, auto: data.auto,
+    steps: data.steps || [], effects: data.effects || [],
+    note: data.note || "", timing: data.timing || "",
+  }))
   .filter(c => {
-    const key = JSON.stringify(c.steps) + "|" + c.timing;
+    const key = JSON.stringify(c.steps) + "|" + c.timing + "|" + JSON.stringify(c.effects);
     if (_seenEffects.has(key)) return false;
     _seenEffects.add(key);
     return true;
@@ -193,6 +202,32 @@ function summarizeStep(s) {
     default:                           base = s.type; break;
   }
   return after ? `${base} ${after}` : base;
+}
+
+function summarizeEffect(e) {
+  switch (e.type) {
+    case "reduce_enemy_evasion":              return `回避側回避力-${e.amount}`;
+    case "increase_enemy_evasion":            return `回避側回避力+${e.amount}`;
+    case "reduce_own_evasion":                return `自分回避力-${e.amount}`;
+    case "enemy_move_adjacent":               return "回避側が隣接マスへ移動";
+    case "pre_self_move_adjacent":            return "配置前に自機が隣接マスへ移動";
+    case "extra_support_cover":               return `援護/かばうを+${e.count}回追加宣言可`;
+    case "double_support_cover":              return "援護射撃/かばうを2回行う";
+    case "self_move_empty":                   return "自機が空きマスへ移動";
+    case "self_move_any":                     return "自機が任意マスへ移動";
+    case "no_sc_cost":                        return "SC消費なし";
+    case "cancel_hp_reduction":              return "残り人数減少を打ち消す";
+    case "attacker_chooses_respawn":         return "再配置マスを攻撃側が決定";
+    case "costs_rei":                         return `霊力${e.amount}消費`;
+    case "costs_own_evasion":                return `自回避力${e.amount}消費`;
+    case "extra_hp_loss_if_same_cell_fail":  return "同マス回避失敗時に追加人数減";
+    case "next_dodge_no_evasion_loss":       return "次回避時に回避力消費なし";
+    case "enemy_may_stay_on_dodge":          return "回避側が移動しなくてよい";
+    case "remove_from_enemy_cell":           return `敵機マスから${e.count}除去`;
+    case "reset_graze":                      return "グレイズをリセット";
+    case "mirror_graze_gain":               return "グレイズ増加を相手に反映";
+    default:                                 return e.type;
+  }
 }
 
 // ── デフォルト値 ─────────────────────────────────────
