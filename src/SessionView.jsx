@@ -4,6 +4,52 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 
+// ─── SpellCard フレームコンポーネント ────────────────────────────────
+// 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
+export function SpellCard({ color = C.gold, title, headerRight, children, style = {}, contentStyle = {} }) {
+  const dim = color + "44";
+  const glow = color + "1a";
+  return (
+    <div style={{
+      position: "relative",
+      border: `1px solid ${color}`,
+      borderRadius: 2,
+      background: "rgba(4,4,12,0.93)",
+      boxShadow: `0 0 20px ${glow}, inset 0 0 24px rgba(0,0,0,0.55)`,
+      ...style,
+    }}>
+      {/* 内側の細枠 */}
+      <div style={{
+        position: "absolute", inset: 5,
+        border: `1px solid ${dim}`,
+        borderRadius: 1,
+        pointerEvents: "none",
+      }} />
+      {/* 四隅のダイヤ装飾 */}
+      {[{ top: -5, left: 12 }, { top: -5, right: 12 }, { bottom: -5, left: 12 }, { bottom: -5, right: 12 }].map((pos, i) => (
+        <div key={i} style={{ position: "absolute", width: 10, height: 10, background: color, transform: "rotate(45deg)", ...pos }} />
+      ))}
+      {/* コンテンツ（内側枠より手前） */}
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {title && (
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "8px 16px 7px",
+            borderBottom: `1px solid ${dim}`,
+            background: `linear-gradient(90deg, ${color}18 0%, transparent 70%)`,
+          }}>
+            <span style={{ fontSize: 11, color, letterSpacing: 3, fontFamily: "'Noto Serif JP', serif" }}>{title}</span>
+            {headerRight}
+          </div>
+        )}
+        <div style={{ padding: "10px 12px", ...contentStyle }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── ユーティリティ ───────────────────────────────────────────────
 export function getSpotByD66(d1, d2, SPOTS) {
   const val = Math.min(d1, d2) * 10 + Math.max(d1, d2);
@@ -1273,24 +1319,23 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
       const remaining = b.spellChoose.remaining - b.spellChoose.selected.length;
       return (
-        <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${C.gold}`, marginTop: 10 }}>
-          <div style={{ fontSize: 11, color: C.gold, marginBottom: 6 }}>🔮 マスを {remaining} 箇所選択してください</div>
-          <div style={{ fontSize: 9, color: C.textDim }}>（グリッド上のマス番号をクリック）</div>
-          <div style={{ display: "flex", gap: 4, marginTop: 8, justifyContent: "center" }}>
+        <SpellCard color={C.gold} title={`✦ マスを ${remaining} 箇所選択`} style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 9, color: C.textDim, marginBottom: 10 }}>（グリッド上のマス番号をクリック）</div>
+          <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
             {[1,2,3,4,5,6].map(cell => {
               const alreadySelected = b.spellChoose.selected.includes(cell);
               return (
                 <button key={cell} onClick={() => handleSpellChooseCell(cell)}
                   disabled={alreadySelected || !canDeclare}
                   style={{ width: 32, height: 32, borderRadius: 4, cursor: alreadySelected ? "default" : "pointer",
-                    background: alreadySelected ? "rgba(200,160,64,0.3)" : "rgba(255,255,255,0.05)",
+                    background: alreadySelected ? "rgba(212,168,56,0.3)" : "rgba(255,255,255,0.05)",
                     border: `1px solid ${alreadySelected ? C.gold : C.border}`, color: alreadySelected ? C.gold : C.text, fontSize: 13 }}>
                   {cell}
                 </button>
               );
             })}
           </div>
-        </div>
+        </SpellCard>
       );
     }
 
@@ -1298,14 +1343,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (available.length === 0 || b.lastSpellUsed || spellPts <= 0 || !canDeclare) return null;
 
     return (
-      <div style={{ background: "rgba(0,0,0,0.85)", padding: 12, borderRadius: 8, border: `1px solid ${borderColor}`, marginTop: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 11, color: cardColor }}>
-            🔮 スペルカード宣言 — {attacker?.charName || attacker?.name}
-          </div>
-          <div style={{ fontSize: 10, color: C.gold }}>残り {spellPts} 点</div>
-        </div>
-
+      <SpellCard
+        color={cardColor}
+        title={`✦ スペルカード宣言 ─ ${attacker?.charName || attacker?.name}`}
+        headerRight={<span style={{ fontSize: 10, color: C.gold }}>残り {spellPts} 点</span>}
+        style={{ marginTop: 14 }}
+        contentStyle={{ padding: "8px 10px" }}
+      >
         {available.map((spell, i) => {
           const [expanded, setExpanded] = [false, () => {}];
           return (
@@ -1348,7 +1392,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             </div>
           );
         })}
-      </div>
+      </SpellCard>
     );
   };
 
@@ -1912,8 +1956,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const cardBorder = isSafe ? C.green : C.red;
 
     return (
-      <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `2px solid ${cardBorder}`, textAlign: "center" }}>
-        <div style={{ color: "#fff", fontSize: 12, marginBottom: 8 }}>{isPc ? "当たり判定ステップ" : "当たり判定ステップ(NPC)"}</div>
+      <SpellCard color={cardBorder} title={isPc ? "◆ 当たり判定" : "◆ 当たり判定（NPC）"} contentStyle={{ textAlign: "center", padding: 14 }}>
         {renderSpellStep(isPc, "hit")}
 
         {/* ⚡ 不死身スキル */}
@@ -2030,20 +2073,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             )}
           </div>
         )}
-      </div>
+      </SpellCard>
     );
   };
 
   const renderDropout = (isPc) => {
     const combatant = isPc ? combatantPc : combatantNpc;
     return (
-      <div style={{ background: "rgba(0,0,0,0.85)", padding: 20, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
+      <SpellCard color={C.red} title="◆ 脱落" contentStyle={{ textAlign: "center", padding: 16 }}>
         <div style={{ color: C.red, fontSize: 16, fontWeight: "bold", marginBottom: 10 }}>脱落</div>
         <div style={{ color: "#fff", fontSize: 11, marginBottom: 15 }}>{combatant?.charName || combatant?.name} は戦線から離脱しました...</div>
         {isGm && (
           <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "cleanup" } }))} style={btnFull(C.border, C.border, C.textFaint)}>ラウンド終了処理へ</button>
         )}
-      </div>
+      </SpellCard>
     );
   };
 
@@ -2168,12 +2211,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
-        <div style={{ background: "#0c1020", border: `2px solid ${borderColor}`, padding: 36, borderRadius: 10, maxWidth: 480, width: "90%", textAlign: "center" }}>
-          <div style={{ fontSize: 22, color: titleColor, fontWeight: "bold", marginBottom: 16, letterSpacing: 2 }}>{title}</div>
+        <SpellCard color={borderColor} style={{ maxWidth: 480, width: "90%" }} contentStyle={{ textAlign: "center", padding: 32 }}>
+          <div style={{ fontSize: 22, color: titleColor, fontWeight: "bold", marginBottom: 16, letterSpacing: 3 }}>{title}</div>
 
           {isVictory && !isMass && relatedQ && (
-            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
-              <div style={{ fontSize: 11, color: C.gold, marginBottom: 4 }}>クエスト解決</div>
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(212,168,56,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 11, color: C.gold, marginBottom: 4, letterSpacing: 2 }}>クエスト解決</div>
               <div style={{ fontSize: 13, color: "#fff" }}>「{relatedQ.name}」</div>
             </div>
           )}
@@ -2198,7 +2241,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ) : (
             <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>
           )}
-        </div>
+        </SpellCard>
       </div>
     );
   }
