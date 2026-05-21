@@ -13,6 +13,32 @@ export const SPRITE_COLS = 10;
 
 export { CHARACTERS, PERSONALITY_SKILLS };
 
+// ─── ロビー共通コンポーネント ─────────────────────────────────────
+
+function Divider({ color = C.textFaint, style = {} }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, ...style }}>
+      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${color}90)` }} />
+      <span style={{ fontSize: 8, color }}>◆</span>
+      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${color}90, transparent)` }} />
+    </div>
+  );
+}
+
+function LobbyCard({ color = C.gold, children, style = {}, onClick }) {
+  const dim  = color + "44";
+  const glow = color + "18";
+  return (
+    <div onClick={onClick} style={{ position: "relative", border: `1px solid ${color}`, borderRadius: 2, background: "rgba(4,4,12,0.93)", boxShadow: `0 0 20px ${glow}`, cursor: onClick ? "pointer" : "default", ...style }}>
+      <div style={{ position: "absolute", inset: 5, border: `1px solid ${dim}`, borderRadius: 1, pointerEvents: "none" }} />
+      {[{ top: -5, left: 14 }, { top: -5, right: 14 }, { bottom: -5, left: 14 }, { bottom: -5, right: 14 }].map((pos, i) => (
+        <div key={i} style={{ position: "absolute", width: 10, height: 10, background: color, transform: "rotate(45deg)", ...pos }} />
+      ))}
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+    </div>
+  );
+}
+
 // ─── ユーティリティ ──────────────────────────────────────────────
 
 function rollD6()  { return Math.floor(Math.random() * 6) + 1; }
@@ -61,17 +87,25 @@ function LoginScreen() {
   };
 
   return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
-      <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } } button:hover { opacity: 0.82 }`}</style>
-      <div style={{ textAlign: "center", animation: "fadeUp 0.5s ease" }}>
-        <div style={{ fontSize: 9, letterSpacing: 7, color: C.textFaint, marginBottom: 6 }}>TRPG SESSION SUPPORT</div>
-        <div style={{ fontSize: 24, color: C.gold, letterSpacing: 5, marginBottom: 3 }}>幻想ナラトグラフ</div>
-        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 36 }}>セッション支援システム</div>
-        <button onClick={login} disabled={loading} style={{ ...btn("rgba(66,133,244,0.2)", "#4285f4", "#8ab4f8", { padding: "12px 28px", fontSize: 13 }) }}>
-          {loading ? "接続中…" : "🔑 Googleアカウントでログイン"}
-        </button>
-        {err && <div style={{ marginTop: 12, fontSize: 10, color: C.red }}>{err}</div>}
-      </div>
+    <div style={{ background: "radial-gradient(ellipse at center, #110a24 0%, #07050e 55%, #040309 100%)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
+      <style>{`
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes glowPulse { 0%,100% { text-shadow: 0 0 24px rgba(212,168,56,0.5) } 50% { text-shadow: 0 0 48px rgba(212,168,56,0.9), 0 0 80px rgba(212,168,56,0.3) } }
+        button:hover { opacity: 0.82 }
+      `}</style>
+      <LobbyCard color={C.gold} style={{ animation: "fadeUp 0.6s ease" }}>
+        <div style={{ textAlign: "center", padding: "36px 52px", minWidth: 300 }}>
+          <div style={{ fontSize: 9, letterSpacing: 8, color: C.textFaint, marginBottom: 14 }}>TRPG SESSION SUPPORT</div>
+          <Divider color={C.textFaint} style={{ marginBottom: 20 }} />
+          <div style={{ fontSize: 28, color: C.gold, letterSpacing: 8, marginBottom: 8, fontWeight: 700, animation: "glowPulse 4s ease-in-out infinite" }}>幻想ナラトグラフ</div>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 28, letterSpacing: 3 }}>幻想郷のセッション支援システム</div>
+          <Divider color={C.goldDim} style={{ marginBottom: 28 }} />
+          <button onClick={login} disabled={loading} style={{ ...btn("rgba(20,16,48,0.9)", C.gold, C.gold, { padding: "13px 40px", fontSize: 13, letterSpacing: 2, boxShadow: "0 0 16px rgba(212,168,56,0.25)" }) }}>
+            {loading ? "接続中…" : "🔮 Googleアカウントでログイン"}
+          </button>
+          {err && <div style={{ marginTop: 14, fontSize: 10, color: C.red }}>{err}</div>}
+        </div>
+      </LobbyCard>
     </div>
   );
 }
@@ -90,22 +124,25 @@ function UsernameSetup({ user, onDone }) {
   };
 
   return (
-    <div style={{ background: "#040608", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
-      <div style={{ textAlign: "center", maxWidth: 320 }}>
-        <div style={{ fontSize: 20, color: C.gold, letterSpacing: 3, marginBottom: 4 }}>幻想ナラトグラフ</div>
-        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 24 }}>セッションで使用する名前を設定してください</div>
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="例: アリス"
-          style={{ ...iStyle, textAlign: "center", fontSize: 16, letterSpacing: 2, marginBottom: 12 }}
-          onKeyDown={e => e.key === "Enter" && save()}
-          autoFocus
-        />
-        <button onClick={save} disabled={saving || !name.trim()} style={{ ...btn(C.goldBg, C.goldDim, C.gold, { width: "100%", padding: "9px" }) }}>
-          {saving ? "保存中…" : "この名前で始める"}
-        </button>
-      </div>
+    <div style={{ background: "radial-gradient(ellipse at center, #110a24 0%, #07050e 55%, #040309 100%)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
+      <LobbyCard color={C.gold}>
+        <div style={{ textAlign: "center", padding: "28px 40px", maxWidth: 320 }}>
+          <div style={{ fontSize: 16, color: C.gold, letterSpacing: 4, marginBottom: 6 }}>幻想ナラトグラフ</div>
+          <Divider color={C.textFaint} style={{ marginBottom: 18 }} />
+          <div style={{ fontSize: 11, color: C.textDim, marginBottom: 20 }}>セッションで使用する名前を設定してください</div>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="例: アリス"
+            style={{ ...iStyle, textAlign: "center", fontSize: 16, letterSpacing: 2, marginBottom: 12 }}
+            onKeyDown={e => e.key === "Enter" && save()}
+            autoFocus
+          />
+          <button onClick={save} disabled={saving || !name.trim()} style={{ ...btn(C.goldBg, C.goldDim, C.gold, { width: "100%", padding: "9px", letterSpacing: 2 }) }}>
+            {saving ? "保存中…" : "この名前で始める"}
+          </button>
+        </div>
+      </LobbyCard>
     </div>
   );
 }
@@ -159,47 +196,63 @@ function Lobby({ user, displayName, onProfile }) {
     <div style={{ background: "#040608", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
       <style>{`button:hover { opacity: 0.82 }`}</style>
 
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 22, color: C.gold, letterSpacing: 4, marginBottom: 6 }}>幻想ナラトグラフ</div>
-        <div style={{ fontSize: 12, color: C.textDim }}>ようこそ、{displayName}さん</div>
+      <div style={{ textAlign: "center", marginBottom: 40 }}>
+        <div style={{ fontSize: 9, letterSpacing: 8, color: C.textFaint, marginBottom: 12 }}>TRPG SESSION SUPPORT</div>
+        <div style={{ fontSize: 24, color: C.gold, letterSpacing: 6, marginBottom: 6, fontWeight: 700 }}>幻想ナラトグラフ</div>
+        <Divider color={C.goldDim} style={{ maxWidth: 240, margin: "0 auto 10px" }} />
+        <div style={{ fontSize: 11, color: C.textDim, letterSpacing: 2 }}>ようこそ、{displayName}さん</div>
       </div>
 
       {view === "top" && (
-        <div style={{ display: "flex", gap: 12 }}>
-          <button onClick={() => setView("create")} style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "14px 28px" }) }}>🎲 GMとして部屋を作る</button>
-          <button onClick={() => setView("join")}   style={{ ...btn(C.blueBg, C.blueBorder, C.blue, { padding: "14px 28px" }) }}>✦ 部屋に参加する</button>
+        <div style={{ display: "flex", gap: 16 }}>
+          <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180 }}>
+            <div style={{ textAlign: "center", padding: "24px 32px" }}>
+              <div style={{ fontSize: 22, color: C.red, marginBottom: 10 }}>⚙</div>
+              <div style={{ fontSize: 12, color: C.red, letterSpacing: 2 }}>GMとして部屋を作る</div>
+            </div>
+          </LobbyCard>
+          <LobbyCard color={C.blue} onClick={() => setView("join")} style={{ minWidth: 180 }}>
+            <div style={{ textAlign: "center", padding: "24px 32px" }}>
+              <div style={{ fontSize: 22, color: C.blue, marginBottom: 10 }}>◆</div>
+              <div style={{ fontSize: 12, color: C.blue, letterSpacing: 2 }}>部屋に参加する</div>
+            </div>
+          </LobbyCard>
         </div>
       )}
 
       {view === "create" && (
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 11, color: C.textDim, marginBottom: 16 }}>GMとして新しいセッションを開始します</div>
-          <button onClick={createRoom} disabled={loading} style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "12px 32px" }) }}>
-            {loading ? "作成中…" : "部屋を作成する"}
-          </button>
-          <br />
-          <button onClick={() => setView("top")} style={{ ...btn("none", "none", C.textFaint, { marginTop: 10, fontSize: 11 }) }}>← 戻る</button>
-        </div>
+        <LobbyCard color={C.red} style={{ minWidth: 280 }}>
+          <div style={{ textAlign: "center", padding: "24px 32px" }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 20 }}>GMとして新しいセッションを開始します</div>
+            <button onClick={createRoom} disabled={loading} style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "12px 32px", width: "100%", letterSpacing: 2 }) }}>
+              {loading ? "作成中…" : "部屋を作成する"}
+            </button>
+            <br />
+            <button onClick={() => setView("top")} style={{ ...btn("none", "none", C.textFaint, { marginTop: 12, fontSize: 11 }) }}>← 戻る</button>
+          </div>
+        </LobbyCard>
       )}
 
       {view === "join" && (
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>GMから共有された部屋コードを入力してください</div>
-          <input
-            value={joinCode}
-            onChange={e => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="例: XK7F2"
-            maxLength={5}
-            style={{ ...iStyle, textAlign: "center", fontSize: 20, letterSpacing: 6, width: 160, marginBottom: 10 }}
-            onKeyDown={e => e.key === "Enter" && joinRoom()}
-          />
-          <br />
-          <button onClick={joinRoom} disabled={loading || !joinCode.trim()} style={{ ...btn(C.blueBg, C.blueBorder, C.blue, { padding: "10px 28px", opacity: joinCode.trim() ? 1 : 0.4 }) }}>
-            {loading ? "確認中…" : "参加する"}
-          </button>
-          <br />
-          <button onClick={() => setView("top")} style={{ ...btn("none", "none", C.textFaint, { marginTop: 10, fontSize: 11 }) }}>← 戻る</button>
-        </div>
+        <LobbyCard color={C.blue} style={{ minWidth: 300 }}>
+          <div style={{ textAlign: "center", padding: "24px 32px" }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 16 }}>GMから共有された部屋コードを入力してください</div>
+            <input
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="例: XK7F2"
+              maxLength={5}
+              style={{ ...iStyle, textAlign: "center", fontSize: 20, letterSpacing: 8, width: 160, marginBottom: 12 }}
+              onKeyDown={e => e.key === "Enter" && joinRoom()}
+            />
+            <br />
+            <button onClick={joinRoom} disabled={loading || !joinCode.trim()} style={{ ...btn(C.blueBg, C.blueBorder, C.blue, { padding: "10px 28px", opacity: joinCode.trim() ? 1 : 0.4, letterSpacing: 2 }) }}>
+              {loading ? "確認中…" : "参加する"}
+            </button>
+            <br />
+            <button onClick={() => setView("top")} style={{ ...btn("none", "none", C.textFaint, { marginTop: 12, fontSize: 11 }) }}>← 戻る</button>
+          </div>
+        </LobbyCard>
       )}
 
       {err && <div style={{ marginTop: 14, fontSize: 11, color: C.red }}>{err}</div>}
@@ -355,9 +408,9 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
   // ローカルスタイル定数
   const S = {
     root: { background: C.bg, minHeight: "100vh", fontFamily: "'Noto Serif JP', serif", color: C.text, padding: 16 },
-    card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: 16, marginBottom: 12 },
-    h2:   { fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 10 },
-    sec:  { fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid #111828`, paddingBottom: 3, marginBottom: 8, marginTop: 6 },
+    card: { background: "rgba(5,4,14,0.9)", border: `1px solid ${C.border}`, borderRadius: 2, padding: "14px 16px", marginBottom: 12 },
+    h2:   { fontSize: 13, color: C.gold, letterSpacing: 3, marginBottom: 10 },
+    sec:  { fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8, marginTop: 6 },
   };
 
   if (!room) return (
@@ -371,17 +424,17 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       <style>{`button:hover { opacity: 0.82 } @keyframes spin { 50% { transform: scale(1.12) } } ::-webkit-scrollbar { width: 3px } ::-webkit-scrollbar-thumb { background: #1a1e2a } input, textarea, select { outline: none }`}</style>
 
       {/* ヘッダー */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div>
-          <span style={{ fontSize: 14, color: C.gold, letterSpacing: 2 }}>幻想ナラトグラフ</span>
-          <span style={{ fontSize: 10, color: C.textDim, marginLeft: 10 }}>準備フェイズ</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 16, color: C.gold, letterSpacing: 4 }}>幻想ナラトグラフ</span>
+          <span style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>準備フェイズ</span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ padding: "3px 12px", background: C.goldBg, border: `1px solid ${C.goldDim}`, borderRadius: 12, fontSize: 11, color: C.gold, letterSpacing: 2 }}>
-            部屋コード: {roomCode}
+          <div style={{ padding: "4px 16px", background: "rgba(4,4,12,0.9)", border: `1px solid ${C.goldDim}`, borderRadius: 2, fontSize: 12, color: C.gold, letterSpacing: 5 }}>
+            ◆ {roomCode}
           </div>
-          <button onClick={copyUrl} style={{ ...btn("rgba(255,255,255,0.04)", C.border, copied ? "#4caf50" : C.textDim, { padding: "3px 10px", fontSize: 10 }) }}>
-            {copied ? "✓ コピーしました" : "URLをコピー"}
+          <button onClick={copyUrl} style={{ ...btn("rgba(255,255,255,0.04)", C.border, copied ? C.green : C.textDim, { padding: "3px 10px", fontSize: 10 }) }}>
+            {copied ? "✓ コピー" : "URLをコピー"}
           </button>
           <button onClick={() => signOut(auth)} style={{ ...btn("none", C.border, C.textFaint, { padding: "3px 10px", fontSize: 10 }) }}>ログアウト</button>
         </div>
@@ -532,7 +585,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 {diceResult && (
                   <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 10 }}>
                     {diceResult.map((d, i) => (
-                      <div key={i} style={{ width: 44, height: 44, border: "2px solid #1e3a5a", borderRadius: 6, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#60c0f0", fontWeight: "bold", animation: diceAnim ? "spin 0.25s ease infinite" : "none" }}>
+                      <div key={i} style={{ width: 48, height: 48, border: `2px solid ${diceAnim ? C.gold : C.goldDim}`, borderRadius: 3, background: "rgba(8,6,18,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, color: C.gold, fontWeight: "bold", animation: diceAnim ? "spin 0.25s ease infinite" : "none", boxShadow: diceAnim ? `0 0 14px rgba(212,168,56,0.5)` : "none", transition: "border-color 0.3s, box-shadow 0.3s" }}>
                         {d}
                       </div>
                     ))}
