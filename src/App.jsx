@@ -20,7 +20,7 @@ function areaColor(area) {
 }
 
 // BFS でスタート地点から各スポットへの最短距離を求める
-function getDistances(startSpotId) {
+export function getDistances(startSpotId) {
   if (!startSpotId) return {};
   const dists = { [startSpotId]: 0 };
   const queue = [startSpotId];
@@ -44,7 +44,7 @@ function getSpot(id) {
 }
 
 // シナリオデータの互換性チェックと正規化（旧仕様の dsType/dsName 等を nested ds に変換）
-function normalizeScenario(s) {
+export function normalizeScenario(s) {
   if (!s) return s;
   const clone = { ...s };
   clone.finalBattleEnemies = (s.finalBattleEnemies || []).map(en => {

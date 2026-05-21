@@ -192,15 +192,24 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
   );
 }
 
-function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick }) {
+function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick, lives, maxLives, sc }) {
   const cells = [1, 2, 3, 4, 5, 6];
   const campColor = isNpc ? C.red : C.blue;
-  
+  const borderColor = isCombatant ? campColor : C.border;
+
   return (
-    <div style={{ 
-      width: 180, opacity: isDead ? 0.4 : 1, 
-      border: `2px solid ${isCombatant ? campColor : C.border}`, 
-      borderRadius: 8, background: "rgba(10,12,20,0.8)", padding: 6 
+    <div style={{
+      position: "relative",
+      width: 210,
+      opacity: isDead ? 0.35 : 1,
+      border: `2px solid ${borderColor}`,
+      borderRadius: 6,
+      background: "rgba(8,10,18,0.9)",
+      padding: 6,
+      boxShadow: isCombatant
+        ? `0 0 22px ${campColor}44, inset 0 0 18px rgba(0,0,0,0.55)`
+        : "inset 0 0 12px rgba(0,0,0,0.4)",
+      transition: "box-shadow 0.3s, border-color 0.3s",
     }}>
       <style>{`
         @keyframes pulseHighlight {
@@ -209,41 +218,48 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
           100% { box-shadow: inset 0 0 2px ${C.blue}; background: rgba(100, 181, 246, 0.1); }
         }
       `}</style>
-      <div style={{ fontSize: 10, color: isCombatant ? campColor : C.textDim, textAlign: "center", marginBottom: 4, fontWeight: "bold" }}>
+
+      {/* アクティブ時の内側装飾枠 */}
+      {isCombatant && (
+        <div style={{ position: "absolute", inset: 4, border: `1px solid ${campColor}44`, borderRadius: 3, pointerEvents: "none" }} />
+      )}
+
+      <div style={{ fontSize: 10, color: isCombatant ? campColor : C.textDim, textAlign: "center", marginBottom: 5, fontWeight: "bold", letterSpacing: 1 }}>
         {name}
       </div>
-      
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(2, 50px)", gap: 4 }}>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(2, 56px)", gap: 4 }}>
         {cells.map(num => {
           const danmakuCount = grid ? grid[num - 1] : 0;
           const hasChar = pos === num;
           const isHighlighted = highlightCells.includes(num);
-          
+
           return (
-            <div 
-              key={num} 
+            <div
+              key={num}
               onClick={() => isHighlighted && onCellClick && onCellClick(num)}
-              style={{ 
+              style={{
                 position: "relative",
-                background: "rgba(255,255,255,0.03)", 
-                border: `1px solid ${hasChar ? campColor : isHighlighted ? C.blue : "rgba(255,255,255,0.1)"}`,
+                background: hasChar ? `${campColor}10` : "rgba(255,255,255,0.02)",
+                border: `1px solid ${hasChar ? campColor : isHighlighted ? C.blue : "rgba(255,255,255,0.08)"}`,
                 borderRadius: 4,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: isHighlighted ? "pointer" : "default",
                 animation: isHighlighted ? "pulseHighlight 1.5s infinite" : "none",
-                transition: "all 0.2s"
+                transition: "all 0.2s",
               }}
             >
-              <div style={{ position: "absolute", top: 2, left: 3, fontSize: 8, color: "rgba(255,255,255,0.2)" }}>{num}</div>
-              
+              <div style={{ position: "absolute", top: 2, left: 3, fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{num}</div>
+
               {danmakuCount > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center", padding: 2 }}>
-                  {[...Array(danmakuCount)].map((_, i) => (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: isNpc ? C.blue : C.red }} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "center", padding: 3 }}>
+                  {[...Array(Math.min(danmakuCount, 9))].map((_, i) => (
+                    <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: isNpc ? C.blue : C.red, boxShadow: `0 0 4px ${isNpc ? C.blue : C.red}88` }} />
                   ))}
+                  {danmakuCount > 9 && <span style={{ fontSize: 8, color: isNpc ? C.blue : C.red }}>{danmakuCount}</span>}
                 </div>
               )}
-              
+
               {hasChar && (
                 <div style={{ position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
                   {sprite}
@@ -253,9 +269,50 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
           );
         })}
       </div>
+
+      {/* ステータスバー */}
+      {(lives !== undefined || sc !== undefined) && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 5, padding: "3px 2px", borderTop: `1px solid rgba(255,255,255,0.06)` }}>
+          {lives !== undefined && (
+            <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+              {[...Array(maxLives || 3)].map((_, i) => (
+                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < lives ? campColor : "rgba(255,255,255,0.1)", boxShadow: i < lives ? `0 0 5px ${campColor}99` : "none" }} />
+              ))}
+            </div>
+          )}
+          {sc !== undefined && (
+            <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1 }}>◇×{sc}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+// 弾幕ごっこのフェーズ表示用ラベル
+const PHASE_LABELS = {
+  setup:             "対戦準備",
+  round_start:       "対戦者選出",
+  pc_shot_intro:     "PCショット宣言",
+  pc_shot_roll:      "PCショット",
+  pc_shot_after:     "PCショット後",
+  npc_shot_intro:    "NPCショット宣言",
+  npc_shot_roll:     "NPCショット",
+  npc_shot_after:    "NPCショット後",
+  pc_evade_intro:    "PC回避判定",
+  pc_evade_move:     "PC回避移動",
+  npc_evade_intro:   "NPC回避判定",
+  npc_evade_move:    "NPC回避移動",
+  pc_hit_check:      "PC当たり判定",
+  npc_hit_check:     "NPC当たり判定",
+  pc_hit_recovery:   "PC復帰",
+  npc_hit_recovery:  "NPC復帰",
+  pc_dropout:        "PC脱落",
+  npc_dropout:       "NPC脱落",
+  round_end_check:   "ラウンド終了確認",
+  cleanup:           "ラウンド終了処理",
+  result:            "結果",
+};
 
 const TIMING_RULES = [
   { key: "round_start", re: /ラウンドの?開始時/       },
@@ -1300,16 +1357,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canRoll = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
 
     return (
-      <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${cardColor}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-        <div style={{ color: cardColor, fontSize: 11, marginBottom: 4 }}>{title}</div>
-        <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{name} の攻撃</div>
-        {b.supportDice > 0 && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>援護射撃ボーナス: +{b.supportDice}D</div>}
+      <SpellCard
+        color={cardColor}
+        title={`◆ ${title}`}
+        style={{ minWidth: 280, animation: "fadeUp 0.3s ease" }}
+        contentStyle={{ textAlign: "center", padding: "14px 18px" }}
+      >
+        <div style={{ color: "#fff", fontSize: 14, marginBottom: 12, fontWeight: 700, letterSpacing: 2 }}>{name}</div>
+        {b.supportDice > 0 && (
+          <div style={{
+            fontSize: 10, color: C.sakura, marginBottom: 10,
+            padding: "3px 8px", display: "inline-block",
+            background: `${C.sakura}1a`, border: `1px solid ${C.sakura}55`, borderRadius: 2,
+          }}>
+            ✦ 援護射撃 +{b.supportDice}D
+          </div>
+        )}
         {canRoll && (
-          <button onClick={() => executeShot(isPc)} style={buttonStyle}>
+          <button onClick={() => executeShot(isPc)} style={{ ...buttonStyle, fontSize: 12, letterSpacing: 2, padding: "10px" }}>
             🎲 ショットを放つ ({diceCount}D)
           </button>
         )}
-      </div>
+      </SpellCard>
     );
   };
 
@@ -1496,15 +1565,29 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canBigPower = canProceed && dice.length > 0 && hasOfficialSkill(attacker, "大威力")     && !isDanmakuUsed(attackerId, "大威力") && !b.bigPowerSelect;
 
     return (
-      <div style={{ background: "rgba(0,0,0,0.8)", padding: 15, borderRadius: 8, border: `1px solid ${C.greenBorder}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-        <div style={{ color: C.green, fontSize: 11, marginBottom: 6 }}>ショット完了</div>
-
+      <SpellCard
+        color={C.green}
+        title="◆ ショット完了"
+        style={{ minWidth: 280, animation: "fadeUp 0.3s ease" }}
+        contentStyle={{ textAlign: "center", padding: 14 }}
+      >
         {/* ダイス結果表示 */}
         {dice.length > 0 && (
-          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginBottom: 10 }}>
-            {dice.map((d, i) => (
-              <div key={i} style={{ width: 30, height: 30, background: "rgba(14,20,36,0.95)", border: `1px solid ${C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: C.blue, fontWeight: "bold" }}>{d}</div>
-            ))}
+          <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
+            {dice.map((d, i) => {
+              const c = isPc ? C.blue : C.red;
+              return (
+                <div key={i} style={{
+                  width: 36, height: 36,
+                  background: "rgba(8,6,18,0.95)",
+                  border: `2px solid ${c}`,
+                  borderRadius: 3,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 18, color: c, fontWeight: "bold",
+                  boxShadow: `0 0 10px ${c}55`,
+                }}>{d}</div>
+              );
+            })}
           </div>
         )}
 
@@ -1854,7 +1937,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             </button>
           );
         })()}
-      </div>
+      </SpellCard>
     );
   };
 
@@ -1870,41 +1953,52 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canProceed = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
 
     return (
-      <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${borderColor}`, textAlign: "center" }}>
-        <div style={{ color: titleColor, fontSize: 11, marginBottom: 4 }}>{isPc ? "回避ステップ" : "回避ステップ(NPC)"}</div>
-        <div style={{ color: "#fff", fontSize: 13, marginBottom: 12 }}>{combatant?.charName || combatant?.name} の回避</div>
+      <SpellCard
+        color={titleColor}
+        title={isPc ? "◆ 回避ステップ" : "◆ 回避ステップ（NPC）"}
+        headerRight={
+          !canAutoSuccess && (
+            <span style={{ fontSize: 10, color: C.gold, letterSpacing: 1 }}>目標 {targetValue}</span>
+          )
+        }
+        style={{ minWidth: 280 }}
+        contentStyle={{ textAlign: "center", padding: 14 }}
+      >
+        <div style={{ color: "#fff", fontSize: 14, marginBottom: 12, fontWeight: 700, letterSpacing: 2 }}>{combatant?.charName || combatant?.name}</div>
         {canAutoSuccess ? (
           <div>
-            <div style={{ color: C.green, fontSize: 10, marginBottom: 10 }}>マスの弾幕が 0 なので自動成功です</div>
+            <div style={{ color: C.green, fontSize: 11, marginBottom: 12, padding: "5px 10px", display: "inline-block", background: `${C.green}1a`, border: `1px solid ${C.greenBorder}`, borderRadius: 2 }}>
+              ✦ 弾幕 0 — 自動成功
+            </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
               {canProceed && (
                 <>
                   <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" } }))} style={btnFull(C.greenBg, C.greenBorder, C.green)}>移動先を選択</button>
-                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>その場にとどまる</button>
+                  <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.06)", C.border, C.text)}>その場にとどまる</button>
                 </>
               )}
             </div>
           </div>
         ) : (
           <div>
-            <div style={{ color: C.gold, fontSize: 10, marginBottom: 10 }}>目標値: {targetValue} (弾幕 {bulletCount} + 3)</div>
+            <div style={{ color: C.textDim, fontSize: 10, marginBottom: 10, letterSpacing: 1 }}>弾幕 {bulletCount} + 3 = {targetValue}</div>
             {isPlayable && (
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 {canProceed && (
                   <>
                     {remainingDice > 0 ? (
                       <>
-                        <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red)}>
+                        <button onClick={() => handleEvadeRoll(isPc)} style={btnFull(isPc ? C.blueBg : C.redBg, isPc ? C.blueBorder : C.redBorder, isPc ? C.blue : C.red, { fontSize: 12, padding: "10px 14px", letterSpacing: 2 })}>
                           🎲 回避判定 ({remainingDice}D)
                         </button>
                         {isPc && (
-                          <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.1)", C.border, C.text)}>
+                          <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "pc_hit_check", currentEvadeDice: getDefaultEvadeDice(combatantPc) } }))} style={btnFull("rgba(255,255,255,0.06)", C.border, C.text)}>
                             その場にとどまる
                           </button>
                         )}
                       </>
                     ) : (
-                      <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.08)", C.border, C.text)}>
+                      <button onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", currentEvadeDice: isPc ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice } }))} style={btnFull("rgba(255,255,255,0.06)", C.border, C.text)}>
                         回避ダイスがなくなりました。判定へ
                       </button>
                     )}
@@ -1914,45 +2008,48 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             )}
           </div>
         )}
-      {renderSpellStep(!isPc, "evade")}
+        {renderSpellStep(!isPc, "evade")}
 
-      {/* ⚡ 壁抜け（防御側が回避ステップ中に使用） */}
-      {isPlayable && (() => {
-        const defenderId = isPc ? b.pcCombatant : b.npcCombatant;
-        const defender   = isPc ? combatantPc : combatantNpc;
-        const canWallPass = hasOfficialSkill(defender, "壁抜け") && !isDanmakuUsed(defenderId, "壁抜け") && !b.wallPass;
-        return canWallPass ? (
-          <button
-            onClick={() => {
-              markDanmakuUsed(defenderId, "壁抜け");
-              upd(p => ({ ...p,
-                battle: { ...p.battle, wallPass: true },
-                log: [`🧱 ${defender?.charName || defender?.name} の「壁抜け」が発動：1↔3番・4↔6番が隣接扱いになります。`, ...p.log]
-              }));
-            }}
-            style={{ ...btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold), marginTop: 6 }}>
-            🧱 壁抜け（1↔3・4↔6番を隣接扱い）
-          </button>
-        ) : b.wallPass ? (
-          <div style={{ fontSize: 9, color: C.gold, marginTop: 4 }}>🧱 壁抜け発動中</div>
-        ) : null;
-      })()}
-      </div>
+        {/* ⚡ 壁抜け（防御側が回避ステップ中に使用） */}
+        {isPlayable && (() => {
+          const defenderId = isPc ? b.pcCombatant : b.npcCombatant;
+          const defender   = isPc ? combatantPc : combatantNpc;
+          const canWallPass = hasOfficialSkill(defender, "壁抜け") && !isDanmakuUsed(defenderId, "壁抜け") && !b.wallPass;
+          return canWallPass ? (
+            <button
+              onClick={() => {
+                markDanmakuUsed(defenderId, "壁抜け");
+                upd(p => ({ ...p,
+                  battle: { ...p.battle, wallPass: true },
+                  log: [`🧱 ${defender?.charName || defender?.name} の「壁抜け」が発動：1↔3番・4↔6番が隣接扱いになります。`, ...p.log]
+                }));
+              }}
+              style={{ ...btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold), marginTop: 8 }}>
+              🧱 壁抜け（1↔3・4↔6番を隣接扱い）
+            </button>
+          ) : b.wallPass ? (
+            <div style={{ fontSize: 9, color: C.gold, marginTop: 6 }}>🧱 壁抜け発動中</div>
+          ) : null;
+        })()}
+      </SpellCard>
     );
   };
 
   const renderEvadeMove = (isPc) => {
     const borderColor = isPc ? C.blue : C.red;
-    const textColor = isPc ? C.blue : C.red;
 
     return (
-      <div style={{ background: "rgba(0,0,0,0.85)", padding: "12px 20px", borderRadius: 8, border: `1px solid ${borderColor}`, textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-        <div style={{ color: textColor, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>移動先を選択</div>
-        <div style={{ color: "#fff", fontSize: 10 }}>ハイライトされた隣接マスをクリックしてください</div>
+      <SpellCard
+        color={borderColor}
+        title="◆ 移動先を選択"
+        style={{ minWidth: 260, animation: "fadeUp 0.3s ease" }}
+        contentStyle={{ textAlign: "center", padding: "12px 16px" }}
+      >
+        <div style={{ color: C.text, fontSize: 11, letterSpacing: 1 }}>ハイライトされた隣接マスをクリックしてください</div>
         {isGm && (
           <div style={{ marginTop: 8, fontSize: 9, color: C.textFaint }}>※GMはPLの代わりに操作可能です</div>
         )}
-      </div>
+      </SpellCard>
     );
   };
 
@@ -2398,7 +2495,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           }
 
           return (
-            <BattleGrid 
+            <BattleGrid
               key={n.id}
               name={n.name}
               isNpc={true}
@@ -2407,6 +2504,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               pos={b.positions?.[n.id]}
               isDead={n.resources.残り人数?.cur <= 0}
               highlightCells={highlights}
+              lives={n.resources.残り人数?.cur}
+              maxLives={n.resources.残り人数?.max}
+              sc={n.resources.スペルカード?.cur}
               onCellClick={(num) => {
                 if (isRecovery) {
                   handleRecovery(false, num);
@@ -2421,8 +2521,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       </div>
 
       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ background: "#080a14", border: `1px solid ${C.goldDim}`, color: C.gold, padding: "4px 20px", borderRadius: 20, fontSize: 12, fontWeight: "bold", boxShadow: "0 0 20px rgba(0,0,0,0.8)" }}>
-          {b.phase.toUpperCase()}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "rgba(8,6,18,0.95)",
+          border: `1px solid ${C.goldDim}`,
+          color: C.gold,
+          padding: "5px 18px",
+          borderRadius: 2,
+          fontSize: 11,
+          fontWeight: "bold",
+          letterSpacing: 3,
+          boxShadow: `0 0 20px rgba(0,0,0,0.8), 0 0 12px ${C.gold}22`,
+        }}>
+          <span style={{ color: C.textDim, fontSize: 9, letterSpacing: 2 }}>Rd.{b.round || 1}</span>
+          <span style={{ color: C.goldDim }}>◆</span>
+          <span>{PHASE_LABELS[b.phase] || b.phase}</span>
         </div>
 
         {(b.phase === "pc_shot_intro" || b.phase === "npc_shot_intro") && renderShotIntro(b.phase === "pc_shot_intro")}
@@ -2440,10 +2553,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         {(b.phase === "pc_hit_check" || b.phase === "npc_hit_check") && renderHitCheck(b.phase === "pc_hit_check")}
 
         {(b.phase === "pc_hit_recovery" || b.phase === "npc_hit_recovery") && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
-            <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>復帰位置を選択</div>
-            <div style={{ color: "#fff", fontSize: 10 }}>好きなマスをクリックして復帰してください</div>
-          </div>
+          <SpellCard color={C.gold} title="◆ 復帰位置を選択" style={{ minWidth: 260 }} contentStyle={{ textAlign: "center", padding: "12px 16px" }}>
+            <div style={{ color: C.text, fontSize: 11, letterSpacing: 1 }}>好きなマスをクリックして復帰してください</div>
+          </SpellCard>
         )}
 
         {(b.phase === "pc_dropout" || b.phase === "npc_dropout") && renderDropout(b.phase === "pc_dropout")}
@@ -2453,45 +2565,42 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           const allPcsDead  = alivePcs.length === 0;
 
           if (allNpcsDead) return (
-            <div style={{ background: "rgba(0,0,0,0.9)", padding: 20, borderRadius: 8, border: `2px solid ${C.gold}`, textAlign: "center" }}>
-              <div style={{ color: C.gold, fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>🎉 PC陣営の勝利！</div>
-              <div style={{ color: "#fff", fontSize: 11, marginBottom: 16 }}>全ての敵を撃破しました。</div>
+            <SpellCard color={C.gold} title="🎉 PC陣営の勝利！" style={{ minWidth: 300 }} contentStyle={{ textAlign: "center", padding: 18 }}>
+              <div style={{ color: "#fff", fontSize: 12, marginBottom: 16, letterSpacing: 1 }}>全ての敵を撃破しました</div>
               {isGm && (
                 <button
                   onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "result", result: "pc_win" } }))}
-                  style={btnFull(C.goldBg, C.goldDim, C.gold)}
+                  style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 12, letterSpacing: 2, padding: "10px" })}
                 >
                   結果画面へ
                 </button>
               )}
               {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>}
-            </div>
+            </SpellCard>
           );
 
           if (allPcsDead) return (
-            <div style={{ background: "rgba(0,0,0,0.9)", padding: 20, borderRadius: 8, border: `2px solid ${C.red}`, textAlign: "center" }}>
-              <div style={{ color: C.red, fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>💀 NPC陣営の勝利...</div>
-              <div style={{ color: "#fff", fontSize: 11, marginBottom: 16 }}>全てのPCが脱落しました。</div>
+            <SpellCard color={C.red} title="💀 NPC陣営の勝利..." style={{ minWidth: 300 }} contentStyle={{ textAlign: "center", padding: 18 }}>
+              <div style={{ color: "#fff", fontSize: 12, marginBottom: 16, letterSpacing: 1 }}>全てのPCが脱落しました</div>
               {isGm && (
                 <button
                   onClick={() => upd(p => ({ ...p, battle: { ...p.battle, phase: "result", result: "npc_win" } }))}
-                  style={btnFull(C.redBg, C.redBorder, C.red)}
+                  style={btnFull(C.redBg, C.redBorder, C.red, { fontSize: 12, letterSpacing: 2, padding: "10px" })}
                 >
                   結果画面へ
                 </button>
               )}
               {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>}
-            </div>
+            </SpellCard>
           );
 
           return (
-            <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
-              <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了処理</div>
-              <div style={{ color: "#fff", fontSize: 11, marginBottom: 6 }}>
-                脱落者が出ましたが、戦闘は続きます。
+            <SpellCard color={C.gold} title="◆ ラウンド終了処理" style={{ minWidth: 280 }} contentStyle={{ textAlign: "center", padding: 14 }}>
+              <div style={{ color: C.text, fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>
+                脱落者が出ましたが、戦闘は続きます
               </div>
-              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 14 }}>
-                残存PC: {alivePcs.length}人 ／ 残存NPC: {aliveNpcs.length}体
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 14, padding: "4px 10px", display: "inline-block", border: `1px solid ${C.border}`, borderRadius: 2 }}>
+                残存PC {alivePcs.length} ／ 残存NPC {aliveNpcs.length}
               </div>
               {isGm && (
                 <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
@@ -2499,14 +2608,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                 </button>
               )}
               {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMが次ラウンドを開始するのを待っています...</div>}
-            </div>
+            </SpellCard>
           );
         })()}
 
         {b.phase === "round_end_check" && (
-          <div style={{ background: "rgba(0,0,0,0.85)", padding: 15, borderRadius: 8, border: `1px solid ${C.gold}`, textAlign: "center" }}>
-            <div style={{ color: C.gold, fontSize: 12, fontWeight: "bold", marginBottom: 10 }}>ラウンド終了確認</div>
-            <div style={{ color: "#fff", fontSize: 11, marginBottom: 12 }}>敵の回避に成功しました。このラウンドを終了して次に進みます。</div>
+          <SpellCard color={C.gold} title="◆ ラウンド終了確認" style={{ minWidth: 300 }} contentStyle={{ textAlign: "center", padding: 14 }}>
+            <div style={{ color: C.text, fontSize: 11, marginBottom: 12, letterSpacing: 1 }}>敵の回避に成功しました。このラウンドを終了して次に進みます。</div>
             {/* ⚡ 低速弾（ラウンド終了時：弾幕を1マス分保護） */}
             {(() => {
               const pcId  = b.pcCombatant;
@@ -2578,7 +2686,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             {(isGm || user.uid === b.pcCombatant) && !b.pendingSpell && !b.slowBulletSelect && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
-          </div>
+          </SpellCard>
         )}
       </div>
 
@@ -2597,19 +2705,23 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[p.uid], b.wallPass);
 
           return (
-            <BattleGrid 
+            <BattleGrid
               key={p.uid}
               name={p.charName}
               isCombatant={isCombatant}
               grid={b.grids?.[p.uid]}
               pos={currentPos}
               highlightCells={isMyTurn ? highlights : []}
+              isDead={(p.resources?.残り人数?.cur || 0) <= 0}
+              lives={p.resources?.残り人数?.cur}
+              maxLives={p.resources?.残り人数?.max}
+              sc={p.resources?.スペルカード?.cur}
               onCellClick={(num) => {
                 if (isRecovery) handleRecovery(p.uid, num);
                 else if (isEvadeMove) handleEvadeMove(true, num);
               }}
               sprite={
-                p.customPortrait 
+                p.customPortrait
                   ? <img src={p.customPortrait} style={{ width: "90%", height: "90%", objectFit: "cover", borderRadius: "50%" }} />
                   : <CharSprite spriteRow={p.spriteRow} spriteCol={p.spriteCol} size={40} />
               }
