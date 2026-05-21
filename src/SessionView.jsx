@@ -5620,6 +5620,160 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   };
   const interventionUsed = b.usedIntervention?.[user.uid];
 
+  // ─── NPC ステータスカード ───
+  const renderNpcCard = (npc, isCurrent) => {
+    const npcId = npc.id;
+    const graze = npc.resources?.グレイズ?.cur ?? 0;
+    return (
+      <div key={npcId} style={{
+        padding: "8px 10px",
+        background: "rgba(192,57,43,0.1)",
+        border: `1px solid ${isCurrent ? C.red : C.redBorder}`,
+        borderRadius: 6,
+        boxShadow: isCurrent ? `0 0 10px ${C.red}33` : "none",
+      }}>
+        <div style={{ fontSize: 8, color: C.red, letterSpacing: 2, marginBottom: 2 }}>
+          {isCurrent ? "▶ ENEMY" : "ENEMY"}
+        </div>
+        <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{npc.name}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
+          <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npc.resources?.残り人数?.cur ?? 0}</span></div>
+          <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npc.resources?.スペルカード?.cur ?? 0}</span></div>
+          <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{calcShotDiceCount(npc.resources?.攻撃力?.cur ?? 0, 0, hasOfficialSkill(npc, "使い魔"))}</span>{hasOfficialSkill(npc, "使い魔") && <span style={{fontSize:8,color:C.textFaint}}> (-1)</span>}</div>
+          <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+            グレイズ: <span style={{color:C.green}}>{graze}点</span>
+            {isGm && hasOfficialSkill(npc, "弾貨") && graze >= 4 && (
+              <button
+                onClick={() => upd(p => {
+                  const n0 = p.battle.participants.npcs.find(n => n.id === npcId);
+                  if (!n0) return p;
+                  const ng = (n0.resources.グレイズ?.cur || 0) - 4;
+                  const ns = Math.min((n0.resources.スペルカード?.max || 9), (n0.resources.スペルカード?.cur || 0) + 1);
+                  return {
+                    ...p,
+                    battle: { ...p.battle, participants: { ...p.battle.participants,
+                      npcs: p.battle.participants.npcs.map(n => n.id !== npcId ? n : {
+                        ...n,
+                        resources: { ...n.resources,
+                          グレイズ:     { ...n.resources.グレイズ,     cur: ng },
+                          スペルカード: { ...n.resources.スペルカード, cur: ns },
+                        },
+                      }),
+                    }},
+                    log: [`💠 ${n0.name} 『弾貨』グレイズ4点消費 → スペルカード+1 (現在:${ns})`, ...p.log],
+                  };
+                })}
+                style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
+              >弾貨</button>
+            )}
+            {isGm && graze >= 5 && (
+              <button
+                onClick={() => upd(p => {
+                  const n0 = p.battle.participants.npcs.find(n => n.id === npcId);
+                  if (!n0) return p;
+                  const ng = (n0.resources.グレイズ?.cur || 0) - 5;
+                  const ns = Math.min((n0.resources.スペルカード?.max || 9), (n0.resources.スペルカード?.cur || 0) + 1);
+                  return {
+                    ...p,
+                    battle: { ...p.battle, participants: { ...p.battle.participants,
+                      npcs: p.battle.participants.npcs.map(n => n.id !== npcId ? n : {
+                        ...n,
+                        resources: { ...n.resources,
+                          グレイズ:     { ...n.resources.グレイズ,     cur: ng },
+                          スペルカード: { ...n.resources.スペルカード, cur: ns },
+                        },
+                      }),
+                    }},
+                    log: [`💠 ${n0.name} グレイズ5点消費 → スペルカード+1 (現在:${ns})`, ...p.log],
+                  };
+                })}
+                style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
+              >G→SC</button>
+            )}
+          </div>
+          <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npc.resources?.回避力?.cur ?? 3}</span></div>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── PC ステータスカード ───
+  const renderPcCard = (pc, isCurrent) => {
+    const pcUid = pc.uid;
+    const graze = pc.resources?.グレイズ?.cur ?? 0;
+    return (
+      <div key={pcUid} style={{
+        padding: "8px 10px",
+        background: "rgba(25,118,210,0.1)",
+        border: `1px solid ${isCurrent ? C.blue : C.blueBorder}`,
+        borderRadius: 6,
+        boxShadow: isCurrent ? `0 0 10px ${C.blue}33` : "none",
+      }}>
+        <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, marginBottom: 2 }}>
+          {isCurrent ? "▶ PLAYER" : "PLAYER"}
+        </div>
+        <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pc.charName}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
+          <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pc.resources?.残り人数?.cur ?? 0}</span></div>
+          <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pc.resources?.スペルカード?.cur ?? 0}</span></div>
+          <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+            グレイズ: <span style={{color:C.green}}>{graze}点</span>
+            {hasOfficialSkill(pc, "弾貨") && graze >= 4 && (
+              <button
+                onClick={() => upd(p => {
+                  const x0 = p.pcs.find(x => x.uid === pcUid);
+                  if (!x0) return p;
+                  const ng = (x0.resources.グレイズ?.cur || 0) - 4;
+                  const ns = Math.min((x0.resources.スペルカード?.max || 9), (x0.resources.スペルカード?.cur || 0) + 1);
+                  return { ...p,
+                    pcs: p.pcs.map(x => x.uid !== pcUid ? x : { ...x, resources: { ...x.resources,
+                      グレイズ:     { ...x.resources.グレイズ,     cur: ng },
+                      スペルカード: { ...x.resources.スペルカード, cur: ns },
+                    }}),
+                    log: [`💎 ${x0.charName} 弾貨：G4→SC+1(${ns})`, ...p.log],
+                  };
+                })}
+                style={{ fontSize: 8, padding: "1px 5px", background: "rgba(100,181,246,0.2)", border: `1px solid ${C.blueBorder}`, color: C.blue, borderRadius: 3, cursor: "pointer" }}
+              >弾貨(4G→SC)</button>
+            )}
+            {graze >= 5 && (
+              <button
+                onClick={() => upd(p => {
+                  const x0 = p.pcs.find(x => x.uid === pcUid);
+                  if (!x0) return p;
+                  const ng = (x0.resources.グレイズ?.cur || 0) - 5;
+                  const ns = Math.min((x0.resources.スペルカード?.max || 9), (x0.resources.スペルカード?.cur || 0) + 1);
+                  return {
+                    ...p,
+                    pcs: p.pcs.map(x => x.uid !== pcUid ? x : {
+                      ...x,
+                      resources: { ...x.resources,
+                        グレイズ:     { ...x.resources.グレイズ,     cur: ng },
+                        スペルカード: { ...x.resources.スペルカード, cur: ns },
+                      },
+                    }),
+                    log: [`💠 ${x0.charName} グレイズ5点消費 → スペルカード+1 (現在:${ns})`, ...p.log],
+                  };
+                })}
+                style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
+              >G→SC</button>
+            )}
+          </div>
+          <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pc.resources?.回避力?.cur ?? 3}</span></div>
+        </div>
+      </div>
+    );
+  };
+
+  // 表示対象（通常: 選出された2名のみ、集団戦: 生存全員）
+  const isMassBattle = b.type === "mass";
+  const npcsToShow = isMassBattle
+    ? (b.participants?.npcs || []).filter(n => (n.resources?.残り人数?.cur ?? 0) > 0)
+    : (npcCombatant ? [npcCombatant] : []);
+  const pcsToShow = isMassBattle
+    ? gs.pcs.filter(p => (p.resources?.残り人数?.cur ?? 0) > 0)
+    : (pcCombatant ? [pcCombatant] : []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 10, flexShrink: 0 }}>
@@ -5646,140 +5800,22 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
       <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
         {battleTab === "info" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {!npcCombatant || !pcCombatant ? (
+            {npcsToShow.length === 0 && pcsToShow.length === 0 ? (
               <div style={{ padding: "20px 10px", textAlign: "center", color: C.textFaint, fontSize: 10 }}>
                 対戦者を選出すると<br />ステータスが表示されます
               </div>
-            ) : (<>
-            <div style={{ padding: "8px 10px", background: "rgba(192,57,43,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
-              <div style={{ fontSize: 8, color: C.red, letterSpacing: 2, marginBottom: 2 }}>ENEMY</div>
-              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{npcCombatant.name}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
-                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant.resources.残り人数?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant.resources.スペルカード?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{calcShotDiceCount(npcCombatant.resources.攻撃力?.cur ?? 0, 0, hasOfficialSkill(npcCombatant, "使い魔"))}</span>{hasOfficialSkill(npcCombatant, "使い魔") && <span style={{fontSize:8,color:C.textFaint}}> (-1)</span>}</div>
-                <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-                  グレイズ: <span style={{color:C.green}}>{npcCombatant.resources.グレイズ?.cur ?? 0}点</span>
-                  {isGm && hasOfficialSkill(npcCombatant, "弾貨") && (npcCombatant.resources.グレイズ?.cur ?? 0) >= 4 && (
-                    <button
-                      onClick={() => upd(p => {
-                        const npc = p.battle.participants.npcs.find(n => n.id === b.npcCombatant);
-                        if (!npc) return p;
-                        const newGraze = (npc.resources.グレイズ?.cur || 0) - 4;
-                        const newSpe   = Math.min((npc.resources.スペルカード?.max || 9), (npc.resources.スペルカード?.cur || 0) + 1);
-                        return {
-                          ...p,
-                          battle: {
-                            ...p.battle,
-                            participants: {
-                              ...p.battle.participants,
-                              npcs: p.battle.participants.npcs.map(n => n.id !== b.npcCombatant ? n : {
-                                ...n,
-                                resources: {
-                                  ...n.resources,
-                                  グレイズ:     { ...n.resources.グレイズ,     cur: newGraze },
-                                  スペルカード: { ...n.resources.スペルカード, cur: newSpe   },
-                                },
-                              }),
-                            },
-                          },
-                          log: [`💠 ${npc.name} 『弾貨』グレイズ4点消費 → スペルカード+1 (現在:${newSpe})`, ...p.log],
-                        };
-                      })}
-                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
-                    >弾貨</button>
-                  )}
-                  {isGm && (npcCombatant.resources.グレイズ?.cur ?? 0) >= 5 && (
-                    <button
-                      onClick={() => upd(p => {
-                        const npc = p.battle.participants.npcs.find(n => n.id === b.npcCombatant);
-                        if (!npc) return p;
-                        const newGraze = (npc.resources.グレイズ?.cur || 0) - 5;
-                        const newSpe   = Math.min((npc.resources.スペルカード?.max || 9), (npc.resources.スペルカード?.cur || 0) + 1);
-                        return {
-                          ...p,
-                          battle: {
-                            ...p.battle,
-                            participants: {
-                              ...p.battle.participants,
-                              npcs: p.battle.participants.npcs.map(n => n.id !== b.npcCombatant ? n : {
-                                ...n,
-                                resources: {
-                                  ...n.resources,
-                                  グレイズ:     { ...n.resources.グレイズ,     cur: newGraze },
-                                  スペルカード: { ...n.resources.スペルカード, cur: newSpe   },
-                                },
-                              }),
-                            },
-                          },
-                          log: [`💠 ${npc.name} グレイズ5点消費 → スペルカード+1 (現在:${newSpe})`, ...p.log],
-                        };
-                      })}
-                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
-                    >G→SC</button>
-                  )}
-                </div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{npcCombatant.resources.回避力?.cur ?? 3}</span></div>
-              </div>
-            </div>
-
-            <div style={{ padding: "8px 10px", background: "rgba(25,118,210,0.1)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
-              <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, marginBottom: 2 }}>PLAYER</div>
-              <div style={{ fontSize: 11, color: "#fff", fontWeight: "bold" }}>{pcCombatant.charName}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
-                <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{pcCombatant.resources.残り人数?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{pcCombatant.resources.スペルカード?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
-                  グレイズ: <span style={{color:C.green}}>{pcCombatant.resources.グレイズ?.cur ?? 0}点</span>
-                  {/* ⚡ 弾貨スキル: グレイズ4点 → スペルカード1点 */}
-                  {hasOfficialSkill(pcCombatant, "弾貨") && (pcCombatant.resources.グレイズ?.cur ?? 0) >= 4 && (
-                    <button
-                      onClick={() => upd(p => {
-                        const pc = p.pcs.find(x => x.uid === b.pcCombatant);
-                        if (!pc) return p;
-                        const ng = (pc.resources.グレイズ?.cur || 0) - 4;
-                        const ns = Math.min((pc.resources.スペルカード?.max || 9), (pc.resources.スペルカード?.cur || 0) + 1);
-                        return { ...p,
-                          pcs: p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, resources: { ...x.resources,
-                            グレイズ:     { ...x.resources.グレイズ,     cur: ng },
-                            スペルカード: { ...x.resources.スペルカード, cur: ns },
-                          }}),
-                          log: [`💎 ${pc.charName} 弾貨：G4→SC+1(${ns})`, ...p.log],
-                        };
-                      })}
-                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(100,181,246,0.2)", border: `1px solid ${C.blueBorder}`, color: C.blue, borderRadius: 3, cursor: "pointer" }}
-                    >弾貨(4G→SC)</button>
-                  )}
-                  {(pcCombatant.resources.グレイズ?.cur ?? 0) >= 5 && (
-                    <button
-                      onClick={() => upd(p => {
-                        const pc = p.pcs.find(x => x.uid === b.pcCombatant);
-                        if (!pc) return p;
-                        const newGraze = (pc.resources.グレイズ?.cur || 0) - 5;
-                        const newSpe   = Math.min((pc.resources.スペルカード?.max || 9), (pc.resources.スペルカード?.cur || 0) + 1);
-                        const newAtk   = pc.resources.攻撃力?.cur || 1;
-                        return {
-                          ...p,
-                          pcs: p.pcs.map(x => x.uid !== b.pcCombatant ? x : {
-                            ...x,
-                            resources: {
-                              ...x.resources,
-                              グレイズ:       { ...x.resources.グレイズ,       cur: newGraze },
-                              スペルカード: { ...x.resources.スペルカード, cur: newSpe   },
-                            },
-                          }),
-                          log: [`💠 ${pc.charName} グレイズ5点消費 → スペルカード+1 (現在:${newSpe})`, ...p.log],
-                        };
-                      })}
-                      style={{ fontSize: 8, padding: "1px 5px", background: "rgba(171,71,188,0.2)", border: "1px solid #7b1fa2", color: "#ce93d8", borderRadius: 3, cursor: "pointer" }}
-                    >G→SC</button>
-                  )}
-                </div>
-                <div style={{ fontSize: 9, color: C.textDim }}>回避力: <span style={{color:C.blue}}>{pcCombatant.resources.回避力?.cur ?? 3}</span></div>
-              </div>
-            </div>
-
-            </>)}
+            ) : (
+              <>
+                {isMassBattle && npcsToShow.length > 0 && (
+                  <div style={{ fontSize: 8, color: C.red, letterSpacing: 2, opacity: 0.8 }}>◆ 敵陣 ({npcsToShow.length})</div>
+                )}
+                {npcsToShow.map(n => renderNpcCard(n, n.id === b.npcCombatant))}
+                {isMassBattle && pcsToShow.length > 0 && (
+                  <div style={{ fontSize: 8, color: C.blue, letterSpacing: 2, opacity: 0.8, marginTop: 4 }}>◆ PC陣 ({pcsToShow.length})</div>
+                )}
+                {pcsToShow.map(p => renderPcCard(p, p.uid === b.pcCombatant))}
+              </>
+            )}
 
             {isSpectator && pcCombatant && npcCombatant && (
               <div style={{ padding: 10, background: "rgba(200,160,64,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
