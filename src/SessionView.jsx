@@ -337,9 +337,39 @@ export function hasOfficialSkill(entity, skillName) {
   const dsName = (entity.ds && entity.ds.name) || entity.dsName
     || entity.skillName || (entity.ps && entity.ps.name) || null;
   if (!dsName) return false;
-  console.log(dsName);
   const isOfficial = OFFICIAL_DANMAKU_SKILLS.some(s => s.name === dsName);
   return isOfficial && dsName === skillName;
+}
+
+// 弾幕スキル使用済み判定（純粋関数版・BattleView 内クロージャと同仕様）
+// usedds の形式: { [attackerId]: string[] }
+export function isSkillUsed(usedds, attackerId, skillName) {
+  return !!(usedds && usedds[attackerId] && usedds[attackerId].includes(skillName));
+}
+
+// 弾幕スキルを使用済みに追加（純粋関数版・元のオブジェクトは変更しない）
+export function markSkillUsed(usedds, attackerId, skillName) {
+  if (!attackerId) return usedds || {};
+  const base = usedds || {};
+  return {
+    ...base,
+    [attackerId]: [...(base[attackerId] || []), skillName],
+  };
+}
+
+// ショット時の総ダイス数を計算（使い魔習得者は -1、最低 1）
+export function calcShotDiceCount(attackPower, supportDice, hasFamiliar) {
+  return Math.max(1, (attackPower || 0) + (supportDice || 0) - (hasFamiliar ? 1 : 0));
+}
+
+// かばう/使い魔自動かばう処理: 指定マスに弾幕があれば1つ除去
+// 元の grid 配列は変更せず、新しい配列と成否を返す
+export function resolveCover(grid, die) {
+  const base = grid || [0, 0, 0, 0, 0, 0];
+  const next = [...base];
+  const success = next[die - 1] > 0;
+  if (success) next[die - 1] -= 1;
+  return { grid: next, success };
 }
 
 export function parseSpell(text) {
@@ -404,7 +434,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const b = gs.battle;
   if (!b) return null;
 
-  const pcs = gs.pcs || [];
+  const allPcs = gs.pcs || [];
+  const pcs = b.participantPcUids
+    ? allPcs.filter(pc => b.participantPcUids.includes(pc.uid))
+    : allPcs;
   const npcs = b.participants?.npcs || [];
 
   const alivePcs = pcs.filter(p => (p.resources?.残り人数?.cur || 0) > 0);
@@ -501,9 +534,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     animateDice(1, "使い魔かばう（自動）", (res) => {
       const die = res[0];
       upd(p => {
-        const grid = [...(p.battle.grids[targetId] || [0,0,0,0,0,0])];
-        const success = grid[die - 1] > 0;
-        if (success) grid[die - 1] -= 1;
+        const { grid, success } = resolveCover(p.battle.grids[targetId], die);
         const pc = p.pcs.find(x => x.uid === targetId);
         const npc = p.battle.participants.npcs.find(n => n.id === targetId);
         const name = pc?.charName || npc?.name || targetId;
@@ -521,7 +552,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const bonus = b.supportDice || 0;
     // ★ 使い魔スキル: ショットダイス数 -1
     const hasFamiliar = hasOfficialSkill(attacker, "使い魔");
-    const totalDice = Math.max(1, attacker.resources.攻撃力.cur + bonus - (hasFamiliar ? 1 : 0));
+    const totalDice = calcShotDiceCount(attacker.resources.攻撃力.cur, bonus, hasFamiliar);
 
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
@@ -2205,10 +2236,36 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         <div style={{ background: "#0c1020", border: `1px solid ${C.border}`, padding: 30, borderRadius: 8, maxWidth: 500, width: "90%" }}>
           <div style={{ fontSize: 18, color: C.gold, marginBottom: 20, textAlign: "center", letterSpacing: 4 }}>弾幕ごっこ準備</div>
           
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>対戦形式: {b.type === "mass" ? "集団戦" : "通常戦"}</div>
-            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>参加PC: {pcs.map(p => p.charName).join(", ")}</div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>対戦形式: {b.type === "mass" ? "集団戦" : "通常戦"}</div>
             <div style={{ fontSize: 11, color: C.textDim }}>相手: {npcs.map(n => n.name).join(", ")}</div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>参加するPCを選択</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {allPcs.map(pc => {
+                const currentUids = b.participantPcUids || allPcs.map(p => p.uid);
+                const isSelected = currentUids.includes(pc.uid);
+                return (
+                  <button key={pc.uid}
+                    onClick={() => {
+                      const cur = b.participantPcUids || allPcs.map(p => p.uid);
+                      const next = isSelected ? cur.filter(u => u !== pc.uid) : [...cur, pc.uid];
+                      upd(p => ({ ...p, battle: { ...p.battle, participantPcUids: next } }));
+                    }}
+                    style={btnFull(
+                      isSelected ? C.blueBg : "rgba(255,255,255,0.05)",
+                      isSelected ? C.blueBorder : C.border,
+                      isSelected ? C.blue : C.textDim,
+                      { fontSize: 10, padding: "5px 10px" }
+                    )}
+                  >
+                    {isSelected ? "✓ " : ""}{pc.charName}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div style={{ marginBottom: 16 }}>
@@ -2231,13 +2288,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             </div>
           </div>
 
-          <button 
-            disabled={!b.startOrder}
+          <button
+            disabled={!b.startOrder || (b.participantPcUids || []).length === 0}
             onClick={() => {
               const positions = {};
               const grids = {};
               const useRandom = gs.config?.useRandomPlacement;
-              pcs.forEach(p => {
+              const participantUids = b.participantPcUids || allPcs.map(p => p.uid);
+              allPcs.filter(p => participantUids.includes(p.uid)).forEach(p => {
                 positions[p.uid] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
                 grids[p.uid] = [0,0,0,0,0,0];
               });
@@ -2256,8 +2314,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   round: 1,
                   actedPcs: [],
                   actedNpcs: [],
-                  log: ["⚖️ 弾幕ごっこ開始！規約に従い、正々堂々と戦いましょう。"]
-                }
+                },
+                log: ["⚖️ 弾幕ごっこ開始！規約に従い、正々堂々と戦いましょう。", ...(p.log || [])]
               }));
             }}
             style={btnFull(C.redBg, C.redBorder, C.red, { padding: "12px", opacity: b.startOrder ? 1 : 0.3, marginTop: 4 })}
@@ -2408,8 +2466,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           pendingSpell: null,
           lastShotDice: null,
           supportDice: 0,
-          log: [`⚔️ ラウンド開始：${npcChar.name} vs ${pcChar.charName} （先攻: ${order === "pc" ? "PC" : "NPC"}）`, ...p.log]
-        }
+        },
+        log: [`⚔️ ラウンド開始：${npcChar.name} vs ${pcChar.charName} （先攻: ${order === "pc" ? "PC" : "NPC"}）`, ...p.log]
       }));
     };
 
@@ -4571,6 +4629,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                               phase: "setup",
                               questId: q.id,
                               scenePcUid: p.currentScene?.pcUid,
+                              participantPcUids: [p.currentScene?.pcUid].filter(Boolean),
                               participants: {
                                 npcs: [{
                                   id: "enemy_" + Date.now(),
@@ -5514,7 +5573,10 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
   const npcCombatant = b.participants.npcs.find(n => n.id === b.npcCombatant);
 
-  const spectators = gs.pcs.filter(p =>
+  const participantPcs = b.participantPcUids
+    ? (gs.pcs || []).filter(pc => b.participantPcUids.includes(pc.uid))
+    : (gs.pcs || []);
+  const spectators = participantPcs.filter(p =>
     p.uid !== b.pcCombatant &&
     (p.resources?.残り人数?.cur || 0) > 0
   );
@@ -5595,7 +5657,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, marginTop: 4 }}>
                 <div style={{ fontSize: 9, color: C.textDim }}>残り人数: <span style={{color:C.red}}>{npcCombatant.resources.残り人数?.cur ?? 0}</span></div>
                 <div style={{ fontSize: 9, color: C.textDim }}>スペルカード: <span style={{color:C.purple}}>{npcCombatant.resources.スペルカード?.cur ?? 0}</span></div>
-                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{Math.max(1, (npcCombatant.resources.攻撃力?.cur ?? 0) - (hasOfficialSkill(npcCombatant, "使い魔") ? 1 : 0))}</span>{hasOfficialSkill(npcCombatant, "使い魔") && <span style={{fontSize:8,color:C.textFaint}}> (-1)</span>}</div>
+                <div style={{ fontSize: 9, color: C.textDim }}>攻撃力: <span style={{color:C.gold}}>{calcShotDiceCount(npcCombatant.resources.攻撃力?.cur ?? 0, 0, hasOfficialSkill(npcCombatant, "使い魔"))}</span>{hasOfficialSkill(npcCombatant, "使い魔") && <span style={{fontSize:8,color:C.textFaint}}> (-1)</span>}</div>
                 <div style={{ fontSize: 9, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
                   グレイズ: <span style={{color:C.green}}>{npcCombatant.resources.グレイズ?.cur ?? 0}点</span>
                   {isGm && hasOfficialSkill(npcCombatant, "弾貨") && (npcCombatant.resources.グレイズ?.cur ?? 0) >= 4 && (
@@ -5726,9 +5788,9 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                   <div style={{ fontSize: 9, color: C.textFaint, textAlign: "center" }}>使用済み ({interventionUsed === "support" ? "援護" : "かばう"})</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <button 
+                    <button
                       onClick={() => handleSupportFire(user.uid)}
-                      disabled={b.phase !== "npc_shot_roll" && b.phase !== "pc_shot_roll"}
+                      disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
                       style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
                     >💥 援護射撃</button>
 
