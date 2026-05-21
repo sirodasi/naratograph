@@ -2805,7 +2805,7 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 }
 
 // ─── PCCard ───────────────────────────────────────────────────────
-export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
+export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot, room }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
@@ -5007,6 +5007,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                           isGm={isGm}
                           onUpdatePc={updPc => upd(p => ({ ...p, pcs: p.pcs.map(x => x.uid === pc.uid ? updPc : x) }))}
                           getSpot={getSpot}
+                          room={room}
                         />
                       ))
                   }
