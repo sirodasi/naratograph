@@ -329,11 +329,16 @@ const EFFECT_PATTERNS = [
   { type: "FIXED",    re: /【(\d+)番マス×(\d+)】/g           },
 ];
 
-// 「。」で文を区切って、条件キーワードを含む文だけを抽出する
+// スペカ条件文を抽出する
+// 条件文は通常「このスペルカード」で始まり、キーワード(できない等)を含む。
+// 名前や効果記号【...×N】と同じ文（句点なし）に連結されているケースに対応するため、
+// まず「このスペルカード」位置で前段を切り捨ててから、「。」で文区切りして該当文を返す。
 const CONDITION_KEYWORD_RE = /(?:できない|限り使用できない|場合にしか使用できない)/;
 function extractCondition(text) {
   if (!text) return null;
-  const sentences = text.split("。").map(s => s.trim()).filter(Boolean);
+  const startIdx = text.indexOf("このスペルカード");
+  const searchText = startIdx >= 0 ? text.slice(startIdx) : text;
+  const sentences = searchText.split("。").map(s => s.trim()).filter(Boolean);
   const condSentence = sentences.find(s => CONDITION_KEYWORD_RE.test(s));
   return condSentence ? condSentence + "。" : null;
 }
