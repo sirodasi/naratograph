@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { CharSprite } from "./Lobby";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
-import { C, btnFull, btnSmall } from "./styles/colors";
+import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 
 // ─── ユーティリティ ───────────────────────────────────────────────
 export function getSpotByD66(d1, d2, SPOTS) {
@@ -3806,9 +3806,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
       const logMsg = `${pc.charName} は [${spotId}] で手がかりを獲得し、クエスト「${targetQName}」に配置した` + 
         (resolvedAuto ? "。クエストが自動解決されました！" : "");
 
-      return { 
-        ...p, 
-        clues: newCluesOnSpots, 
+      return {
+        ...p,
+        clues: newClues,
         quests: nextQuests, 
         currentScene: { ...p.currentScene, phase: "action_done" }, 
         log: [logMsg, ...p.log] 
@@ -4107,10 +4107,17 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
                   {["お酒", "小銭", "お守り", "Pアイテム", "残機のかけら", "スペカのかけら"].map(k => (
                     <button key={k} onClick={() => {
-                        gainItem(k, 1);
                         const count = (sc.gambleRewards || 0) + 1;
-                        if (count >= 3) upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" } }));
-                        else upd(p => ({ ...p, currentScene: { ...p.currentScene, gambleRewards: count } }));
+                        upd(p => {
+                          const uid = p.currentScene.pcUid;
+                          const newPcs = p.pcs.map(x => x.uid === uid ? { ...x, items: { ...x.items, [k]: (x.items[k] || 0) + 1 } } : x);
+                          return {
+                            ...p,
+                            pcs: newPcs,
+                            currentScene: { ...p.currentScene, gambleRewards: count, ...(count >= 3 ? { phase: "action_done" } : {}) },
+                            log: [`${p.pcs.find(x => x.uid === uid)?.charName} は【${k}】を獲得した`, ...p.log],
+                          };
+                        });
                     }} style={btnFull("rgba(200,160,64,0.1)", C.goldDim, C.gold, { width: "auto" })}>+ {k}</button>
                   ))}
                   <div style={{ width: "100%", fontSize: 9, color: C.textDim, marginTop: 4 }}>残り獲得数: {3 - (sc.gambleRewards || 0)}</div>
@@ -5276,6 +5283,41 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
 
   const isSpectator = spectators.some(p => p.uid === user.uid);
   const isCombatant = b.pcCombatant === user.uid;
+
+  const handleSupportFire = (userUid) => {
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        supportDice: (p.battle.supportDice || 0) + 1,
+        usedIntervention: { ...p.battle.usedIntervention, [userUid]: "support" }
+      },
+      log: [`💥 ${gs.pcs.find(x => x.uid === userUid)?.charName} の援護射撃！攻撃ダイスが増加します。`, ...p.log]
+    }));
+  };
+
+  const handleCover = (userUid, targetUid) => {
+    animateDice(1, "かばう", (res) => {
+      const die = res[0];
+      upd(p => {
+        const currentGrid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
+        let success = false;
+        if (currentGrid[die - 1] > 0) {
+          currentGrid[die - 1] -= 1;
+          success = true;
+        }
+        return {
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [targetUid]: currentGrid },
+            usedIntervention: { ...p.battle.usedIntervention, [userUid]: "cover" }
+          },
+          log: [`🛡️ ${gs.pcs.find(x => x.uid === userUid)?.charName} が ${die}番マスをかばった！ ${success ? "弾幕を除去しました。" : "しかしそこには弾幕がなかった！"}`, ...p.log]
+        };
+      });
+    });
+  };
   const interventionUsed = b.usedIntervention?.[user.uid];
 
   return (
