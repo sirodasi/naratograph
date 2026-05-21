@@ -2805,7 +2805,7 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 }
 
 // ─── PCCard ───────────────────────────────────────────────────────
-export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot, room }) {
+export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
@@ -3647,7 +3647,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
 }
 
 // ─── ScenePanel ───────────────────────────────────────────────────
-function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS }) {
+function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) {
   const sc = gs.currentScene;
   if (!sc) return null;
   const pc = gs.pcs.find(p => p.uid === sc.pcUid);
@@ -4847,7 +4847,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               </div>
             )}
 
-            {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} />}
+            {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} room={room} />}
 
             {!gs.currentScene && isGm && (
               <div style={{ padding: "8px", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.01)" }}>
