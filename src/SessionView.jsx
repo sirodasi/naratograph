@@ -454,6 +454,30 @@ export function buildSpellCard(card) {
   };
 }
 
+// Firebase に書き込むpendingSpell/manualSpell用のスリム形。
+// 派生フィールド (effects, condition, textBody, timing, effectTiming, structured) は
+// 持たず、表示・適用時は expandStoredSpell で再構築する。
+function slimSpellForStorage(spellCard) {
+  if (!spellCard) return null;
+  return {
+    name:   spellCard.name,
+    text:   spellCard.text,
+    manual: spellCard.manual ?? false,
+    ...(spellCard.ref ? { ref: spellCard.ref } : {}),
+  };
+}
+
+// Firebase から読み出した pendingSpell/manualSpell を、派生フィールド付きで再構築する。
+// 旧データ（フル展開済み）も互換的に扱える。
+export function expandStoredSpell(stored) {
+  if (!stored) return null;
+  // text があれば buildSpellCard で派生を補完。位置情報などの追加フィールドは保持する。
+  if (stored.text) {
+    return { ...buildSpellCard({ name: stored.name, text: stored.text, ref: stored.ref }), ...stored };
+  }
+  return stored;
+}
+
 export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const b = gs.battle;
   if (!b) return null;
@@ -668,7 +692,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       if (structured.timing === "round_end") {
         upd(p => ({
           ...consumeSpell(p),
-          battle: { ...p.battle, pendingSpell: { ...spellCard, attackerId, defenderId, attPos, defPos } },
+          battle: { ...p.battle, pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } },
           log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
         }));
         return;
@@ -744,7 +768,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (spellCard.effectTiming === "round_end") {
       upd(p => ({
         ...consumeSpell(p),
-        battle: { ...p.battle, pendingSpell: { ...spellCard, attackerId, defenderId, attPos, defPos, defenderPos: defPos } },
+        battle: { ...p.battle, pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } },
         log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
       }));
       return;
@@ -757,7 +781,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         battle: {
           ...p.battle,
           lastSpellUsed: spellCard.name,
-          manualSpell: { ...spellCard, attackerId, defenderId, defenderPos: defPos }
+          manualSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, defenderPos: defPos }
         },
         log: [`🔮 ${attackerName}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
       }));
@@ -847,7 +871,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   // ラウンド終了時の pendingSpell 適用
   const applyPendingSpell = () => {
-    const ps = b.pendingSpell;
+    // Firebase はスリム形 (text/name/manual+位置情報) で保存されているため再構築する
+    const ps = expandStoredSpell(b.pendingSpell);
     if (!ps) return;
 
     // 構造化データがある場合はステップを適用
@@ -1632,7 +1657,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   };
 
   const renderManualSpellControls = () => {
-    const spell = b.manualSpell || b.pendingSpell;
+    const spell = expandStoredSpell(b.manualSpell || b.pendingSpell);
     if (!spell || !isGm) return null;
 
     const pcId = b.pcCombatant;
@@ -2867,23 +2892,26 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               ) : null;
             })()}
 
-            {b.pendingSpell && (
-              <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 5 }}>
-                <div style={{ fontSize: 11, color: "#ef9a9a", marginBottom: 4 }}>⏰ {b.pendingSpell.name} — ラウンド終了時の効果が発動します</div>
-                <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{b.pendingSpell.textBody || b.pendingSpell.text}</div>
-                {b.pendingSpell.condition && (
-                  <div style={{ fontSize: 9, color: C.red, marginBottom: 6 }}>⚠ {b.pendingSpell.condition}</div>
-                )}
-                {b.pendingSpell.manual && (
-                  <div style={{ fontSize: 9, color: "#5a6070", marginBottom: 6 }}>★ GMが手動で効果を処理してください</div>
-                )}
-                {isGm && (
-                  <button onClick={applyPendingSpell} style={{ ...btnFull("rgba(239,154,154,0.2)", "#c62828", "#ef9a9a"), marginTop: 4 }}>
-                    効果を適用して次へ
-                  </button>
-                )}
-              </div>
-            )}
+            {b.pendingSpell && (() => {
+              const ps = expandStoredSpell(b.pendingSpell);
+              return (
+                <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 5 }}>
+                  <div style={{ fontSize: 11, color: "#ef9a9a", marginBottom: 4 }}>⏰ {ps.name} — ラウンド終了時の効果が発動します</div>
+                  <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{ps.textBody || ps.text}</div>
+                  {ps.condition && (
+                    <div style={{ fontSize: 9, color: C.red, marginBottom: 6 }}>⚠ {ps.condition}</div>
+                  )}
+                  {ps.manual && (
+                    <div style={{ fontSize: 9, color: "#5a6070", marginBottom: 6 }}>★ GMが手動で効果を処理してください</div>
+                  )}
+                  {isGm && (
+                    <button onClick={applyPendingSpell} style={{ ...btnFull("rgba(239,154,154,0.2)", "#c62828", "#ef9a9a"), marginTop: 4 }}>
+                      効果を適用して次へ
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             {(isGm || user.uid === b.pcCombatant) && !b.pendingSpell && !b.slowBulletSelect && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
@@ -4772,8 +4800,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                                   },
                                   ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
                                   spellCards: [
-                                    { name: enemy.sc1name, desc: enemy.sc1effect, ref: enemy.sc1ref || "" },
-                                    { name: enemy.sc2name, desc: enemy.sc2effect, ref: enemy.sc2ref || "" }
+                                    { name: enemy.sc1name, desc: enemy.sc1effect, ...(enemy.sc1ref ? { ref: enemy.sc1ref } : {}) },
+                                    { name: enemy.sc2name, desc: enemy.sc2effect, ...(enemy.sc2ref ? { ref: enemy.sc2ref } : {}) }
                                   ].filter(s => s.name)
                                 }]
                               }

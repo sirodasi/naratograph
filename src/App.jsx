@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
-import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildSpellCard } from "./SessionView";
+import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 
@@ -424,13 +424,10 @@ function SessionApp({ roomCode, user }) {
           } : null),
           as:  p.as  ?? charData?.as  ?? null,
           ds:  p.ds  ?? charData?.ds  ?? null,
-          spellCards: (charData?.spellCards ?? p.spellCards ?? []).map(s =>
-            typeof s === "string" ? buildSpellCard(s) : s
-          ),
-          growthSpellCard: (() => {
-            const raw = charData?.growthSpellCard ?? p.growthSpellCard ?? null;
-            return raw && typeof raw === "string" ? buildSpellCard(raw) : raw;
-          })(),
+          // スペカは派生フィールド（effects/condition/textBody/structured等）を Firebase に
+          // 永続化しないよう、生のテキストのまま保持する（表示時に buildSpellCard で再構築）。
+          spellCards: charData?.spellCards ?? p.spellCards ?? [],
+          growthSpellCard: charData?.growthSpellCard ?? p.growthSpellCard ?? null,
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
@@ -513,8 +510,8 @@ function SessionApp({ roomCode, user }) {
             },
             ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
             spellCards: [
-              { name: enemy.sc1name, desc: enemy.sc1effect, ref: enemy.sc1ref || "" },
-              { name: enemy.sc2name, desc: enemy.sc2effect, ref: enemy.sc2ref || "" }
+              { name: enemy.sc1name, desc: enemy.sc1effect, ...(enemy.sc1ref ? { ref: enemy.sc1ref } : {}) },
+              { name: enemy.sc2name, desc: enemy.sc2effect, ...(enemy.sc2ref ? { ref: enemy.sc2ref } : {}) }
             ].filter(s => s.name)
           }]
         }
@@ -670,8 +667,8 @@ function SessionApp({ roomCode, user }) {
       },
       ds: en.ds ?? { name: en.dsName || en.dsCustomName || "", desc: en.dsDesc || "" },
       spellCards: [
-        { name: en.sc1name, desc: en.sc1effect, ref: en.sc1ref || "" },
-        { name: en.sc2name, desc: en.sc2effect, ref: en.sc2ref || "" }
+        { name: en.sc1name, desc: en.sc1effect, ...(en.sc1ref ? { ref: en.sc1ref } : {}) },
+        { name: en.sc2name, desc: en.sc2effect, ...(en.sc2ref ? { ref: en.sc2ref } : {}) }
       ].filter(s => s.name)
     }));
 
