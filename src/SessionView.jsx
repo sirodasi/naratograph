@@ -169,6 +169,14 @@ export const BAD_STATUS_TABLE = {
 
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
 
+// 変調免疫チェック（馬鹿スキル用）
+export function isBadStatusImmune(pc, bsName) {
+  return pc?.ps?.name === "馬鹿" && pc.badStatusImmune === bsName;
+}
+
+// 個性スキルの一回限り使用済みフラグキー
+export const PS_ONCE_FLAG = "psUsedThisSession";
+
 // ─── BackstoryScreen ──────────────────────────────────────────────
 export function BackstoryScreen({ gs, isGm, onProceed }) {
   const [visible, setVisible] = useState(false);
@@ -3269,7 +3277,7 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 }
 
 // ─── PCCard ───────────────────────────────────────────────────────
-export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
+export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SPOTS }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
@@ -3293,8 +3301,77 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
   };
 
   const activateSkill = () => {
-    onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, log:[...(pc.log || []), `《${skill?.name}》を発動`] });
     setSkillModal(null);
+    const skillName = skill?.name;
+
+    if (skillName === "真面目") {
+      // D6点 霊力獲得
+      animateDice(1, "真面目（霊力回復）", res => {
+        const gain = res[0];
+        const r = pc.resources.霊力 || { cur: 0, max: 20 };
+        if ((pc.badStatus || []).includes("スランプ")) {
+          onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1 });
+          return;
+        }
+        const nextCur = Math.min(r.max, r.cur + gain);
+        onUpdatePc({ ...pc,
+          skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1,
+          resources: { ...pc.resources,
+            霊力: { ...r, cur: nextCur },
+            攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) }
+          }
+        });
+      });
+      return;
+    }
+
+    if (skillName === "怠け者") {
+      // 自身への絆を獲得
+      const selfBond = `${pc.charName}自身への絆`;
+      const bonds = [...(pc.bonds || [])];
+      if (!bonds.includes(selfBond)) bonds.push(selfBond);
+      onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, bonds });
+      return;
+    }
+
+    if (skillName === "信仰") {
+      // 好きなタグを1つ獲得
+      const tag = window.prompt("獲得するタグ名を入力してください");
+      if (!tag || !tag.trim()) return;
+      const tags = [...(pc.tags || [])];
+      if (!tags.includes(tag.trim())) tags.push(tag.trim());
+      onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, tags });
+      return;
+    }
+
+    if (skillName === "胡乱" && upd) {
+      // 全手がかり除去→ランダム再配置
+      upd(p => {
+        const count = (p.clues || []).length;
+        if (count === 0) return { ...p, pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, skillActivatedThisSession: (x.skillActivatedThisSession || 0) + 1 }), log: [`${pc.charName}《胡乱》: 手がかりがありませんでした`, ...p.log] };
+        const spotIds = (SPOTS || []).map(s => s.id);
+        const newClues = [];
+        for (let i = 0; i < count; i++) {
+          newClues.push(spotIds[Math.floor(Math.random() * spotIds.length)]);
+        }
+        return { ...p,
+          clues: newClues,
+          pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, skillActivatedThisSession: (x.skillActivatedThisSession || 0) + 1 }),
+          log: [`${pc.charName}《胡乱》: 手がかり${count}つをランダムに再配置した`, ...p.log]
+        };
+      });
+      return;
+    }
+
+    if (skillName === "カリスマ") {
+      // 1セッション1回 手下登場（GM手動）
+      if (pc[PS_ONCE_FLAG]) return;
+      onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, [PS_ONCE_FLAG]: true });
+      return;
+    }
+
+    // その他：カウント+ログのみ
+    onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1 });
   };
 
   const adjustResource = (key, delta) => {
@@ -3426,7 +3503,37 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
                 {skill.type === "オート" && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{skill.desc}</div>
-              {skillCanActivate && !isCustomChar && <button onClick={() => setSkillModal(true)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold }}>発動する</button>}
+
+              {/* 馬鹿: 免疫変調の選択 */}
+              {skill.name === "馬鹿" && !isCustomChar && (
+                <div style={{ marginBottom: 6 }}>
+                  {pc.badStatusImmune
+                    ? <div style={{ fontSize: 9, color: "#81c784" }}>🛡 免疫中: 《{pc.badStatusImmune}》</div>
+                    : (
+                      <div>
+                        <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>免疫にする変調を選んでください:</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {Object.values(BAD_STATUS_TABLE).map(bs => (
+                            <button key={bs.name} onClick={() => onUpdatePc({ ...pc, badStatusImmune: bs.name })}
+                              style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textDim }}>
+                              {bs.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }
+                </div>
+              )}
+
+              {/* カリスマ: 1セッション1回表示 */}
+              {skill.name === "カリスマ" && pc[PS_ONCE_FLAG] && (
+                <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>（このセッションは使用済み）</div>
+              )}
+
+              {skillCanActivate && !isCustomChar && !(skill.name === "カリスマ" && pc[PS_ONCE_FLAG]) && (
+                <button onClick={() => setSkillModal(true)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold }}>発動する</button>
+              )}
             </div>
           )}
           {pc.as && (
@@ -3474,7 +3581,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
             </div>
           )}
 
-          {gs.cycleIdx === 3 && (
+          {gs.cycleIdx === 3 && skill?.name !== "アウトドア派" && (
             <div style={{ marginTop: 8, padding: 6, background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
               <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>今夜の帰還先</div>
               <div style={{ display: "flex", gap: 4 }}>
@@ -3486,6 +3593,67 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, getSpot }) {
                     📰 {getSpot(gs.newspaper.targetSpot)?.name}
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* アウトドア派: 夜帰還不要の表示 */}
+          {gs.cycleIdx === 3 && skill?.name === "アウトドア派" && (
+            <div style={{ marginTop: 8, padding: 6, background: "rgba(129,199,132,0.1)", border: `1px solid #81c78440`, borderRadius: 4 }}>
+              <div style={{ fontSize: 9, color: "#81c784" }}>🌙《アウトドア派》帰還不要 — 現在地で夜を過ごします</div>
+            </div>
+          )}
+
+          {/* 不夜城: 夜サイクル終了時に深夜サイクル追加（1回限り） */}
+          {gs.cycleIdx === 3 && skill?.name === "不夜城" && !pc[PS_ONCE_FLAG] && upd && (
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => {
+                const motive = pc.resources.やる気?.cur || 0;
+                if (motive < 1) return;
+                upd(p => ({
+                  ...p,
+                  pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
+                    ...x, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: motive - 1 } },
+                    [PS_ONCE_FLAG]: true
+                  }),
+                  log: [`${pc.charName}《不夜城》: やる気1消費して深夜サイクルを追加！`, ...p.log]
+                }));
+              }} style={btnFull("rgba(129,199,132,0.15)", "#81c78440", "#81c784", { fontSize: 10 })}>
+                🌃《不夜城》深夜サイクルを追加（やる気-1）
+              </button>
+            </div>
+          )}
+
+          {/* ご執心: 導入フェイズ中に絆を獲得 */}
+          {gs.sessionPhase === "intro" && skill?.name === "ご執心" && !pc[PS_ONCE_FLAG] && (
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => {
+                const target = window.prompt("絆を獲得するキャラクター名を入力してください");
+                if (!target || !target.trim()) return;
+                const bonds = [...(pc.bonds || [])];
+                if (!bonds.includes(target.trim())) bonds.push(target.trim());
+                onUpdatePc({ ...pc, bonds, [PS_ONCE_FLAG]: true });
+              }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10 })}>
+                💛《ご執心》絆を獲得する
+              </button>
+            </div>
+          )}
+
+          {/* 用意周到: 探索フェイズ開始時に任意アイテム1つ獲得（1回限り） */}
+          {gs.sessionPhase === "explore" && skill?.name === "用意周到" && !pc[PS_ONCE_FLAG] && (
+            <div style={{ marginTop: 8, padding: 6, background: "rgba(255,183,77,0.08)", border: `1px solid #ffb74d30`, borderRadius: 4 }}>
+              <div style={{ fontSize: 9, color: "#ffb74d", marginBottom: 6 }}>🎒《用意周到》アイテム1つを獲得</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4 }}>
+                {ITEM_NAMES.filter(n => n !== "妖器").map(itemName => (
+                  <button key={itemName} onClick={() => {
+                    onUpdatePc({ ...pc,
+                      items: { ...pc.items, [itemName]: (pc.items?.[itemName] || 0) + 1 },
+                      [PS_ONCE_FLAG]: true
+                    });
+                  }} style={{ padding: "4px 6px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.text }}>
+                    {itemName}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -3656,6 +3824,23 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         </div>
       );
     } else {
+      // 赤貧: 小銭獲得時に任意アイテムへ変換
+      if (act.item === "小銭" && pc.ps?.name === "赤貧") {
+        return (
+          <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
+            <div style={{ color: "#ffb74d", marginBottom: 8, fontSize: 11 }}>《赤貧》【小銭】は失われ、代わりに任意アイテムを1つ獲得します</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+              {ITEM_NAMES.filter(n => n !== "小銭").map(itemName => (
+                <button key={itemName} onClick={() => {
+                  proceed([`${pc.charName}《赤貧》: 【小銭】→【${itemName}】へ変換して獲得した`], {
+                    pc: { items: { ...pc.items, [itemName]: (pc.items[itemName] || 0) + count } }
+                  });
+                }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
+              ))}
+            </div>
+          </div>
+        );
+      }
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <button onClick={() => {
@@ -4197,6 +4382,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
         actualVal = Math.max(0, actualVal - 1);
         logAdd += `（※新聞[24:雨模様]のため減少）`;
       }
+      // 活発: 移動距離+1
+      if (pc.ps?.name === "活発") {
+        actualVal += 1;
+        logAdd += `（《活発》+1スポット）`;
+      }
       return { ...p, currentScene: { ...p.currentScene, phase: "move_dest", selectedMoveDie: actualVal }, log: [logAdd, ...p.log] };
     });
   };
@@ -4244,6 +4434,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 
     const hasTag    = spotDetail.tags.some(t => (pc.tags || []).includes(t) || pc.charName === t || (pc.ps && pc.ps.name === t));
     let diceCount   = 2 + (hasTag ? 1 : 0);
+    // 快適な拠点: 自身の拠点にいる場合+1
+    if (pc.ps?.name === "快適な拠点" && pc.currentSpot === pc.baseSpotId) diceCount++;
+    // 寂しがり屋: 同スポットに他PCがいる場合+1（弾幕ごっこ以外）
+    if (pc.ps?.name === "寂しがり屋" && gs.pcs.some(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot)) diceCount++;
     if ((pc.badStatus || []).includes("怪我")) diceCount = Math.min(2, diceCount);
     
     upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag } }));
@@ -4310,20 +4504,24 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     }
 
     upd(p => {
+      const isMutual = p.newspaper?.roll === 34;
+      // 人気者: 絆を獲得した相手もこちらへの絆を取得
+      const hasPininkiWar = pc.ps?.name === "人気者";
       const newPcs = p.pcs.map(x => {
         if (x.uid === pc.uid) {
           const bonds = [...(x.bonds || [])];
           if (!bonds.includes(targetName)) bonds.push(targetName);
           return { ...x, bonds };
         }
-        if (p.newspaper?.roll === 34 && x.charName === targetName) {
-          const bonds =[...(x.bonds || [])];
+        if ((isMutual || hasPininkiWar) && x.charName === targetName) {
+          const bonds = [...(x.bonds || [])];
           if (!bonds.includes(pc.charName)) bonds.push(pc.charName);
           return { ...x, bonds };
         }
         return x;
       });
-      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.charName} は《${targetName}への絆》を獲得した` + (p.newspaper?.roll === 34 ? `（新聞効果で双方向に獲得！）` : ""), ...p.log] };
+      const extra = isMutual ? "（新聞効果で双方向に獲得！）" : hasPininkiWar ? "（《人気者》で相手も絆を獲得！）" : "";
+      return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "action_done" }, log:[`${pc.charName} は《${targetName}への絆》を獲得した${extra}`, ...p.log] };
     });
   };
 
@@ -4349,6 +4547,32 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 <button onClick={chooseMove} style={btnFull(C.blueBg,  C.blueBorder,  C.blue)}>移動する（やる気D）</button>
                 <button onClick={chooseStay} style={btnFull(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
               </div>
+
+              {/* インドア派: 移動の代わりに拠点へテレポート */}
+              {pc.ps?.name === "インドア派" && pc.currentSpot !== pc.baseSpotId && (
+                <button onClick={() => upd(p => ({
+                  ...p,
+                  pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, currentSpot: pc.baseSpotId }),
+                  currentScene: { ...p.currentScene, phase: "action" },
+                  log: [`${pc.charName}《インドア派》: 移動の代わりに拠点[${getSpot(pc.baseSpotId)?.name}]へ移動`, ...p.log]
+                }))} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10 })}>
+                  🏠《インドア派》拠点へ移動
+                </button>
+              )}
+
+              {/* 能天気: やる気1消費で3スポット移動 */}
+              {pc.ps?.name === "能天気" && (pc.resources.やる気?.cur || 0) >= 1 && (
+                <button onClick={() => upd(p => ({
+                  ...p,
+                  pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
+                    ...x, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: (x.resources.やる気?.cur || 0) - 1 } }
+                  }),
+                  currentScene: { ...p.currentScene, phase: "move_dest", selectedMoveDie: 3 },
+                  log: [`${pc.charName}《能天気》: やる気1消費して3スポット移動`, ...p.log]
+                }))} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10 })}>
+                  🌈《能天気》3スポット移動（やる気-1）
+                </button>
+              )}
 
               {(gs.quests || []).filter(q => !q.solved && q.revealed && (q.clues || 0) >= q.level).map(q => (
                 <button 
@@ -4659,6 +4883,34 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 </button>
               )}
 
+              {/* 瀟洒: 3ダイス以上かつ霊力1点消費で自動成功 */}
+              {pc.ps?.name === "瀟洒" && (sc.actionDiceCount || 2) >= 3 && (pc.resources.霊力?.cur || 0) >= 1 && (
+                <button onClick={() => {
+                  upd(p => {
+                    const rei = pc.resources.霊力;
+                    return {
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
+                        ...x, resources: { ...x.resources,
+                          霊力: { ...rei, cur: rei.cur - 1 },
+                          攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((rei.cur - 1) / 5) }
+                        }
+                      }),
+                      currentScene: { ...p.currentScene, phase: "explore_result", actionDice: [4, 4, 4], fumbleResolved: true, specialResolved: true },
+                      log: [`${pc.charName}《瀟洒》: 霊力1消費して行為判定を自動成功！`, ...p.log]
+                    };
+                  });
+                }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { marginBottom: 8, fontSize: 10 })}>
+                  ✨《瀟洒》霊力1消費で自動成功
+                </button>
+              )}
+
+              {/* 我儘: 全ての絆を自身への絆として扱う */}
+              {pc.ps?.name === "我儘" && (
+                <div style={{ fontSize: 9, color: "#ffb74d", marginBottom: 8, padding: "4px 8px", background: "rgba(255,183,77,0.08)", borderRadius: 4, border: "1px solid #ffb74d30" }}>
+                  ♟《我儘》あなたの絆はすべて自身への絆として扱われます
+                </div>
+              )}
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
           )}
@@ -4723,9 +4975,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     <button onClick={() => animateDice(1, "変調決定", res => {
                       const bsName = BAD_STATUS_TABLE[res[0]].name;
                       upd(p => {
-                        const newBs  = Array.from(new Set([...(pc.badStatus || []), bsName]));
-                        const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
-                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[`${pc.charName} は変調《${bsName}》を獲得した`, ...p.log] };
+                        const immune = isBadStatusImmune(pc, bsName);
+                        const newBs  = immune ? (pc.badStatus || []) : Array.from(new Set([...(pc.badStatus || []), bsName]));
+                        const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: !immune && bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
+                        const log = immune ? `🛡 ${pc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `${pc.charName} は変調《${bsName}》を獲得した`;
+                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[log, ...p.log] };
                       });
                     })} style={btnFull(C.redBg, C.redBorder, C.red, { fontSize: 10 })}>🎲 変調表を振る (1D6)</button>
                   </div>
@@ -4737,13 +4991,44 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       <div style={{ color: C.gold, marginBottom: 4 }}>【イベント効果】</div>
                       {sc.selectedEvent?.effect}
                     </div>
+
+                    {/* 熱中: 失敗時にやる気1消費で再判定 */}
+                    {!isSuccess && !isFumble && pc.ps?.name === "熱中" && (pc.resources.やる気?.cur || 0) >= 1 && (
+                      <button onClick={() => {
+                        upd(p => ({
+                          ...p,
+                          pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
+                            ...x, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: (x.resources.やる気?.cur || 0) - 1 } }
+                          }),
+                          currentScene: { ...p.currentScene, phase: "explore_roll", actionDice: undefined, fumbleResolved: false, specialResolved: false },
+                          log: [`${pc.charName}《熱中》: やる気1消費して行為判定をやり直す！`, ...p.log]
+                        }));
+                      }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10, marginBottom: 8 })}>
+                        🔄《熱中》やる気1消費で再判定
+                      </button>
+                    )}
+
+                    {/* 直感: 失敗時でも手がかりを取得（1回限り・手がかりがある場合のみ） */}
+                    {!isSuccess && pc.ps?.name === "直感" && !pc[PS_ONCE_FLAG] && hasClueHere && (
+                      <button onClick={() => {
+                        upd(p => ({
+                          ...p,
+                          pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, [PS_ONCE_FLAG]: true }),
+                          currentScene: { ...p.currentScene, phase: "explore_clue", isSuccess: true },
+                          log: [`${pc.charName}《直感》: 失敗でも手がかりを取得！`, ...p.log]
+                        }));
+                      }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10, marginBottom: 8 })}>
+                        🔍《直感》失敗でも手がかりを取得（1回限り）
+                      </button>
+                    )}
+
                     <button onClick={() => {
                       const event = sc.selectedEvent;
                       const actions =[];
                       if (event.onAlways) actions.push(...event.onAlways);
                       if (isSuccess && event.onSuccess) actions.push(...event.onSuccess);
                       if (!isSuccess && event.onFailure) actions.push(...event.onFailure);
-                      
+
                       upd(p => ({
                         ...p,
                         currentScene: {
@@ -4907,7 +5192,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const allRolled = pcsHere.every(p => sc.rolls?.[p.uid]);
             
             const hasTag = myPc && q?.specifiedTag && q.specifiedTag.split(/[、,]/).some(t => (myPc.tags ||[]).includes(t.trim()) || myPc.charName === t.trim() || (myPc.ps && myPc.ps.name === t.trim()));
-            const baseDice = 2 + (hasTag ? 1 : 0);
+            let baseDice = 2 + (hasTag ? 1 : 0);
+            // 快適な拠点: 自身の拠点にいる場合+1
+            if (myPc?.ps?.name === "快適な拠点" && myPc.currentSpot === myPc.baseSpotId) baseDice++;
+            // 寂しがり屋: 同スポットに他PCがいる場合+1
+            if (myPc?.ps?.name === "寂しがり屋" && gs.pcs.some(x => x.uid !== myPc?.uid && x.currentSpot === myPc?.currentSpot)) baseDice++;
             const myDiceCount = sc.diceCounts?.[user?.uid] || baseDice;
 
             return (
@@ -4936,7 +5225,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 {!myRoll && myPc && !anySuccess && (
                   <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 6, border: `1px solid ${C.border}` }}>
                     <div style={{ fontSize: 11, color: C.text, marginBottom: 8 }}>あなたの判定ダイス: <span style={{color:C.gold, fontSize:14}}>{myDiceCount}</span> 個</div>
-                    
+
                     <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 12 }}>
                       <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts||{}), [user.uid]: Math.max(1, myDiceCount - 1) } } }))} style={btnSmall}>-</button>
                       <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts||{}), [user.uid]: myDiceCount + 1 } } }))} style={btnSmall}>+</button>
@@ -4959,6 +5248,35 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       </button>
                     )}
 
+                    {/* 瀟洒: 3ダイス以上かつ霊力1消費で自動成功 */}
+                    {myPc.ps?.name === "瀟洒" && myDiceCount >= 3 && (myPc.resources.霊力?.cur || 0) >= 1 && (
+                      <button onClick={() => {
+                        upd(p => {
+                          const rei = myPc.resources.霊力;
+                          return {
+                            ...p,
+                            pcs: p.pcs.map(x => x.uid !== myPc.uid ? x : {
+                              ...x, resources: { ...x.resources,
+                                霊力: { ...rei, cur: rei.cur - 1 },
+                                攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((rei.cur - 1) / 5) }
+                              }
+                            }),
+                            currentScene: { ...p.currentScene, rolls: { ...(p.currentScene.rolls||{}), [user.uid]: { dice: [4, 4, 4], success: true, isSpecial: false, isFumble: false } } },
+                            log: [`${myPc.charName}《瀟洒》: 霊力1消費してクエスト判定を自動成功！`, ...p.log]
+                          };
+                        });
+                      }} style={{ ...btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { marginBottom: 10, fontSize: 10 }) }}>
+                        ✨《瀟洒》霊力1消費で自動成功
+                      </button>
+                    )}
+
+                    {/* 我儘: 全ての絆を自身への絆として扱う */}
+                    {myPc.ps?.name === "我儘" && (
+                      <div style={{ fontSize: 9, color: "#ffb74d", marginBottom: 8, padding: "4px 8px", background: "rgba(255,183,77,0.08)", borderRadius: 4, border: "1px solid #ffb74d30" }}>
+                        ♟《我儘》あなたの絆はすべて自身への絆として扱われます
+                      </div>
+                    )}
+
                     <button onClick={() => animateDice(myDiceCount, "クエスト判定", res => {
                       const max = Math.max(...res);
                       const isFumble = res.every(d => d === 1);
@@ -4971,8 +5289,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           const bsKey = Math.floor(Math.random() * 6) + 1;
                           const bsName = BAD_STATUS_TABLE[bsKey]?.name;
                           if (bsName) {
-                            newPcs = p.pcs.map(x => x.uid !== myPc.uid ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
-                            extraLogs.push(`💀 ファンブル！ ${myPc.charName} は変調《${bsName}》を獲得した`);
+                            const immune = isBadStatusImmune(myPc, bsName);
+                            newPcs = p.pcs.map(x => x.uid !== myPc.uid ? x : { ...x, badStatus: immune ? (x.badStatus||[]) : [...(x.badStatus || []), bsName] });
+                            extraLogs.push(immune ? `🛡 ${myPc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${myPc.charName} は変調《${bsName}》を獲得した`);
                           }
                         } else if (isSpecial && success) {
                           const gain = Math.ceil(Math.random() * 6);
@@ -5017,6 +5336,23 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 {allRolled && !anySuccess && (
                   <div style={{ textAlign: "center", marginTop: 16 }}>
                     <div style={{ fontSize: 13, color: C.red, marginBottom: 8 }}>💀 全員失敗...</div>
+
+                    {/* 熱中: やる気1消費で全員分の判定をリセットして再判定 */}
+                    {myPc?.ps?.name === "熱中" && (myPc.resources.やる気?.cur || 0) >= 1 && (
+                      <button onClick={() => {
+                        upd(p => ({
+                          ...p,
+                          pcs: p.pcs.map(x => x.uid !== myPc.uid ? x : {
+                            ...x, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: (x.resources.やる気?.cur || 0) - 1 } }
+                          }),
+                          currentScene: { ...p.currentScene, rolls: {}, diceCounts: {} },
+                          log: [`${myPc.charName}《熱中》: やる気1消費してクエスト判定をやり直す！`, ...p.log]
+                        }));
+                      }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { marginBottom: 8, fontSize: 10 })}>
+                        🔄《熱中》やる気1消費で再判定
+                      </button>
+                    )}
+
                     {(pc.uid === user?.uid) && (
                       <button onClick={() => animateDice(1, "ペナルティ表", res => {
                         upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_penalty", penaltyDice: res[0] } }));
@@ -5070,9 +5406,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 animateDice(1, "変調決定", res => {
                   const bsName = BAD_STATUS_TABLE[res[0]].name;
                   upd(p => {
-                    const newBs = Array.from(new Set([...(pc.badStatus || []), bsName]));
-                    const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: bsName === "だるい" ? 1 : x.resources.やる気.cur } } } : x);
-                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true }, log: [`${pc.charName} はペナルティで変調《${bsName}》を獲得した。`, ...p.log] };
+                    const immune = isBadStatusImmune(pc, bsName);
+                    const newBs = immune ? (pc.badStatus || []) : Array.from(new Set([...(pc.badStatus || []), bsName]));
+                    const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: !immune && bsName === "だるい" ? 1 : x.resources.やる気.cur } } } : x);
+                    const log = immune ? `🛡 ${pc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `${pc.charName} はペナルティで変調《${bsName}》を獲得した。`;
+                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "quest_done", isSuccess: true }, log: [log, ...p.log] };
                   });
                 });
               } else if (d === 2) {
@@ -5560,7 +5898,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                           gs={gs}
                           isGm={isGm}
                           onUpdatePc={updPc => upd(p => ({ ...p, pcs: p.pcs.map(x => x.uid === pc.uid ? updPc : x) }))}
+                          upd={upd}
+                          animateDice={animateDice}
                           getSpot={getSpot}
+                          SPOTS={SPOTS}
                           room={room}
                         />
                       ))

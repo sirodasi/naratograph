@@ -378,7 +378,7 @@ function SessionApp({ roomCode, user }) {
 
   function normalizePc(p) {
     const charData = CHARACTERS.find(c => c.id === p.charId) ?? null;
-    const personality = p.personalitySkill ?? p.ps ?? (p.skillId ? {
+    const personality = p.ps ?? (p.skillId ? {
       id:   p.skillId,
       name: p.skillName ?? PERSONALITY_SKILLS[p.skillId]?.name ?? "",
       type: PERSONALITY_SKILLS[p.skillId]?.type ?? null,
@@ -416,7 +416,7 @@ function SessionApp({ roomCode, user }) {
           spriteRow:     p.spriteRow ?? -1,
           spriteCol:     p.spriteCol ?? -1,
           customPortrait: p.customPortrait ?? null,
-          ps: p.personalitySkill ?? p.ps ?? (p.skillId ? {
+          ps: p.ps ?? (p.skillId ? {
             id:   p.skillId,
             name: p.skillName ?? PERSONALITY_SKILLS[p.skillId]?.name ?? "",
             type: PERSONALITY_SKILLS[p.skillId]?.type ?? null,

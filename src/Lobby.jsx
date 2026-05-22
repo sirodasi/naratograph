@@ -354,7 +354,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
     if (!selectedSkillId) return;
     const skill = PERSONALITY_SKILLS[selectedSkillId];
     await update(ref(db, `rooms/${roomCode}/players/${user.uid}`), {
-      personalitySkill: {
+      ps: {
         id:   selectedSkillId,
         name: skill?.name || "",
         type: skill?.type || null,
@@ -496,7 +496,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                     {p.name}{p.role === "gm" ? " (GM)" : ""}
                   </div>
                   {p.charName && (
-                    <div style={{ fontSize: 9, color: C.textDim }}>{p.charName}{(p.personalitySkill?.name || p.ps?.name) ? ` / 《${p.personalitySkill?.name || p.ps?.name}》` : ""}</div>
+                    <div style={{ fontSize: 9, color: C.textDim }}>{p.charName}{(p.ps?.name) ? ` / 《${p.ps?.name}》` : ""}</div>
                   )}
                 </div>
                 <div style={{ fontSize: 9, color: p.ready ? "#4caf50" : C.textFaint, flexShrink: 0 }}>{p.ready ? "✓" : "…"}</div>
@@ -660,7 +660,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                       <div>
                         <div style={{ fontSize: 12, color: C.text }}>{p.name}</div>
                         {p.charName && <div style={{ fontSize: 10, color: C.gold }}>{p.charName}</div>}
-                        {(p.personalitySkill?.name || p.ps?.name) && <div style={{ fontSize: 10, color: C.textDim }}>個性：《{p.personalitySkill?.name || p.ps?.name}》</div>}
+                        {(p.ps?.name) && <div style={{ fontSize: 10, color: C.textDim }}>個性：《{p.ps?.name}》</div>}
                       </div>
                       <div style={{ marginLeft: "auto", fontSize: 11, color: p.ready ? C.green : C.textFaint }}>{p.ready ? "✓ 準備完了" : "待機中…"}</div>
                     </div>
