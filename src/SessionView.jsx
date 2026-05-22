@@ -766,6 +766,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         });
         return;
       }
+      // roll_check_then_place: ダイスロール後に成功/失敗のステップを決定する
+      if (hasChoiceStep) {
+        const choiceStep = structured.steps.find(s => s.type === "roll_check_then_place");
+        if (choiceStep) {
+          upd(p => ({
+            ...consumeSpell(p),
+            battle: {
+              ...p.battle,
+              spellRollCheck: {
+                attackerId, defenderId, attPos, defPos,
+                snapDef: defGrid, snapAtk: atkGrid,
+                check: choiceStep.check,
+                success: choiceStep.success || [],
+                fail: choiceStep.fail || [],
+                spellName: spellCard.name,
+              },
+              spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+            },
+            log: [`🔮 ${attackerName}：${spellCard.name}！ (ダイスを振って効果を決定)`, ...p.log],
+          }));
+          return;
+        }
+      }
+
       // hasChoiceStep は以下の既存ロジックへフォールスルー
     }
 
@@ -877,6 +901,84 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         },
       }));
     }
+  };
+
+  // roll_check_then_place: ダイス結果を受けてステップを適用する
+  const resolveSpellRollCheck = () => {
+    const src = b.spellRollCheck;
+    if (!src) return;
+    animateDice(src.check.dice, `${src.spellName}（判定）`, res => {
+      const maxDie = Math.max(...res);
+      const isCheckSuccess = maxDie >= src.check.target;
+      const steps = isCheckSuccess ? src.success : src.fail;
+      const { attackerId, defenderId, attPos, defPos } = src;
+      let defGrid = [...(src.snapDef || [0,0,0,0,0,0])];
+      let atkGrid = [...(src.snapAtk || [0,0,0,0,0,0])];
+      const randomHints = [];
+      let hasDesignated = false;
+      let designatedCount = 0;
+
+      for (const step of steps) {
+        if (step.type === "random") {
+          randomHints.push({ diceCount: step.count ?? 1, afterList: step.after || [] });
+        } else if (step.type === "designated") {
+          hasDesignated = true;
+          designatedCount = step.count ?? 1;
+        } else {
+          const result = applyStep(step, defGrid, atkGrid, attPos, defPos);
+          defGrid = result.defGrid;
+          atkGrid = result.atkGrid;
+        }
+      }
+
+      const label = isCheckSuccess ? "成功" : "失敗";
+      if (hasDesignated) {
+        upd(p => ({
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
+            spellRollCheck: null,
+            spellChoose: { attackerId, defenderId, remaining: designatedCount, selected: [], excludeEnemyCell: false },
+          },
+          log: [`🎲 ${src.spellName}：判定${label}（${res.join(",")}）→ マスを選択してください`, ...p.log],
+        }));
+      } else if (randomHints.length > 0) {
+        const totalDice = randomHints.reduce((s, h) => s + h.diceCount, 0);
+        const snapDef2 = defGrid;
+        const snapAtk2 = atkGrid;
+        upd(p => ({ ...p, battle: { ...p.battle, spellRollCheck: null } }));
+        animateDice(totalDice, `${src.spellName}（配置）`, res2 => {
+          let finalDef = [...snapDef2];
+          let offset = 0;
+          for (const hint of randomHints) {
+            const batch = res2.slice(offset, offset + hint.diceCount);
+            offset += hint.diceCount;
+            const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
+            finalDef = nextDef;
+          }
+          upd(p => ({
+            ...p,
+            battle: {
+              ...p.battle,
+              grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk2 },
+            },
+            log: [`🎲 ${src.spellName}：判定${label}（${res.join(",")}）→ ランダム配置完了`, ...p.log],
+          }));
+        });
+      } else {
+        // 失敗かつ fail:[] → 何も配置しない
+        upd(p => ({
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
+            spellRollCheck: null,
+          },
+          log: [`🎲 ${src.spellName}：判定${label}（${res.join(",")}）→ 効果なし`, ...p.log],
+        }));
+      }
+    });
   };
 
   // ラウンド終了時の pendingSpell 適用
@@ -1617,6 +1719,23 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const canDeclare  = isPcAttacker ? (isGm || user.uid === b.pcCombatant) : isGm;
     const cardColor   = isPcAttacker ? C.blue : C.red;
     const borderColor = isPcAttacker ? C.blueBorder : C.redBorder;
+
+    // roll_check_then_place: 判定ダイスを振る
+    if (b.spellRollCheck && b.spellRollCheck.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
+      const src = b.spellRollCheck;
+      return (
+        <SpellCard color={C.gold} title={`✦ ${src.spellName} ─ 効果判定`} style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>
+            {src.check.dice}D6 を振り、最大値が {src.check.target} 以上なら成功効果、失敗なら失敗効果が発動します。
+          </div>
+          {canDeclare && (
+            <button onClick={resolveSpellRollCheck} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
+              🎲 {src.check.dice}D を振る
+            </button>
+          )}
+        </SpellCard>
+      );
+    }
 
     // CHOOSE 選択中
     if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
@@ -4896,7 +5015,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((rei.cur - 1) / 5) }
                         }
                       }),
-                      currentScene: { ...p.currentScene, phase: "explore_result", actionDice: [4, 4, 4], fumbleResolved: true, specialResolved: true },
+                      currentScene: { ...p.currentScene, phase: "explore_result", actionDice: [], isAutoSuccess: true, fumbleResolved: true, specialResolved: true },
                       log: [`${pc.charName}《瀟洒》: 霊力1消費して行為判定を自動成功！`, ...p.log]
                     };
                   });
@@ -4935,7 +5054,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const maxDie       = Math.max(...(sc.actionDice ||[0]));
             const isFumble     = sc.actionDice?.length > 0 && sc.actionDice.every(d => d === 1);
             const isSpecial    = sc.actionDice?.includes(6);
-            const isSuccess    = maxDie >= (sc.selectedEvent?.target || 0) && !isFumble;
+            const isSuccess    = sc.isAutoSuccess || (maxDie >= (sc.selectedEvent?.target || 0) && !isFumble);
             const pendingFumble  = isFumble  && !sc.fumbleResolved;
             const pendingSpecial = isSpecial && !isFumble && !sc.specialResolved;
             const canProceed   = !pendingFumble && !pendingSpecial;
