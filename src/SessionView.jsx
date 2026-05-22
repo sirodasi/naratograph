@@ -444,11 +444,13 @@ export function buildSpellCard(card) {
 
   // 構造化データの timing が round_end なら effectTiming に反映
   if (structured?.timing === "round_end") parsed.effectTiming = "round_end";
+  // 構造化データが full/partial なら手動フラグを解除
+  if (structured && structured.auto !== "manual") parsed.manual = false;
 
   return {
     ...card,
     name,
-    text,
+    text: text || (structured ? (structured.note || "") : ""),
     ...parsed,
     structured,
   };
@@ -723,7 +725,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           battle: {
             ...p.battle,
             grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
-            lastSpellUsed: spellCard.name,
+            spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
           },
           log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
         }));
@@ -749,7 +751,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             battle: {
               ...p.battle,
               grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
-              lastSpellUsed: spellCard.name,
+              spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
             },
             log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
           }));
@@ -780,7 +782,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         ...consumeSpell(p),
         battle: {
           ...p.battle,
-          lastSpellUsed: spellCard.name,
+          spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
           manualSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, defenderPos: defPos }
         },
         log: [`🔮 ${attackerName}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
@@ -801,7 +803,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ...p.battle,
           grids: { ...p.battle.grids, [defenderId]: updatedGrid },
           spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
-          lastSpellUsed: spellCard.name,
+          spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
         },
         log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
       }));
@@ -817,7 +819,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           battle: {
             ...p.battle,
             grids: { ...p.battle.grids, [defenderId]: updatedGrid.map((v, i) => v + (gridPatch[defenderId]?.[i] || 0)), },
-            lastSpellUsed: spellCard.name,
+            spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
           },
           log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
         }));
@@ -831,7 +833,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       battle: {
         ...p.battle,
         grids: { ...p.battle.grids, [defenderId]: updatedGrid },
-        lastSpellUsed: spellCard.name,
+        spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
       },
       log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
     }));
@@ -1213,17 +1215,49 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       const resultNotice = isFumble ? "ファンブル！" : isSpecial ? "スペシャル！" : "";
 
       if (isSuccess) {
-        upd(p => ({
-          ...p,
-          battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" },
-          log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")})${resultNotice ? ` ${resultNotice}` : ""}` + (isPc ? " 移動先を選択してください。" : ""), ...p.log]
-        }));
+        upd(p => {
+          let newPcs = p.pcs;
+          let specialLog = "";
+          if (isPc && isSpecial) {
+            const gain = Math.ceil(Math.random() * 6);
+            newPcs = p.pcs.map(x => x.uid !== b.pcCombatant ? x : {
+              ...x, resources: {
+                ...x.resources,
+                霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) },
+                攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) }
+              }
+            });
+            specialLog = ` スペシャル！霊力+${gain}`;
+          }
+          return {
+            ...p,
+            pcs: newPcs,
+            battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" },
+            log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")})${specialLog}` + (isPc ? " 移動先を選択してください。" : ""), ...p.log]
+          };
+        });
       } else {
-        upd(p => ({
-          ...p,
-          battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check" },
-          log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})${resultNotice ? ` ${resultNotice}` : ""}`, ...p.log]
-        }));
+        upd(p => {
+          let newPcs = p.pcs;
+          let fumbleLog = "";
+          // PC ファンブル → 変調獲得
+          if (isPc && isFumble) {
+            const bsKey = Math.floor(Math.random() * 6) + 1;
+            const bsName = BAD_STATUS_TABLE[bsKey]?.name;
+            if (bsName) {
+              newPcs = p.pcs.map(x => x.uid !== b.pcCombatant ? x : {
+                ...x, badStatus: [...(x.badStatus || []), bsName]
+              });
+              fumbleLog = ` ファンブル！変調《${bsName}》を獲得`;
+            }
+          }
+          return {
+            ...p,
+            pcs: newPcs,
+            battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check" },
+            log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})${fumbleLog}`, ...p.log]
+          };
+        });
       }
     });
   };
@@ -1231,7 +1265,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const handleEvadeMove = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
     const oldPos = b.positions[combatantId];
-    if (!getEvadeNeighbors(oldPos, b.wallPass).includes(targetCellNum)) return;
+    if (!getEvadeNeighbors(oldPos, b.wallPassBy === combatantId).includes(targetCellNum)) return;
     const bulletsCleared = b.grids[combatantId][oldPos - 1] || 0;
 
     upd(p => {
@@ -1405,8 +1439,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           actedNpcs: nextActedNpcs,
           pcCombatant: null,
           npcCombatant: null,
-          lastSpellUsed: null,
-          wallPass: null,
+          spellUsedBy: {},
+          wallPassBy: null,
           homingSelect: null,
           wideShotSelect: null,
           slowBulletSelect: null,
@@ -1565,6 +1599,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   const renderSpellStep = (isPcAttacker, timing = "standard") => {
     const attacker    = isPcAttacker ? combatantPc : combatantNpc;
+    const attackerId  = isPcAttacker ? b.pcCombatant : b.npcCombatant;
     const spellsRaw   = isPcAttacker
       ? [...(attacker?.spellCards || []), ...(attacker?.growthSpellUnlocked ? [attacker?.growthSpellCard] : [])]
       : [...(attacker?.spellCards || [])];
@@ -1600,7 +1635,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }
 
     // 使用可能なスペカも点数もなく宣言済みでもなければパネル不要
-    if (available.length === 0 || b.lastSpellUsed || spellPts <= 0 || !canDeclare) return null;
+    if (available.length === 0 || b.spellUsedBy?.[attackerId] || spellPts <= 0 || !canDeclare) return null;
 
     return (
       <SpellCard
@@ -2198,20 +2233,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         {isPlayable && (() => {
           const defenderId = isPc ? b.pcCombatant : b.npcCombatant;
           const defender   = isPc ? combatantPc : combatantNpc;
-          const canWallPass = hasOfficialSkill(defender, "壁抜け") && !isDanmakuUsed(defenderId, "壁抜け") && !b.wallPass;
+          const canWallPass = hasOfficialSkill(defender, "壁抜け") && !isDanmakuUsed(defenderId, "壁抜け") && !b.wallPassBy;
           return canWallPass ? (
             <button
               onClick={() => {
                 markDanmakuUsed(defenderId, "壁抜け");
                 upd(p => ({ ...p,
-                  battle: { ...p.battle, wallPass: true },
+                  battle: { ...p.battle, wallPassBy: defenderId },
                   log: [`🧱 ${defender?.charName || defender?.name} の「壁抜け」が発動：1↔3番・4↔6番が隣接扱いになります。`, ...p.log]
                 }));
               }}
               style={{ ...btnFull("rgba(200,160,64,0.18)", C.goldDim, C.gold), marginTop: 8 }}>
               🧱 壁抜け（1↔3・4↔6番を隣接扱い）
             </button>
-          ) : b.wallPass ? (
+          ) : b.wallPassBy === defenderId ? (
             <div style={{ fontSize: 9, color: C.gold, marginTop: 6 }}>🧱 壁抜け発動中</div>
           ) : null;
         })()}
@@ -2268,9 +2303,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   const next = afterDefensePhase(!isPc);
                   if (isPc) {
                     upd(p => ({ ...p,
-                      pcs: p.pcs.map(x => x.uid !== defenderId ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: x.resources.霊力.cur - 10 } } }),
+                      pcs: p.pcs.map(x => x.uid !== defenderId ? x : {
+                        ...x, resources: {
+                          ...x.resources,
+                          霊力: { ...x.resources.霊力, cur: x.resources.霊力.cur - 10 },
+                          攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((x.resources.霊力.cur - 10) / 5) }
+                        }
+                      }),
                       battle: { ...p.battle, phase: next },
-                      log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-10）`, ...p.log]
+                      log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-10・攻撃力更新）`, ...p.log]
                     }));
                   } else {
                     upd(p => ({ ...p,
@@ -2613,7 +2654,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           spellChoose: null,
           pcLastResort: false,
           npcLastResort: false,
-          lastSpellUsed: null,
+          spellUsedBy: {},
+          wallPassBy: null,
           pendingSpell: null,
           lastShotDice: null,
           supportDice: 0,
@@ -2722,7 +2764,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           let highlights = [];
           if (isGm) {
             if (isRecovery) highlights = [1, 2, 3, 4, 5, 6];
-            else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[n.id], b.wallPass);
+            else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[n.id], b.wallPassBy === n.id);
           }
 
           return (
@@ -2939,7 +2981,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
           let highlights = [];
           if (isRecovery) highlights = [1, 2, 3, 4, 5, 6];
-          else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[p.uid], b.wallPass);
+          else if (isEvadeMove) highlights = getEvadeNeighbors(b.positions[p.uid], b.wallPassBy === p.uid);
 
           return (
             <BattleGrid
@@ -4847,6 +4889,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                         <div style={{ fontSize: 11, color: C.text }}>{p.charName}</div>
                         <div style={{ fontSize: 11, color: r ? (r.success ? C.green : C.red) : C.textFaint }}>
                           {r ? (r.success ? `成功 (${r.dice.join(", ")})` : `失敗 (${r.dice.join(", ")})`) : "待機中..."}
+                          {r?.isSpecial && <span style={{ color: C.gold, marginLeft: 4 }}>⭐スペシャル</span>}
+                          {r?.isFumble && <span style={{ color: C.red, marginLeft: 4 }}>💀ファンブル</span>}
                         </div>
                       </div>
                     );
@@ -4882,12 +4926,43 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     <button onClick={() => animateDice(myDiceCount, "クエスト判定", res => {
                       const max = Math.max(...res);
                       const isFumble = res.every(d => d === 1);
+                      const isSpecial = res.some(d => d === 6) && !isFumble;
                       const success = max >= 4 && !isFumble;
-                      upd(p => ({
-                        ...p,
-                        currentScene: { ...p.currentScene, rolls: { ...(p.currentScene.rolls||{}), [user.uid]: { dice: res, success } } },
-                        log: [`${myPc.charName} はクエスト「${q?.name}」の判定で ${res.join(", ")} を出し、${success ? "成功" : "失敗"}した！`, ...p.log]
-                      }));
+                      upd(p => {
+                        let newPcs = p.pcs;
+                        const extraLogs = [];
+                        if (isFumble) {
+                          const bsKey = Math.floor(Math.random() * 6) + 1;
+                          const bsName = BAD_STATUS_TABLE[bsKey]?.name;
+                          if (bsName) {
+                            newPcs = p.pcs.map(x => x.uid !== myPc.uid ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+                            extraLogs.push(`💀 ファンブル！ ${myPc.charName} は変調《${bsName}》を獲得した`);
+                          }
+                        } else if (isSpecial && success) {
+                          const gain = Math.ceil(Math.random() * 6);
+                          newPcs = p.pcs.map(x => x.uid !== myPc.uid ? x : {
+                            ...x, resources: {
+                              ...x.resources,
+                              霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) },
+                              攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) }
+                            }
+                          });
+                          extraLogs.push(`✨ スペシャル！ ${myPc.charName} は霊力 +${gain}点回復した`);
+                        }
+                        return {
+                          ...p,
+                          pcs: newPcs,
+                          currentScene: {
+                            ...p.currentScene,
+                            rolls: { ...(p.currentScene.rolls||{}), [user.uid]: { dice: res, success, isSpecial, isFumble } }
+                          },
+                          log: [
+                            ...extraLogs,
+                            `${myPc.charName} はクエスト「${q?.name}」の判定で ${res.join(", ")} を出し、${success ? "成功" : "失敗"}した！${isFumble ? "（ファンブル！）" : isSpecial ? "（スペシャル！）" : ""}`,
+                            ...p.log
+                          ]
+                        };
+                      });
                     })} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
                       🎲 行為判定を行う
                     </button>
