@@ -802,7 +802,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         battle: {
           ...p.battle,
           grids: { ...p.battle.grids, [defenderId]: updatedGrid },
-          spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [] },
+          spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [], excludeEnemyCell: spellCard.structured?.condition_on_placement?.exclude_enemy_cell === true },
           spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
         },
         log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
@@ -1613,18 +1613,24 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     // CHOOSE 選択中
     if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
       const remaining = b.spellChoose.remaining - b.spellChoose.selected.length;
+      const enemyExcludeCell = b.spellChoose.excludeEnemyCell ? b.positions?.[b.spellChoose.defenderId] : null;
       return (
         <SpellCard color={C.gold} title={`✦ マスを ${remaining} 箇所選択`} style={{ marginTop: 14 }}>
           <div style={{ fontSize: 9, color: C.textDim, marginBottom: 10 }}>（グリッド上のマス番号をクリック）</div>
+          {enemyExcludeCell && (
+            <div style={{ fontSize: 9, color: C.red, marginBottom: 6 }}>※ {enemyExcludeCell}番マス（敵現在地）は選択不可</div>
+          )}
           <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
             {[1,2,3,4,5,6].map(cell => {
               const alreadySelected = b.spellChoose.selected.includes(cell);
+              const isExcluded = cell === enemyExcludeCell;
               return (
                 <button key={cell} onClick={() => handleSpellChooseCell(cell)}
-                  disabled={alreadySelected || !canDeclare}
-                  style={{ width: 32, height: 32, borderRadius: 4, cursor: alreadySelected ? "default" : "pointer",
-                    background: alreadySelected ? "rgba(212,168,56,0.3)" : "rgba(255,255,255,0.05)",
-                    border: `1px solid ${alreadySelected ? C.gold : C.border}`, color: alreadySelected ? C.gold : C.text, fontSize: 13 }}>
+                  disabled={alreadySelected || isExcluded || !canDeclare}
+                  style={{ width: 32, height: 32, borderRadius: 4, cursor: (alreadySelected || isExcluded) ? "default" : "pointer",
+                    background: alreadySelected ? "rgba(212,168,56,0.3)" : isExcluded ? "rgba(180,40,40,0.15)" : "rgba(255,255,255,0.05)",
+                    border: `1px solid ${alreadySelected ? C.gold : isExcluded ? C.redBorder : C.border}`,
+                    color: alreadySelected ? C.gold : isExcluded ? C.red : C.text, fontSize: 13 }}>
                   {cell}
                 </button>
               );
@@ -2551,13 +2557,27 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ? [...(p.actedPcs || []), scenePcUid]
           : (p.actedPcs || []);
 
+        const recoveredPcs = nextSessionPhase === "explore"
+          ? p.pcs.map(x => {
+              const lives = x.resources?.残り人数?.cur ?? 0;
+              return lives === 0
+                ? { ...x, resources: { ...x.resources, 残り人数: { ...x.resources.残り人数, cur: 1 } } }
+                : x;
+            })
+          : p.pcs;
+        const recoveredNames = nextSessionPhase === "explore"
+          ? p.pcs.filter(x => (x.resources?.残り人数?.cur ?? 0) === 0).map(x => x.charName)
+          : [];
+        const recoveryLogs = recoveredNames.map(n => `🔵 ${n} の残り人数が0のため1に回復した`);
+
         return {
           ...p,
+          pcs: recoveredPcs,
           quests: nextQuests,
           sessionPhase: nextSessionPhase,
           actedPcs: nextActedPcs,
           battle: { ...p.battle, active: false },
-          log: [logLine, ...p.log]
+          log: [logLine, ...recoveryLogs, ...p.log]
         };
       });
     };
@@ -4101,7 +4121,23 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events:[], desc: "" };
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
-  const endScene = ()  => upd(p => ({ ...p, actedPcs:[...(p.actedPcs || []), pc.uid], currentScene: null, log:[`${pc.charName} のシーンを終了した`, ...p.log] }));
+  const endScene = () => upd(p => {
+    const scenePc = p.pcs.find(x => x.uid === pc.uid);
+    const lives = scenePc?.resources?.残り人数?.cur ?? 0;
+    const nextPcs = lives === 0
+      ? p.pcs.map(x => x.uid !== pc.uid ? x : {
+          ...x, resources: { ...x.resources, 残り人数: { ...x.resources.残り人数, cur: 1 } }
+        })
+      : p.pcs;
+    const recoveryLog = lives === 0 ? [`🔵 ${pc.charName} の残り人数が0のため1に回復した`] : [];
+    return {
+      ...p,
+      pcs: nextPcs,
+      actedPcs: [...(p.actedPcs || []), pc.uid],
+      currentScene: null,
+      log: [`${pc.charName} のシーンを終了した`, ...recoveryLog, ...p.log]
+    };
+  });
 
   const placeClueWithAnimation = count => {
     animateDice(count * 2, count === 1 ? "手がかり1つ配置" : "手がかり2つ配置", res => {
