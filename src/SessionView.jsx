@@ -875,8 +875,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const handleSpellChooseCell = (cell) => {
     const sc = b.spellChoose;
     if (!sc) return;
-    if (sc.selected.includes(cell)) return;  // 同じマスは選べない
-    const newSelected = [...sc.selected, cell];
+    if ((sc.selected || []).includes(cell)) return;  // 同じマスは選べない
+    const newSelected = [...(sc.selected || []), cell];
     const targetId = sc.defenderId || sc.attackerId;
     const grid = [...(b.grids?.[targetId] || [0,0,0,0,0,0])];
     grid[cell - 1] = (grid[cell - 1] || 0) + 1;
@@ -910,7 +910,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     animateDice(src.check.dice, `${src.spellName}（判定）`, res => {
       const maxDie = Math.max(...res);
       const isCheckSuccess = maxDie >= src.check.target;
-      const steps = isCheckSuccess ? src.success : src.fail;
+      const steps = isCheckSuccess ? (src.success || []) : (src.fail || []);
       const { attackerId, defenderId, attPos, defPos } = src;
       let defGrid = [...(src.snapDef || [0,0,0,0,0,0])];
       let atkGrid = [...(src.snapAtk || [0,0,0,0,0,0])];
@@ -1739,7 +1739,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     // CHOOSE 選択中
     if (b.spellChoose && b.spellChoose.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
-      const remaining = b.spellChoose.remaining - b.spellChoose.selected.length;
+      const remaining = b.spellChoose.remaining - (b.spellChoose.selected || []).length;
       const enemyExcludeCell = b.spellChoose.excludeEnemyCell ? b.positions?.[b.spellChoose.defenderId] : null;
       return (
         <SpellCard color={C.gold} title={`✦ マスを ${remaining} 箇所選択`} style={{ marginTop: 14 }}>
@@ -1749,7 +1749,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           )}
           <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
             {[1,2,3,4,5,6].map(cell => {
-              const alreadySelected = b.spellChoose.selected.includes(cell);
+              const alreadySelected = (b.spellChoose.selected || []).includes(cell);
               const isExcluded = cell === enemyExcludeCell;
               return (
                 <button key={cell} onClick={() => handleSpellChooseCell(cell)}
