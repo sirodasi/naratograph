@@ -5,7 +5,7 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
-import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps } from "./data/effectHandlers";
+import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount } from "./data/effectHandlers";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
@@ -967,8 +967,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       return;
     }
 
-    // ── 構造化データによる自動処理（auto: "full"） ────────────────────────
-    if (structured?.auto === "full" && structured.steps?.length > 0) {
+    // ── 構造化データによる自動処理（auto: "full" / "partial"） ──────────
+    if (structured?.steps?.length > 0 && (structured.auto === "full" || structured.auto === "partial")) {
       // round_end: pendingSpell として保存し、ラウンド終了時に applyPendingSpell で処理
       if (structured.timing === "round_end") {
         upd(p => ({
@@ -978,63 +978,90 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         return;
       }
 
-      // 全ステップを処理（決定論的ステップは即時適用、ランダムステップはダイス後）
+      // 全ステップを処理（stat-based count を解決してから applyStep へ渡す）
       let defGrid = [...(b.grids?.[defenderId] || [0,0,0,0,0,0])];
       let atkGrid = [...(b.grids?.[attackerId] || [0,0,0,0,0,0])];
       const randomHints = [];
       let totalDice = 0;
       let hasChoiceStep = false;
+      let firstChoiceStep = null;
+      const attackerEntity = isPcAttacker ? combatantPc : combatantNpc;
 
       for (const step of structured.steps) {
-        const result = applyStep(step, defGrid, atkGrid, attPos, defPos);
+        // stat-based count（{ type: "stat", stat: "グレイズ", multiplier: N }）を解決
+        const resolvedStep = (step.count && typeof step.count === "object")
+          ? { ...step, count: resolveCount(step.count, attackerEntity) }
+          : step;
+        const result = applyStep(resolvedStep, defGrid, atkGrid, attPos, defPos);
         defGrid = result.defGrid;
         atkGrid = result.atkGrid;
-        if (result.needsChoice) { hasChoiceStep = true; break; }
+        if (result.needsChoice) {
+          hasChoiceStep = true;
+          firstChoiceStep = resolvedStep;
+          break;
+        }
         if (result.needsDice) {
           randomHints.push(result);
           totalDice += result.diceCount;
         }
       }
 
-      if (!hasChoiceStep && randomHints.length === 0) {
-        // 完全決定論的
+      // designated / choice_fixed / clear_chosen_then_random → CHOOSE UIへ直接ディスパッチ
+      if (hasChoiceStep && ["designated", "choice_fixed", "clear_chosen_then_random"].includes(firstChoiceStep?.type)) {
+        const count = firstChoiceStep.count ?? 1;
         upd(p => ({
           ...mergeConsumeWithBattle(p, {
             grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
+            spellChoose: { attackerId, defenderId, remaining: count, selected: [], excludeEnemyCell: spellCard.structured?.condition_on_placement?.exclude_enemy_cell === true },
             spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
           }),
-          log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+          log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
         }));
         return;
       }
 
-      if (!hasChoiceStep && totalDice > 0) {
-        // ランダムステップあり: deterministic 部分は適用済み、残りはダイス
-        const snapDef = defGrid;
-        const snapAtk = atkGrid;
-        upd(p => consumeSpell(p));
-        animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
-          let finalDef = [...snapDef];
-          let offset = 0;
-          for (const hint of randomHints) {
-            const batch = res.slice(offset, offset + hint.diceCount);
-            offset += hint.diceCount;
-            const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
-            finalDef = nextDef;
-          }
+      // auto: "full" のみ: 完全決定論的 / ランダムを自動処理
+      if (structured.auto === "full") {
+        if (!hasChoiceStep && randomHints.length === 0) {
+          // 完全決定論的
           upd(p => ({
-            ...p,
-            battle: {
-              ...p.battle,
-              grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
+            ...mergeConsumeWithBattle(p, {
+              grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
               spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-            },
+            }),
             log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
           }));
-        });
-        return;
+          return;
+        }
+
+        if (!hasChoiceStep && totalDice > 0) {
+          // ランダムステップあり: deterministic 部分は適用済み、残りはダイス
+          const snapDef = defGrid;
+          const snapAtk = atkGrid;
+          upd(p => consumeSpell(p));
+          animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
+            let finalDef = [...snapDef];
+            let offset = 0;
+            for (const hint of randomHints) {
+              const batch = res.slice(offset, offset + hint.diceCount);
+              offset += hint.diceCount;
+              const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
+              finalDef = nextDef;
+            }
+            upd(p => ({
+              ...p,
+              battle: {
+                ...p.battle,
+                grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
+                spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+              },
+              log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+            }));
+          });
+          return;
+        }
       }
-      // hasChoiceStep (designated 等) は以下の既存ロジックへフォールスルー
+      // その他の choice step (directional_move_shoot 等) / auto=partial のランダム → テキスト解析ベース処理へ
     }
 
     // ── 構造化 effects: extra_support_cover / extra_support_cover_with_die_choice ──
