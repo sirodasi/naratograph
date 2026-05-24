@@ -914,6 +914,17 @@ function SessionApp({ roomCode, user }) {
           76%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
           100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
         }
+        @keyframes badStatusIn {
+          0%   { opacity: 0; transform: scale(0.55) rotate(-6deg); }
+          55%  { transform: scale(1.14) rotate(3deg); }
+          75%  { transform: scale(0.95) rotate(-1deg); }
+          100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes battleFadeIn {
+          0%   { opacity: 0; transform: scale(0.97) translateY(6px); }
+          60%  { opacity: 1; transform: scale(1.005) translateY(-1px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -926,11 +937,13 @@ function SessionApp({ roomCode, user }) {
             diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling}
           />
         ) : gs.battle?.active ? (
-          <BattleView
-            gs={gs} upd={upd} user={user} isGm={mode === "gm"}
-            animateDice={animateDice}
-            diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} diceLabel={gs.dice?.label}
-          />
+          <div style={{ width: "100%", height: "100%", animation: "battleFadeIn 0.48s ease both" }}>
+            <BattleView
+              gs={gs} upd={upd} user={user} isGm={mode === "gm"}
+              animateDice={animateDice}
+              diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} diceLabel={gs.dice?.label}
+            />
+          </div>
         ) : (
           <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
         )}

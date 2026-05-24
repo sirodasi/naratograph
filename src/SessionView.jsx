@@ -566,6 +566,113 @@ export function expandStoredSpell(stored) {
   return stored;
 }
 
+function BattleParticleCanvas() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    let raf;
+    const resize = () => {
+      cv.width  = cv.offsetWidth  || cv.parentElement?.offsetWidth  || 800;
+      cv.height = cv.offsetHeight || cv.parentElement?.offsetHeight || 600;
+    };
+    resize();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
+    if (ro && cv.parentElement) ro.observe(cv.parentElement);
+
+    const mk = (initY) => ({
+      x: Math.random() * (cv.width  || 800),
+      y: initY ?? -8,
+      r: 1.2 + Math.random() * 2.2,
+      vx: (Math.random() - 0.5) * 0.7,
+      vy: 0.55 + Math.random() * 1.3,
+      isNpc: Math.random() < 0.55,
+      a: 0.05 + Math.random() * 0.09,
+    });
+    const pts = Array.from({ length: 48 }, (_, i) =>
+      mk(Math.random() * ((cv.height || 600) + 20))
+    );
+
+    const draw = () => {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.isNpc ? "#3b7ccc" : "#cc3b3b";
+        ctx.globalAlpha = p.a;
+        ctx.fill();
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.y > cv.height + 12) pts[i] = mk();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => { cancelAnimationFrame(raf); ro?.disconnect(); };
+  }, []);
+  return (
+    <canvas
+      ref={ref}
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }}
+    />
+  );
+}
+
+function SpellDeclareItem({ spell, cardColor, declareSpell, isPcAttacker }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        marginBottom: 6, border: `1px solid ${hov ? cardColor + "88" : C.border}`, borderRadius: 4, overflow: "hidden",
+        transform: hov ? "scale(1.025) translateY(-1px)" : "scale(1)",
+        boxShadow: hov ? `0 4px 14px ${cardColor}44` : "none",
+        transition: "transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease",
+      }}
+    >
+      <div style={{ padding: "6px 8px", background: hov ? `${cardColor}0d` : "rgba(255,255,255,0.03)", transition: "background 0.16s ease" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: spell.manual ? C.textDim : C.gold, marginBottom: 2 }}>{spell.name}</div>
+            <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.textBody || spell.text}</div>
+            {spell.condition && (
+              <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
+            )}
+            {spell.manual && (
+              <div style={{ fontSize: 9, color: "#5a6070", marginTop: 3 }}>★ 効果はGMが手動処理</div>
+            )}
+            {spell.effectTiming === "round_end" && (
+              <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
+            )}
+            {spell.effects.some(e => e.count === -1) && (
+              <div style={{ fontSize: 9, color: C.blue, marginTop: 3 }}>※ 枚数は宣言時に確認</div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              const needCount = spell.effects.some(e => e.count === -1);
+              if (needCount) {
+                const n = parseInt(window.prompt("配置する弾幕の数を入力してください", "1"));
+                if (!isNaN(n) && n > 0) declareSpell(spell, isPcAttacker, n);
+              } else {
+                declareSpell(spell, isPcAttacker, null);
+              }
+            }}
+            style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: "pointer",
+              background: hov ? "rgba(200,160,64,0.35)" : "rgba(200,160,64,0.2)",
+              border: `1px solid ${C.goldDim}`,
+              color: C.gold, borderRadius: 3, transition: "background 0.16s ease" }}
+          >宣言</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const b = gs.battle;
   if (!b) return null;
@@ -1908,48 +2015,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         style={{ marginTop: 14 }}
         contentStyle={{ padding: "8px 10px" }}
       >
-        {available.map((spell, i) => {
-          const [expanded, setExpanded] = [false, () => {}];
-          return (
-            <div key={i} style={{ marginBottom: 6, border: `1px solid ${C.border}`, borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ padding: "6px 8px", background: "rgba(255,255,255,0.03)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: spell.manual ? C.textDim : C.gold, marginBottom: 2 }}>{spell.name}</div>
-                    <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.textBody || spell.text}</div>
-                    {spell.condition && (
-                      <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
-                    )}
-                    {spell.manual && (
-                      <div style={{ fontSize: 9, color: "#5a6070", marginTop: 3 }}>★ 効果はGMが手動処理</div>
-                    )}
-                    {spell.effectTiming === "round_end" && (
-                      <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
-                    )}
-                    {spell.effects.some(e => e.count === -1) && (
-                      <div style={{ fontSize: 9, color: C.blue, marginTop: 3 }}>※ 枚数は宣言時に確認</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      const needCount = spell.effects.some(e => e.count === -1);
-                      if (needCount) {
-                        const n = parseInt(window.prompt("配置する弾幕の数を入力してください", "1"));
-                        if (!isNaN(n) && n > 0) declareSpell(spell, isPcAttacker, n);
-                      } else {
-                        declareSpell(spell, isPcAttacker, null);
-                      }
-                    }}
-                    style={{ flexShrink: 0, padding: "4px 10px", fontSize: 10, cursor: "pointer",
-                      background: "rgba(200,160,64,0.2)",
-                      border: `1px solid ${C.goldDim}`,
-                      color: C.gold, borderRadius: 3 }}
-                  >宣言</button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {available.map((spell, i) => (
+          <SpellDeclareItem
+            key={i}
+            spell={spell}
+            cardColor={cardColor}
+            declareSpell={declareSpell}
+            isPcAttacker={isPcAttacker}
+          />
+        ))}
       </SpellCard>
     );
   };
@@ -2845,39 +2919,79 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       ? (isMass ? "🏆 最終決戦制覇！" : "🎉 勝利！")
       : (isMass ? "💀 最終決戦敗北..." : "💀 敗北...");
 
+    const acColor = isVictory ? C.gold : C.red;
+    const acColorDim = isVictory ? C.goldDim : C.redBorder;
     return (
-      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
-        <SpellCard color={borderColor} style={{ maxWidth: 480, width: "90%" }} contentStyle={{ textAlign: "center", padding: 32 }}>
-          <div style={{ fontSize: 22, color: titleColor, fontWeight: "bold", marginBottom: 16, letterSpacing: 3 }}>{title}</div>
+      <div style={{ width: "100%", height: "100%", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+        background: isVictory
+          ? "radial-gradient(ellipse at 50% 60%, #1c1500 0%, #04060a 65%)"
+          : "radial-gradient(ellipse at 50% 40%, #180508 0%, #04060a 65%)",
+      }}>
+        {/* 拡張リング */}
+        {[0, 0.85, 1.7].map((delay, i) => (
+          <div key={i} style={{
+            position: "absolute", borderRadius: "50%", pointerEvents: "none",
+            width: 520, height: 520, left: "calc(50% - 260px)", top: "calc(50% - 260px)",
+            border: `1px solid ${acColor}44`,
+            animation: `brRing 2.8s ${delay}s ease-out infinite`,
+          }} />
+        ))}
+        {/* 中心グロー */}
+        <div style={{
+          position: "absolute", borderRadius: "50%", pointerEvents: "none",
+          width: 300, height: 300, left: "calc(50% - 150px)", top: "calc(50% - 150px)",
+          background: `radial-gradient(circle, ${acColor}1a 0%, transparent 70%)`,
+          animation: "brGlow 2.2s ease-in-out infinite",
+        }} />
 
-          {isVictory && !isMass && relatedQ && (
-            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(212,168,56,0.1)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
-              <div style={{ fontSize: 11, color: C.gold, marginBottom: 4, letterSpacing: 2 }}>クエスト解決</div>
-              <div style={{ fontSize: 13, color: "#fff" }}>「{relatedQ.name}」</div>
-            </div>
-          )}
+        {/* メインコンテンツ */}
+        <div style={{ position: "relative", zIndex: 5, textAlign: "center", maxWidth: 480, width: "90%",
+          animation: "brCardIn 0.58s cubic-bezier(0.34,1.56,0.64,1) 0.05s both" }}>
 
-          {isVictory && isMass && (
-            <div style={{ marginBottom: 14, fontSize: 12, color: C.textDim, lineHeight: 1.7 }}>
-              全ての強敵を撃破しました。<br />セッションが終了します。
-            </div>
-          )}
+          <div style={{ fontSize: 16, color: acColor, letterSpacing: 10, marginBottom: 10,
+            animation: "brFadeUp 0.4s ease 0.3s both" }}>◆ ◆ ◆</div>
 
-          {!isVictory && (
-            <div style={{ marginBottom: 14, fontSize: 12, color: C.textDim }}>
-              {isMass ? "最終決戦に敗れました。セッションが終了します。" : "残念でした。探索フェイズへ戻ります。"}
-            </div>
-          )}
+          <div style={{ fontSize: 30, color: acColor, fontWeight: "bold", letterSpacing: 4, marginBottom: 6,
+            textShadow: `0 0 36px ${acColor}cc, 0 0 80px ${acColor}44`,
+            animation: "brTitleIn 0.52s cubic-bezier(0.34,1.56,0.64,1) 0.2s both" }}>
+            {title}
+          </div>
 
-          {isGm ? (
-            <button onClick={finishBattle}
-              style={btnFull(isVictory ? C.goldBg : C.redBg, isVictory ? C.goldDim : C.redBorder, isVictory ? C.gold : C.red)}>
-              {isMass ? "セッション終了" : "探索フェイズへ戻る"}
-            </button>
-          ) : (
-            <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>
-          )}
-        </SpellCard>
+          <div style={{ fontSize: 16, color: acColor, letterSpacing: 10, marginBottom: 22,
+            animation: "brFadeUp 0.4s ease 0.5s both" }}>◆ ◆ ◆</div>
+
+          <div style={{ padding: "16px 20px", background: "rgba(0,0,0,0.55)",
+            border: `1px solid ${acColorDim}`, borderRadius: 6, marginBottom: 20,
+            animation: "brFadeUp 0.45s ease 0.65s both" }}>
+            {isVictory && !isMass && relatedQ && (
+              <>
+                <div style={{ fontSize: 10, color: C.textFaint, letterSpacing: 3, marginBottom: 6 }}>クエスト解決</div>
+                <div style={{ fontSize: 14, color: "#fff", letterSpacing: 1 }}>「{relatedQ.name}」</div>
+              </>
+            )}
+            {isVictory && isMass && (
+              <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.8 }}>
+                全ての強敵を撃破しました。<br />セッションが終了します。
+              </div>
+            )}
+            {!isVictory && (
+              <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.8 }}>
+                {isMass ? "最終決戦に敗れました。セッションが終了します。" : "残念でした。探索フェイズへ戻ります。"}
+              </div>
+            )}
+          </div>
+
+          <div style={{ animation: "brFadeUp 0.4s ease 0.9s both" }}>
+            {isGm ? (
+              <button onClick={finishBattle}
+                style={{ ...btnFull(isVictory ? C.goldBg : C.redBg, acColorDim, acColor), padding: "10px", letterSpacing: 2, fontSize: 12 }}>
+                {isMass ? "セッション終了" : "探索フェイズへ戻る"}
+              </button>
+            ) : (
+              <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -3008,7 +3122,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "#040608" }}>
+      <BattleParticleCanvas />
+    <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
       <style>{`
         @keyframes spellFlashIn {
           0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
@@ -3022,6 +3138,26 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           18%  { opacity: 1; transform: translateX(-50%) translateY(0)    scaleX(1); }
           72%  { opacity: 1; transform: translateX(-50%) translateY(0)    scaleX(1); }
           100% { opacity: 0; transform: translateX(-50%) translateY(4px)  scaleX(0.96); }
+        }
+        @keyframes brRing {
+          0%   { transform: scale(0.08); opacity: 0.75; }
+          100% { transform: scale(1.7);  opacity: 0; }
+        }
+        @keyframes brGlow {
+          0%, 100% { opacity: 0.55; transform: scale(1); }
+          50%       { opacity: 1;   transform: scale(1.22); }
+        }
+        @keyframes brCardIn {
+          from { opacity: 0; transform: scale(0.78) translateY(18px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+        @keyframes brTitleIn {
+          from { opacity: 0; transform: scale(0.65) translateY(-10px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+        @keyframes brFadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
@@ -3335,6 +3471,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           );
         })}
       </div>
+    </div>
     </div>
   );
 }
@@ -3900,7 +4037,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 {badStatus.map(bs => {
                   const bData = Object.values(BAD_STATUS_TABLE).find(x => x.name === bs);
                   return (
-                    <div key={bs} style={{ padding: "4px 8px", background: "rgba(224,112,96,0.15)", border: `1px solid ${C.redBorder}`, borderRadius: 4 }}>
+                    <div key={bs} style={{ padding: "4px 8px", background: "rgba(224,112,96,0.15)", border: `1px solid ${C.redBorder}`, borderRadius: 4, animation: "badStatusIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}>
                       <div style={{ fontSize: 10, color: C.red, marginBottom: 2, fontWeight: "bold" }}>《{bs}》</div>
                       <div style={{ fontSize: 8, color: C.textDim, lineHeight: 1.4 }}>{bData?.desc}</div>
                       {isGm && gmEdit && <button onClick={() => onUpdatePc({ ...pc, badStatus: badStatus.filter(x => x !== bs) })} style={{ marginTop: 4, padding: "2px 6px", fontSize: 8, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2 }}>解除</button>}
@@ -5381,11 +5518,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
               <div style={{ textAlign: "center" }}>
                 <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
                   {sc.actionDice?.map((d, i) => (
-                    <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue }}>{d}</div>
+                    <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue, animation: `diceIn 0.32s ${(i * 0.09).toFixed(2)}s cubic-bezier(0.34,1.56,0.64,1) both` }}>{d}</div>
                   ))}
                 </div>
 
-                <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12 }}>
+                <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
                   {isFumble ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
                 </div>
 
@@ -6131,7 +6268,24 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
   return (
     <div style={{ width: 300, display: "flex", flexDirection: "column", background: "#0b0d14", borderLeft: `1px solid ${C.border}`, flexShrink: 0, overflow: "hidden", fontFamily: "'Noto Serif JP', serif" }}>
-      <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } } @keyframes rollSpin { 50% { transform: scale(1.15) } }`}</style>
+      <style>{`
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes rollSpin { 50% { transform: scale(1.15) } }
+        @keyframes scenePanelIn {
+          from { opacity: 0; transform: translateX(22px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes diceIn {
+          from { opacity: 0; transform: scale(0.45) rotate(-18deg); }
+          70%  { transform: scale(1.15) rotate(4deg); }
+          to   { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+        @keyframes diceResultIn {
+          from { opacity: 0; transform: scale(0.55) translateY(6px); }
+          60%  { transform: scale(1.14) translateY(-2px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+      `}</style>
 
       <div style={{ padding: "8px 12px", borderBottom: `1px solid ${C.border}`, background: "#08090f", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -6176,7 +6330,11 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               </div>
             )}
 
-            {gs.currentScene && <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} room={room} />}
+            {gs.currentScene && (
+              <div style={{ animation: "scenePanelIn 0.3s ease both" }}>
+                <ScenePanel gs={gs} upd={upd} user={user} isGm={isGm} getSpot={getSpot} animateDice={animateDice} SPOTS={SPOTS} room={room} />
+              </div>
+            )}
 
             {!gs.currentScene && isGm && (
               <div style={{ padding: "8px", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.01)" }}>
