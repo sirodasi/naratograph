@@ -648,13 +648,13 @@ function SpellDeclareItem({ spell, cardColor, declareSpell, isPcAttacker }) {
             {spell.effectTiming === "round_end" && (
               <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
             )}
-            {spell.effects.some(e => e.count === -1) && (
+            {spell.effects.some(e => e.count === -1) && (!spell.structured || spell.structured.auto === "manual") && (
               <div style={{ fontSize: 9, color: C.blue, marginTop: 3 }}>※ 枚数は宣言時に確認</div>
             )}
           </div>
           <button
             onClick={() => {
-              const needCount = spell.effects.some(e => e.count === -1);
+              const needCount = spell.effects.some(e => e.count === -1) && (!spell.structured || spell.structured.auto === "manual");
               if (needCount) {
                 const n = parseInt(window.prompt("配置する弾幕の数を入力してください", "1"));
                 if (!isNaN(n) && n > 0) declareSpell(spell, isPcAttacker, n);
@@ -1035,6 +1035,25 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         return;
       }
       // hasChoiceStep (designated 等) は以下の既存ロジックへフォールスルー
+    }
+
+    // ── 構造化 effects: extra_support_cover / extra_support_cover_with_die_choice ──
+    // ステップの有無に関わらず、これらの効果は宣言時に即座に援護/かばう権を付与する
+    if (structured?.effects?.length > 0) {
+      const extraEffect = structured.effects.find(e =>
+        e.type === "extra_support_cover" || e.type === "extra_support_cover_with_die_choice"
+      );
+      if (extraEffect) {
+        const withDieChoice = extraEffect.type === "extra_support_cover_with_die_choice";
+        upd(p => ({
+          ...mergeConsumeWithBattle(p, {
+            spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+            extraInterventionPool: { remaining: extraEffect.count, usedDice: [], withDieChoice },
+          }),
+          log: [`🔮 ${attackerName}：${spellCard.name}！ (援護/かばう+${extraEffect.count}回${withDieChoice ? "・ダイス任意" : ""})`, ...p.log],
+        }));
+        return;
+      }
     }
 
     // ── 既存のテキスト解析ベース処理 ─────────────────────────────────────
@@ -1795,6 +1814,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
+          extraInterventionPool: null,
           familiarAction: null,
           tempSelectedPc: null,
           tempSelectedNpc: null
@@ -6304,12 +6324,13 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
       <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
         {gs.battle?.active ? (
-          <BattleRightPanel 
-            gs={gs} 
-            upd={upd} 
-            user={user} 
-            isGm={isGm} 
-            getSpot={getSpot} 
+          <BattleRightPanel
+            gs={gs}
+            upd={upd}
+            user={user}
+            isGm={isGm}
+            getSpot={getSpot}
+            animateDice={animateDice}
           />
         ) : (
           <>
@@ -6836,6 +6857,65 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   };
   const interventionUsed = b.usedIntervention?.[user.uid];
 
+  // ─── 追加援護/かばう（extraInterventionPool）ハンドラ ───
+  const handleExtraSupport = () => {
+    const myName = gs.pcs.find(x => x.uid === user.uid)?.charName || "?";
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        supportDice: (p.battle.supportDice || 0) + 1,
+        extraInterventionPool: { ...p.battle.extraInterventionPool, remaining: (p.battle.extraInterventionPool?.remaining || 0) - 1 },
+      },
+      log: [`💥 ${myName} の追加援護射撃！攻撃ダイスが増加します。`, ...p.log],
+    }));
+  };
+
+  const handleExtraCover = () => {
+    const pool = b.extraInterventionPool;
+    const targetUid = b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant;
+    const myName = gs.pcs.find(x => x.uid === user.uid)?.charName || "?";
+    if (pool?.withDieChoice) {
+      const usedDice = pool.usedDice || [];
+      const available = [1, 2, 3, 4, 5, 6].filter(d => !usedDice.includes(d));
+      if (available.length === 0) return;
+      const input = parseInt(window.prompt(`かばうマスを選んでください（使用可能: ${available.join(", ")}）`, String(available[0])));
+      if (!available.includes(input)) return;
+      upd(p => {
+        const grid = [...(p.battle.grids[targetUid] || [0, 0, 0, 0, 0, 0])];
+        const success = grid[input - 1] > 0;
+        if (success) grid[input - 1] -= 1;
+        return {
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [targetUid]: grid },
+            extraInterventionPool: { ...p.battle.extraInterventionPool, remaining: (p.battle.extraInterventionPool?.remaining || 0) - 1, usedDice: [...usedDice, input] },
+          },
+          log: [`🛡️ ${myName} が ${input}番マスをかばう（任意選択）！ ${success ? "弾幕を除去しました。" : "しかしそこには弾幕がなかった！"}`, ...p.log],
+        };
+      });
+    } else {
+      animateDice(1, "追加かばう", res => {
+        const die = res[0];
+        upd(p => {
+          const grid = [...(p.battle.grids[targetUid] || [0, 0, 0, 0, 0, 0])];
+          const success = grid[die - 1] > 0;
+          if (success) grid[die - 1] -= 1;
+          return {
+            ...p,
+            battle: {
+              ...p.battle,
+              grids: { ...p.battle.grids, [targetUid]: grid },
+              extraInterventionPool: { ...p.battle.extraInterventionPool, remaining: (p.battle.extraInterventionPool?.remaining || 0) - 1 },
+            },
+            log: [`🛡️ ${myName} が ${die}番マスを追加かばい！ ${success ? "弾幕を除去しました。" : "しかしそこには弾幕がなかった！"}`, ...p.log],
+          };
+        });
+      });
+    }
+  };
+
   // ─── NPC ステータスカード ───
   const renderNpcCard = (npc, isCurrent) => {
     const npcId = npc.id;
@@ -7053,6 +7133,27 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                     >🛡️ かばう</button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* 追加援護/かばう権（extra_support_cover 系スペルカード） */}
+            {b.extraInterventionPool && b.extraInterventionPool.remaining > 0 && isSpectator && (
+              <div style={{ padding: 10, background: "rgba(200,160,64,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>
+                  ✨ 追加介入権 ({b.extraInterventionPool.remaining}回残り){b.extraInterventionPool.withDieChoice && <span style={{ color: C.textFaint, fontSize: 8 }}> · ダイス任意選択</span>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <button
+                    onClick={handleExtraSupport}
+                    disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
+                    style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
+                  >💥 追加援護射撃</button>
+                  <button
+                    onClick={handleExtraCover}
+                    disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
+                    style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
+                  >🛡️ 追加かばう</button>
+                </div>
               </div>
             )}
 

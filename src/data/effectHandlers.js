@@ -296,7 +296,8 @@ export function applyStep(step, defGrid, atkGrid, atkPos, defPos) {
     case "choice_fixed":
     case "clear_chosen_then_random":
     case "directional_move_shoot":
-    case "roll_check_then_place": {
+    case "roll_check_then_place":
+    case "duplicate_previous_shot": {
       return { defGrid: def, atkGrid: atk, placedCells: [],
         needsChoice: true, choiceType: step.type };
     }
@@ -399,7 +400,7 @@ export function isRandomStep(step) {
 export function isChoiceStep(step) {
   return [
     "designated", "choice_fixed", "clear_chosen_then_random",
-    "directional_move_shoot", "roll_check_then_place",
+    "directional_move_shoot", "roll_check_then_place", "duplicate_previous_shot",
   ].includes(step.type);
 }
 
