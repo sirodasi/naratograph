@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { CharSprite } from "./Lobby";
+import { sfx } from "./audio";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
@@ -206,6 +207,17 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
   const cells = [1, 2, 3, 4, 5, 6];
   const campColor = isNpc ? C.red : C.blue;
   const borderColor = isCombatant ? campColor : C.border;
+
+  // 弾幕増加を検出して効果音を鳴らす
+  const prevGridRef = useRef(null);
+  useEffect(() => {
+    const curr = grid || [0,0,0,0,0,0];
+    if (prevGridRef.current !== null) {
+      const prev = prevGridRef.current;
+      if (curr.some((v, i) => v > (prev[i] || 0))) sfx.bullet(isNpc);
+    }
+    prevGridRef.current = [...curr];
+  }, [grid]);
 
   return (
     <div style={{
@@ -558,6 +570,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }
   }, [b.phase, b.familiarAction, upd]);
 
+  // ── サウンドON/OFF ────────────────────────────────────────────────
+  const [sfxMuted, setSfxMuted] = useState(!sfx.enabled);
+  const toggleSfx = () => { sfx.toggle(); setSfxMuted(!sfx.enabled); };
+
   // ── スペルカード宣言フラッシュ ──────────────────────────────────────
   const [spellFlash, setSpellFlash] = useState(null);
   const flashKey = useRef({ round: -1, known: new Set() });
@@ -571,6 +587,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         const attacker = pcs.find(p => p.uid === id) || npcs.find(n => n.id === id);
         const isNpcAtk  = !pcs.find(p => p.uid === id);
         setSpellFlash({ name: spellName, attackerName: attacker?.charName || attacker?.name || "???", color: isNpcAtk ? C.red : C.blue, spriteRow: attacker?.spriteRow ?? -1, spriteCol: attacker?.spriteCol ?? -1 });
+        sfx.spell(isNpcAtk);
         break;
       }
     }
@@ -589,11 +606,25 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     if (b.phase === prevBannerPhase.current) return;
     prevBannerPhase.current = b.phase;
     const label = BANNER_PHASES[b.phase];
-    if (!label) return;
-    setPhaseBanner(label);
-    const t = setTimeout(() => setPhaseBanner(null), 1600);
-    return () => clearTimeout(t);
+    if (label) {
+      setPhaseBanner(label);
+      sfx.phase(b.phase);
+      const t = setTimeout(() => setPhaseBanner(null), 1600);
+      return () => clearTimeout(t);
+    }
+    if (b.phase === "pc_hit_recovery" || b.phase === "npc_hit_recovery") sfx.phase(b.phase);
   }, [b.phase]);
+
+  // ── 勝利/敗北 ────────────────────────────────────────────────────
+  const prevCleanupRef = useRef(null);
+  useEffect(() => {
+    if (b.phase !== "cleanup") { prevCleanupRef.current = null; return; }
+    const result = aliveNpcs.length === 0 ? "victory" : alivePcs.length === 0 ? "defeat" : null;
+    if (result && result !== prevCleanupRef.current) {
+      prevCleanupRef.current = result;
+      result === "victory" ? sfx.victory() : sfx.defeat();
+    }
+  }, [b.phase, aliveNpcs.length, alivePcs.length]);
 
   const handleSupportFire = (userUid) => {
     upd(p => ({
@@ -2967,6 +2998,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       )}
 
       <BattleDiceTray diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} label={gs.dice?.label} />
+
+      {/* ミュートボタン */}
+      <button onClick={toggleSfx} title={sfxMuted ? "効果音オン" : "効果音オフ"} style={{ position: "absolute", top: 12, right: 16, background: "rgba(8,6,18,0.85)", border: `1px solid ${C.border}`, borderRadius: 4, color: sfxMuted ? C.textFaint : C.textDim, fontSize: 14, padding: "2px 7px", cursor: "pointer", zIndex: 10, lineHeight: 1.6 }}>
+        {sfxMuted ? "🔇" : "🔊"}
+      </button>
 
       {/* フェーズバッジ（最上部・グリッドと重ならない） */}
       <div style={{ display: "flex", justifyContent: "center" }}>
@@ -6340,6 +6376,18 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 }
 
 function BattleDiceTray({ diceResult, diceAnim, label }) {
+  const prevAnimRef = useRef(diceAnim);
+  useEffect(() => {
+    const wasAnimating = prevAnimRef.current;
+    prevAnimRef.current = diceAnim;
+    if (!wasAnimating && diceAnim) {
+      sfx.diceRoll();
+    } else if (wasAnimating && !diceAnim && diceResult?.length > 0) {
+      const maxDie = Math.max(...diceResult);
+      sfx.diceResult(maxDie);
+    }
+  }, [diceAnim, diceResult]);
+
   if (!diceResult?.length && !diceAnim) return <div style={{ height: 20 }} />;
 
   const displayLabel = label ? label : "DICE ROLL";
