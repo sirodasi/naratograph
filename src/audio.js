@@ -188,6 +188,26 @@ export const sfx = {
     } catch {}
   },
 
+  // ── クエスト解決: 上昇三音＋キラキラ ────────────────────────────────
+  questSolve() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      [523.25, 659.25, 783.99].forEach((f, i) => tone("sine", f, t + i * 0.12, 0.5, 0.14));
+      tone("sine", 1567.98, t + 0.42, 0.4, 0.08, 2093);
+    } catch {}
+  },
+
+  // ── 手がかり配置: 柔らかい発見チャイム ──────────────────────────────
+  cluePlaced() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      tone("sine", 880,  t,      0.18, 0.08, 1108);
+      tone("sine", 1108, t + 0.14, 0.25, 0.06, 1318);
+    } catch {}
+  },
+
   // ── サイクル進行（時間帯: 0=朝, 1=昼, 2=夕, 3=夜）─────────────────
   cycle(cycleIdx) {
     if (!_enabled) return;

@@ -3645,8 +3645,8 @@ export function SessionEndView({ gs, upd, isGm }) {
 // ─── ConfirmModal ─────────────────────────────────────────────────
 export function ConfirmModal({ title, body, onOk, onCancel, okLabel = "実行する", okColor = C.red }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
-      <SpellCard color={okColor} title={`◆ ${title}`} style={{ maxWidth: 360, width: "90%" }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={onCancel}>
+      <SpellCard color={okColor} title={`◆ ${title}`} style={{ maxWidth: 360, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
         {body && <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 16, whiteSpace: "pre-wrap" }}>{body}</div>}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onOk}     style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: `${okColor}20`, border: `1px solid ${okColor}80`, color: okColor, fontSize: 12 }}>{okLabel}</button>
@@ -3663,8 +3663,8 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
   if (!data) return null;
   const canUse = data.canUse(pc);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
-      <SpellCard color={C.gold} title={`✦ 【${itemName}】を使用する`} style={{ maxWidth: 340, width: "90%" }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={onCancel}>
+      <SpellCard color={C.gold} title={`✦ 【${itemName}】を使用する`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4, letterSpacing: 2 }}>タイミング: {data.timing}</div>
         <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 14 }}>{data.desc}</div>
         {!canUse && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>使用条件を満たしていません</div>}
@@ -3681,8 +3681,8 @@ function ItemUseModal({ itemName, pc, onConfirm, onCancel }) {
 function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel }) {
   const typeColor = SKILL_TYPE_COLOR[skillType] || C.text;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onCancel}>
-      <SpellCard color={typeColor} title={`✦ 《${skillName}》を発動する`} headerRight={<span style={{ padding: "2px 8px", background: `${typeColor}18`, border: `1px solid ${typeColor}50`, borderRadius: 10, fontSize: 9, color: typeColor }}>{skillType}</span>} style={{ maxWidth: 360, width: "90%" }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={onCancel}>
+      <SpellCard color={typeColor} title={`✦ 《${skillName}》を発動する`} headerRight={<span style={{ padding: "2px 8px", background: `${typeColor}18`, border: `1px solid ${typeColor}50`, borderRadius: 10, fontSize: 9, color: typeColor }}>{skillType}</span>} style={{ maxWidth: 360, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 11, color: C.textDim, lineHeight: 1.8, marginBottom: 14 }}>{desc}</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onConfirm} style={{ flex: 1, padding: "8px", cursor: "pointer", borderRadius: 2, background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, fontSize: 12 }}>発動する</button>
@@ -3699,6 +3699,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [skillModal, setSkillModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
+  const [resFlash, setResFlash]     = useState({});
+  const prevResRef                  = useRef(null);
 
   const resources     = pc.resources || INIT_RESOURCES();
   const items         = pc.items     || INIT_ITEMS();
@@ -3799,8 +3801,20 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     onUpdatePc({ ...pc, resources: updated });
   };
 
-  const resKeys  =["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
+  const resKeys  = ["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
   const itemKeys = Object.keys(INIT_ITEMS());
+
+  useEffect(() => {
+    const snapshot = Object.fromEntries(resKeys.map(k => [k, resources[k]?.cur ?? 0]));
+    if (prevResRef.current === null) { prevResRef.current = snapshot; return; }
+    const updates = {};
+    for (const k of resKeys) {
+      const cur = snapshot[k], prev = prevResRef.current[k];
+      if (cur !== prev) updates[k] = { tick: ((resFlash[k]?.tick ?? 0) + 1), dir: cur > prev ? "up" : "down" };
+    }
+    prevResRef.current = snapshot;
+    if (Object.keys(updates).length > 0) setResFlash(f => ({ ...f, ...updates }));
+  }, [pc.resources]); // eslint-disable-line
 
   return (
     <div style={{ border: `1px solid ${isActing ? C.blue : C.border}`, borderRadius: 2, marginBottom: 6, overflow: "hidden", transition: "border 0.2s, box-shadow 0.2s", boxShadow: isActing ? `0 0 16px ${C.blue}28` : "none", background: isActing ? `${C.blue}06` : "transparent" }}>
@@ -3830,7 +3844,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               return (
                 <div key={k} style={{ padding: "4px 6px", background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 3, textAlign: "center" }}>
                   <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 1 }}>【{k}】</div>
-                  <div style={{ fontSize: 12, color: C.gold }}>{r.cur}{r.max > 1 && <span style={{ fontSize: 8, color: C.textFaint }}>/{r.max}</span>}</div>
+                  <div key={`${k}-${resFlash[k]?.tick ?? 0}`} style={{ fontSize: 12, color: C.gold, animation: resFlash[k] ? `${resFlash[k].dir === "up" ? "resFlashUp" : "resFlashDown"} 0.55s ease forwards` : "none" }}>{r.cur}{r.max > 1 && <span style={{ fontSize: 8, color: C.textFaint }}>/{r.max}</span>}</div>
                   {isGm && gmEdit && (
                     <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }}>
                       <button onClick={() => adjustResource(k, -1)} style={{ width: 14, height: 14, fontSize: 9, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, cursor: "pointer", borderRadius: 2, padding: 0 }}>−</button>

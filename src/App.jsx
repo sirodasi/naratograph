@@ -141,6 +141,8 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const isMyTurn    = actingPc?.uid === user?.uid;
   const dists       = actingPc ? getDistances(actingPc.currentSpot) : {};
   const maxDist     = gs.currentScene?.selectedMoveDie || 0;
+  const myPc        = (gs.pcs || []).find(p => p.uid === user?.uid);
+  const mySpot      = myPc?.currentSpot;
 
   if (gs.sceneMode) {
     return (
@@ -170,10 +172,17 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   return (
     <div ref={mapRef} style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#060810" }}>
       <style>{`
-        @keyframes pulseReachable {
-          0%   { transform: scale(1);    box-shadow: 0 0  0px #64b5f6; }
-          50%  { transform: scale(1.25); box-shadow: 0 0 20px #64b5f6; }
-          100% { transform: scale(1);    box-shadow: 0 0  0px #64b5f6; }
+        @keyframes pulseRing {
+          0%   { transform: translate(-50%,-50%) scale(1);   opacity: 0.75; }
+          100% { transform: translate(-50%,-50%) scale(2.3); opacity: 0; }
+        }
+        @keyframes mySpotGlow {
+          0%,100% { box-shadow: 0 0 10px rgba(200,160,64,0.75), inset 0 0 6px rgba(200,160,64,0.25); }
+          50%     { box-shadow: 0 0 26px rgba(200,160,64,0.95), 0 0 48px rgba(200,160,64,0.18), inset 0 0 14px rgba(200,160,64,0.4); }
+        }
+        @keyframes myPortraitGlow {
+          0%,100% { box-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+          50%     { box-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 0 14px rgba(200,160,64,0.85); }
         }
       `}</style>
       <img src={mapImg} alt="幻想郷マップ" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "left top", filter: mapFilter, transition: "filter 2s ease" }} />
@@ -212,12 +221,16 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const sy       = mapBounds.top  + (spot.y / 100) * mapBounds.height;
         const isHov    = hov === spot.id;
 
+        const isMySpot = !isDream && mySpot === spot.id;
+
         let borderCol = areaColor(spot.area).border;
+        if (isMySpot && !hasClue && !isReachable) borderCol = "#c8a040";
         if (newsMarker)  borderCol = "#ffb74d";
         if (hasClue)     borderCol = "#00e5ff";
         if (isReachable) borderCol = "#64b5f6";
 
         const shadows = [];
+        if (isMySpot)   shadows.push("0 0 14px rgba(200,160,64,0.8), inset 0 0 8px rgba(200,160,64,0.3)");
         if (hasClue)    shadows.push("0 0 15px rgba(0,229,255,0.8), inset 0 0 10px rgba(0,229,255,0.4)");
         if (newsMarker) shadows.push("0 0 15px rgba(255,183,77,0.8), inset 0 0 10px rgba(255,183,77,0.4)");
         const boxShadow = shadows.length > 0 ? shadows.join(", ") : "none";
@@ -226,27 +239,16 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
 
         return (
           <div key={spot.id}
-            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || newsMarker || pcsHere.length ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
+            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || newsMarker ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
             onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
-            
-            {pcsHere.length > 0 && (
-              <div style={{ position: "absolute", top: -baseSize / 2 - 4, left: "50%", transform: "translate(-50%, -100%)", display: "flex", gap: 2, pointerEvents: "none", zIndex: 10 }}>
-                {pcsHere.map(p => {
-                  const isAct = gs.currentScene?.pcUid === p.uid;
-                  return (
-                    <div key={p.uid} style={{ width: 24, height: 24, borderRadius: "50%", overflow: "hidden", border: `1.5px solid ${isAct ? "#64b5f6" : "#c8a040"}`, background: "#0b0d14", boxShadow: "0 2px 4px rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {p.customPortrait
-                        ? <img src={p.customPortrait} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <div style={{ transform: "translateY(-1px)" }}><CharSprite spriteRow={p.spriteRow ?? -1} spriteCol={p.spriteCol ?? -1} size={34} /></div>
-                      }
-                    </div>
-                  );
-                })}
-              </div>
+
+            {/* 移動可能リング */}
+            {isReachable && (
+              <div style={{ position: "absolute", left: "50%", top: "50%", width: baseSize, height: baseSize, borderRadius: "50%", border: "2px solid rgba(100,181,246,0.8)", pointerEvents: "none", animation: "pulseRing 1.4s ease-out infinite" }} />
             )}
 
-            {/* スポット本体（エフェクト付き） */}
-            <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: boxShadow, animation: isReachable ? "pulseReachable 1.5s infinite ease-in-out" : "none" }}>
+            {/* スポット本体 */}
+            <div style={{ width: baseSize, height: baseSize, borderRadius: "50%", background: areaColor(spot.area).bg, border: `2px solid ${borderCol}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: isDream ? fontSize - 1 : fontSize, color: "#fff", boxShadow: boxShadow, animation: isMySpot ? "mySpotGlow 2.5s ease-in-out infinite" : "none" }}>
               {isDream ? "◇" : (spot.roll ?? "?")}
             </div>
 
@@ -272,6 +274,57 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         );
       })}
 
+      {/* ── PC移動アニメーションレイヤー ── */}
+      {mapBounds.width > 0 && (() => {
+        // 同スポットにいるPC数を事前集計（横オフセット用）
+        const pcsBySpot = {};
+        (gs.pcs || []).forEach(pc => {
+          const id = pc.currentSpot || "__none__";
+          if (!pcsBySpot[id]) pcsBySpot[id] = [];
+          pcsBySpot[id].push(pc);
+        });
+
+        return (gs.pcs || []).map(pc => {
+          if (!pc.currentSpot) return null;
+          const spot = SPOTS.find(s => s.id === pc.currentSpot);
+          if (!spot) return null;
+
+          const px      = (spot.x / 100) * mapBounds.width;
+          const py      = (spot.y / 100) * mapBounds.height;
+          const mates   = pcsBySpot[pc.currentSpot] || [];
+          const idx     = mates.findIndex(p => p.uid === pc.uid);
+          const offsetX = (idx - (mates.length - 1) / 2) * 26;
+          const isAct   = gs.currentScene?.pcUid === pc.uid;
+          const isMyPc  = pc.uid === user?.uid;
+
+          return (
+            <div key={pc.uid} style={{
+              position: "absolute",
+              left: px + offsetX,
+              top: py - baseSize / 2 - 4,
+              transform: "translate(-50%, -100%)",
+              zIndex: 22,
+              pointerEvents: "none",
+              transition: "left 0.52s cubic-bezier(0.4,0,0.2,1), top 0.52s cubic-bezier(0.4,0,0.2,1)",
+            }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: "50%", overflow: "hidden",
+                border: `1.5px solid ${isAct ? "#64b5f6" : "#c8a040"}`,
+                background: "#0b0d14",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: isAct ? "0 0 8px rgba(100,181,246,0.6)" : "0 2px 4px rgba(0,0,0,0.8)",
+                animation: isMyPc ? "myPortraitGlow 2.5s ease-in-out infinite" : "none",
+              }}>
+                {pc.customPortrait
+                  ? <img src={pc.customPortrait} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <div style={{ transform: "translateY(-1px)" }}><CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={34} /></div>
+                }
+              </div>
+            </div>
+          );
+        });
+      })()}
+
       <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
         {gs.sessionPhase === "explore" ? (
           <div style={{ padding: "4px 14px", background: "rgba(10,12,20,0.92)", border: `1px solid ${CYCLE_COLORS[cycleIdx]}40`, borderRadius: 14, fontSize: 12, color: CYCLE_COLORS[cycleIdx] }}>
@@ -295,10 +348,14 @@ function SessionApp({ roomCode, user }) {
   const [synced, setSynced]         = useState(false);
   const [room, setRoom]             = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
-  const [questBanner, setQuestBanner]     = useState(null);
-  const [cycleOverlay, setCycleOverlay]   = useState(null);
-  const timerRef    = useRef(null);
-  const prevCycleRef = useRef({ day: null, cycleIdx: null });
+  const [questBanner, setQuestBanner]         = useState(null);
+  const [cycleOverlay, setCycleOverlay]       = useState(null);
+  const [questSolveFlash, setQuestSolveFlash] = useState(null);
+  const [clueFlash, setClueFlash]             = useState(false);
+  const timerRef      = useRef(null);
+  const prevCycleRef  = useRef({ day: null, cycleIdx: null });
+  const prevQuestsRef = useRef(null);
+  const prevCluesRef  = useRef(null);
 
   const CYCLE_ICONS = ["☀", "🌤", "🌅", "🌙"];
 
@@ -321,6 +378,34 @@ function SessionApp({ roomCode, user }) {
     const t = setTimeout(() => setCycleOverlay(null), 3200);
     return () => clearTimeout(t);
   }, [cycleOverlay]);
+
+  // クエスト解決を検出してフラッシュ
+  useEffect(() => {
+    const solvedIds = (gs.quests || []).filter(q => q.solved).map(q => String(q.id));
+    if (prevQuestsRef.current === null) { prevQuestsRef.current = solvedIds; return; }
+    const newlySolved = (gs.quests || []).filter(q => q.solved && !prevQuestsRef.current.includes(String(q.id)));
+    prevQuestsRef.current = solvedIds;
+    if (newlySolved.length > 0 && gs.sessionPhase !== "end") {
+      setQuestSolveFlash(newlySolved[0]);
+      sfx.questSolve();
+      const t = setTimeout(() => setQuestSolveFlash(null), 3600);
+      return () => clearTimeout(t);
+    }
+  }, [gs.quests]);
+
+  // 手がかり配置を検出してバナー
+  useEffect(() => {
+    const len = (gs.clues || []).length;
+    if (prevCluesRef.current === null) { prevCluesRef.current = len; return; }
+    if (len > prevCluesRef.current) {
+      setClueFlash(true);
+      sfx.cluePlaced();
+      const t = setTimeout(() => setClueFlash(false), 2400);
+      prevCluesRef.current = len;
+      return () => clearTimeout(t);
+    }
+    prevCluesRef.current = len;
+  }, [gs.clues]);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
@@ -791,6 +876,37 @@ function SessionApp({ roomCode, user }) {
           from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.86) translateY(10px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+        @keyframes backdropIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes resFlashUp {
+          0%   { color: #66bb6a; transform: scale(1.35); }
+          55%  { transform: scale(1); }
+          100% { color: inherit; }
+        }
+        @keyframes resFlashDown {
+          0%   { color: #ef5350; transform: scale(1.35); }
+          55%  { transform: scale(1); }
+          100% { color: inherit; }
+        }
+        @keyframes questSolveAnim {
+          0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.72); }
+          18%  { opacity: 1; transform: translate(-50%,-50%) scale(1.05); }
+          28%  { transform: translate(-50%,-50%) scale(1); }
+          74%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%,-50%) scale(0.96); }
+        }
+        @keyframes clueBannerAnim {
+          0%   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+          18%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+          75%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
         @keyframes cycleOverlayAnim {
           0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
           12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
@@ -830,6 +946,29 @@ function SessionApp({ roomCode, user }) {
         pendingAction={pendingAction} setPendingAction={setPendingAction}
         SPOTS={SPOTS}
       />
+
+      {/* 手がかり配置バナー */}
+      {clueFlash && (
+        <div style={{ position: "fixed", top: 14, left: "50%", zIndex: 155, pointerEvents: "none", animation: "clueBannerAnim 2.4s forwards" }}>
+          <div style={{ background: "rgba(4,8,16,0.96)", border: "1px solid rgba(0,229,255,0.65)", borderRadius: 20, padding: "7px 22px", fontSize: 11, color: "#00e5ff", letterSpacing: 2, boxShadow: "0 0 24px rgba(0,229,255,0.3)", whiteSpace: "nowrap" }}>
+            💡 手がかりが配置された
+          </div>
+        </div>
+      )}
+
+      {/* クエスト解決オーバーレイ */}
+      {questSolveFlash && (
+        <div style={{ position: "fixed", top: "50%", left: "50%", zIndex: 160, pointerEvents: "none", animation: "questSolveAnim 3.6s forwards" }}>
+          <div style={{ position: "relative", background: "rgba(4,4,12,0.96)", border: "2px solid #c8a040", borderRadius: 2, padding: "22px 52px", textAlign: "center", boxShadow: "0 0 48px rgba(200,160,64,0.4), inset 0 0 32px rgba(0,0,0,0.7)" }}>
+            {[{ top: -6, left: 12 }, { top: -6, right: 12 }, { bottom: -6, left: 12 }, { bottom: -6, right: 12 }].map((pos, i) => (
+              <div key={i} style={{ position: "absolute", width: 10, height: 10, background: "#c8a040", transform: "rotate(45deg)", ...pos }} />
+            ))}
+            <div style={{ fontSize: 9, color: "rgba(200,160,64,0.55)", letterSpacing: 4, marginBottom: 10 }}>◆ クエスト解決 ◆</div>
+            <div style={{ fontSize: 20, color: "#c8a040", fontWeight: "bold", letterSpacing: 2, marginBottom: 6 }}>✅ {questSolveFlash.name}</div>
+            <div style={{ fontSize: 10, color: "rgba(200,184,154,0.55)", letterSpacing: 2 }}>が解決されました</div>
+          </div>
+        </div>
+      )}
 
       {/* サイクル進行オーバーレイ */}
       {cycleOverlay && (() => {
