@@ -3807,13 +3807,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   useEffect(() => {
     const snapshot = Object.fromEntries(resKeys.map(k => [k, resources[k]?.cur ?? 0]));
     if (prevResRef.current === null) { prevResRef.current = snapshot; return; }
-    const updates = {};
+    const changed = {};
     for (const k of resKeys) {
       const cur = snapshot[k], prev = prevResRef.current[k];
-      if (cur !== prev) updates[k] = { tick: ((resFlash[k]?.tick ?? 0) + 1), dir: cur > prev ? "up" : "down" };
+      if (cur !== prev) changed[k] = cur > prev ? "up" : "down";
     }
     prevResRef.current = snapshot;
-    if (Object.keys(updates).length > 0) setResFlash(f => ({ ...f, ...updates }));
+    if (Object.keys(changed).length > 0) {
+      setResFlash(f => {
+        const next = { ...f };
+        for (const k of Object.keys(changed)) next[k] = { tick: ((f[k]?.tick ?? 0) + 1), dir: changed[k] };
+        return next;
+      });
+    }
   }, [pc.resources]); // eslint-disable-line
 
   return (

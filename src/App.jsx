@@ -385,7 +385,7 @@ function SessionApp({ roomCode, user }) {
     if (prevQuestsRef.current === null) { prevQuestsRef.current = solvedIds; return; }
     const newlySolved = (gs.quests || []).filter(q => q.solved && !prevQuestsRef.current.includes(String(q.id)));
     prevQuestsRef.current = solvedIds;
-    if (newlySolved.length > 0 && gs.sessionPhase !== "end") {
+    if (newlySolved.length > 0 && gs.sessionPhase !== "end" && !gs.battle?.active) {
       setQuestSolveFlash(newlySolved[0]);
       sfx.questSolve();
       const t = setTimeout(() => setQuestSolveFlash(null), 3600);
