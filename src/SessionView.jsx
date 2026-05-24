@@ -2656,7 +2656,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           </div>
 
           <button
-            disabled={!b.startOrder || (b.participantPcUids || []).length === 0}
+            disabled={!b.startOrder || (b.participantPcUids || allPcs.map(p => p.uid)).length === 0}
             onClick={() => {
               const positions = {};
               const grids = {};
