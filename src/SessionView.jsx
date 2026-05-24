@@ -6232,6 +6232,20 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [paperModal, setPaperModal] = useState(null);
   const [sceneSelect, setSceneSelect] = useState("");
 
+  // 探索フェーズのダイス効果音（バトル中は BattleDiceTray が担当するため除外）
+  const prevExploreDiceRef = useRef(false);
+  useEffect(() => {
+    const wasRolling = prevExploreDiceRef.current;
+    const isRolling  = gs.dice?.rolling || false;
+    prevExploreDiceRef.current = isRolling;
+    if (gs.battle?.active) return;
+    if (!wasRolling && isRolling) {
+      sfx.diceRoll();
+    } else if (wasRolling && !isRolling && (gs.dice?.results?.length ?? 0) > 0) {
+      sfx.diceResult(Math.max(...gs.dice.results));
+    }
+  }, [gs.dice?.rolling]); // eslint-disable-line
+
   const cycleIdx   = gs.cycleIdx || 0;
   const isIntro    = gs.sessionPhase === "intro" || gs.sessionPhase === "intro_main";
   const isMorning  = cycleIdx === 0;
