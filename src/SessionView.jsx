@@ -472,10 +472,14 @@ export function buildSpellCard(card) {
   // 構造化データが full/partial なら手動フラグを解除
   if (structured && structured.auto !== "manual") parsed.manual = false;
 
+  const displayText = text || (structured
+    ? (structured.note || `【${name}】の効果は自動処理されます（${structured.auto === "full" ? "完全自動" : structured.auto === "partial" ? "一部自動" : "GM手動"}）`)
+    : "");
+
   return {
     ...card,
     name,
-    text: text || (structured ? (structured.note || "") : ""),
+    text: displayText,
     ...parsed,
     structured,
   };
@@ -766,6 +770,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           ...n, resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: Math.max(0, (n.resources.スペルカード?.cur || 0) - 1) } }
         })}}};
 
+    // NPC の場合 consumeSpell は battle.participants を更新するため、
+    // その後に battle: { ...p.battle, ... } で上書きすると SC 消費が消えてしまう。
+    // このヘルパーを使うと consumed.battle をベースに追加フィールドをマージできる。
+    const mergeConsumeWithBattle = (p, battleExtra) => {
+      const c = consumeSpell(p);
+      return { ...c, battle: { ...c.battle, ...battleExtra } };
+    };
+
     const attackerName = isPcAttacker ? combatantPc?.charName : combatantNpc?.name;
 
     // ── roll_check_then_place: auto レベルに関わらず優先処理 ─────────────
@@ -775,9 +787,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       let defGrid = [...(b.grids?.[defenderId] || [0,0,0,0,0,0])];
       let atkGrid = [...(b.grids?.[attackerId] || [0,0,0,0,0,0])];
       upd(p => ({
-        ...consumeSpell(p),
-        battle: {
-          ...p.battle,
+        ...mergeConsumeWithBattle(p, {
           spellRollCheck: {
             attackerId, defenderId, attPos, defPos,
             snapDef: defGrid, snapAtk: atkGrid,
@@ -787,7 +797,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             spellName: spellCard.name,
           },
           spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-        },
+        }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (ダイスを振って効果を決定)`, ...p.log],
       }));
       return;
@@ -798,8 +808,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       // round_end: pendingSpell として保存し、ラウンド終了時に applyPendingSpell で処理
       if (structured.timing === "round_end") {
         upd(p => ({
-          ...consumeSpell(p),
-          battle: { ...p.battle, pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } },
+          ...mergeConsumeWithBattle(p, { pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } }),
           log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
         }));
         return;
@@ -826,12 +835,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       if (!hasChoiceStep && randomHints.length === 0) {
         // 完全決定論的
         upd(p => ({
-          ...consumeSpell(p),
-          battle: {
-            ...p.battle,
+          ...mergeConsumeWithBattle(p, {
             grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
             spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-          },
+          }),
           log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
         }));
         return;
@@ -874,8 +881,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     // effectTiming が round_end のものは grids に反映せず pendingSpell に保存
     if (spellCard.effectTiming === "round_end") {
       upd(p => ({
-        ...consumeSpell(p),
-        battle: { ...p.battle, pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } },
+        ...mergeConsumeWithBattle(p, { pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
       }));
       return;
@@ -884,12 +890,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     // manual または CHOOSE → 宣言のみ記録して CHOOSE フェーズへ
     if (spellCard.manual) {
       upd(p => ({
-        ...consumeSpell(p),
-        battle: {
-          ...p.battle,
+        ...mergeConsumeWithBattle(p, {
           spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-          manualSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, defenderPos: defPos }
-        },
+          manualSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, defenderPos: defPos },
+        }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
       }));
       return;
@@ -903,13 +907,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       // CHOOSE → 選択フェーズへ
       const chooseCount = spellCard.effects.find(e => e.type === "CHOOSE")?.count ?? 1;
       upd(p => ({
-        ...consumeSpell(p),
-        battle: {
-          ...p.battle,
+        ...mergeConsumeWithBattle(p, {
           grids: { ...p.battle.grids, [defenderId]: updatedGrid },
           spellChoose: { attackerId, defenderId, remaining: chooseCount === -1 ? (customCount ?? 1) : chooseCount, selected: [], excludeEnemyCell: spellCard.structured?.condition_on_placement?.exclude_enemy_cell === true },
           spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-        },
+        }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
       }));
       return;
@@ -934,12 +936,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     // 完全自動（テキスト解析）
     upd(p => ({
-      ...consumeSpell(p),
-      battle: {
-        ...p.battle,
+      ...mergeConsumeWithBattle(p, {
         grids: { ...p.battle.grids, [defenderId]: updatedGrid },
         spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-      },
+      }),
       log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
     }));
   };

@@ -6,6 +6,7 @@ import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
 import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
+import { sfx } from "./audio";
 
 import {
   SPOTS, EDGES, NEWSPAPER,
@@ -295,7 +296,31 @@ function SessionApp({ roomCode, user }) {
   const [room, setRoom]             = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [questBanner, setQuestBanner]     = useState(null);
-  const timerRef = useRef(null);
+  const [cycleOverlay, setCycleOverlay]   = useState(null);
+  const timerRef    = useRef(null);
+  const prevCycleRef = useRef({ day: null, cycleIdx: null });
+
+  const CYCLE_ICONS = ["☀", "🌤", "🌅", "🌙"];
+
+  // サイクル進行（day/cycleIdx の変化）を検出してオーバーレイと効果音を発火
+  useEffect(() => {
+    if (gs.sessionPhase !== "explore") {
+      prevCycleRef.current = { day: gs.day, cycleIdx: gs.cycleIdx };
+      return;
+    }
+    const prev = prevCycleRef.current;
+    if (prev.day !== null && (gs.day !== prev.day || gs.cycleIdx !== prev.cycleIdx)) {
+      setCycleOverlay({ day: gs.day, cycleIdx: gs.cycleIdx || 0 });
+      sfx.cycle(gs.cycleIdx || 0);
+    }
+    prevCycleRef.current = { day: gs.day, cycleIdx: gs.cycleIdx };
+  }, [gs.day, gs.cycleIdx, gs.sessionPhase]);
+
+  useEffect(() => {
+    if (!cycleOverlay) return;
+    const t = setTimeout(() => setCycleOverlay(null), 3200);
+    return () => clearTimeout(t);
+  }, [cycleOverlay]);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
@@ -762,6 +787,13 @@ function SessionApp({ roomCode, user }) {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes cycleOverlayAnim {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
+          12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+          22%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          76%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+        }
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -794,6 +826,25 @@ function SessionApp({ roomCode, user }) {
         pendingAction={pendingAction} setPendingAction={setPendingAction}
         SPOTS={SPOTS}
       />
+
+      {/* サイクル進行オーバーレイ */}
+      {cycleOverlay && (() => {
+        const ci    = cycleOverlay.cycleIdx;
+        const color = CYCLE_COLORS[ci];
+        return (
+          <div style={{ position: "fixed", top: "50%", left: "50%", zIndex: 150, pointerEvents: "none", animation: "cycleOverlayAnim 3.2s forwards" }}>
+            <div style={{ background: "rgba(4,4,12,0.94)", border: `2px solid ${color}`, borderRadius: 2, padding: "28px 56px", textAlign: "center", boxShadow: `0 0 56px ${color}44, 0 0 120px ${color}18, inset 0 0 40px rgba(0,0,0,0.7)` }}>
+              {[{ top: -7, left: 14 }, { top: -7, right: 14 }, { bottom: -7, left: 14 }, { bottom: -7, right: 14 }].map((pos, i) => (
+                <div key={i} style={{ position: "absolute", width: 12, height: 12, background: color, transform: "rotate(45deg)", ...pos }} />
+              ))}
+              <div style={{ fontSize: 42, marginBottom: 10, lineHeight: 1 }}>{CYCLE_ICONS[ci]}</div>
+              <div style={{ fontSize: 28, fontWeight: "bold", color, letterSpacing: 6, textShadow: `0 0 20px ${color}99` }}>{CYCLES[ci]}</div>
+              <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${color}88, transparent)`, margin: "12px 0" }} />
+              <div style={{ fontSize: 12, color: "rgba(200,184,154,0.7)", letterSpacing: 4 }}>{cycleOverlay.day} 日目</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {questBanner && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: "rgba(6,8,16,0.97)", borderBottom: "1px solid #1e3a5a", padding: "16px 24px", animation: "fadeUp 0.3s ease" }}>

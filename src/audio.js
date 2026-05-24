@@ -187,4 +187,36 @@ export const sfx = {
       );
     } catch {}
   },
+
+  // ── サイクル進行（時間帯: 0=朝, 1=昼, 2=夕, 3=夜）─────────────────
+  cycle(cycleIdx) {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      switch (cycleIdx) {
+        case 0: // 朝: 明るい上昇アルペジオ（鳥のさえずり感）
+          [659.25, 783.99, 987.77, 1318.5].forEach((f, i) =>
+            tone("sine", f, t + i * 0.1, 0.35, 0.1)
+          );
+          break;
+        case 1: // 昼: 明るい三和音（全音符）
+          [[523.25, 0], [659.25, 0.05], [783.99, 0.1]].forEach(([f, d]) =>
+            tone("triangle", f, t + d, 0.55, 0.11)
+          );
+          break;
+        case 2: // 夕: 温かみのある下降音（哀愁）
+          [440, 392, 349.23, 293.66].forEach((f, i) =>
+            tone("sine", f, t + i * 0.13, 0.5, 0.12)
+          );
+          break;
+        case 3: // 夜: 深い低音の静謐な和音
+          [[174.61, 0], [220, 0.15], [261.63, 0.3]].forEach(([f, d]) =>
+            tone("sine", f, t + d, 1.2, 0.1)
+          );
+          break;
+        default:
+          break;
+      }
+    } catch {}
+  },
 };
