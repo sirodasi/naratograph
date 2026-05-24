@@ -737,8 +737,32 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     const attackerName = isPcAttacker ? combatantPc?.charName : combatantNpc?.name;
 
-    // ── 構造化データによる自動処理（auto: "full"） ────────────────────────
+    // ── roll_check_then_place: auto レベルに関わらず優先処理 ─────────────
     const structured = spellCard.structured;
+    const rollCheckStep = structured?.steps?.find(s => s.type === "roll_check_then_place");
+    if (rollCheckStep) {
+      let defGrid = [...(b.grids?.[defenderId] || [0,0,0,0,0,0])];
+      let atkGrid = [...(b.grids?.[attackerId] || [0,0,0,0,0,0])];
+      upd(p => ({
+        ...consumeSpell(p),
+        battle: {
+          ...p.battle,
+          spellRollCheck: {
+            attackerId, defenderId, attPos, defPos,
+            snapDef: defGrid, snapAtk: atkGrid,
+            check: rollCheckStep.check,
+            success: rollCheckStep.success || [],
+            fail: rollCheckStep.fail || [],
+            spellName: spellCard.name,
+          },
+          spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+        },
+        log: [`🔮 ${attackerName}：${spellCard.name}！ (ダイスを振って効果を決定)`, ...p.log],
+      }));
+      return;
+    }
+
+    // ── 構造化データによる自動処理（auto: "full"） ────────────────────────
     if (structured?.auto === "full" && structured.steps?.length > 0) {
       // round_end: pendingSpell として保存し、ラウンド終了時に applyPendingSpell で処理
       if (structured.timing === "round_end") {
@@ -808,31 +832,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         });
         return;
       }
-      // roll_check_then_place: ダイスロール後に成功/失敗のステップを決定する
-      if (hasChoiceStep) {
-        const choiceStep = structured.steps.find(s => s.type === "roll_check_then_place");
-        if (choiceStep) {
-          upd(p => ({
-            ...consumeSpell(p),
-            battle: {
-              ...p.battle,
-              spellRollCheck: {
-                attackerId, defenderId, attPos, defPos,
-                snapDef: defGrid, snapAtk: atkGrid,
-                check: choiceStep.check,
-                success: choiceStep.success || [],
-                fail: choiceStep.fail || [],
-                spellName: spellCard.name,
-              },
-              spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-            },
-            log: [`🔮 ${attackerName}：${spellCard.name}！ (ダイスを振って効果を決定)`, ...p.log],
-          }));
-          return;
-        }
-      }
-
-      // hasChoiceStep は以下の既存ロジックへフォールスルー
+      // hasChoiceStep (designated 等) は以下の既存ロジックへフォールスルー
     }
 
     // ── 既存のテキスト解析ベース処理 ─────────────────────────────────────
