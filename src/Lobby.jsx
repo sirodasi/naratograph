@@ -194,9 +194,12 @@ function Lobby({ user, displayName, onProfile }) {
 
   return (
     <div style={{ background: "#040608", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", color: C.text }}>
-      <style>{`button:hover { opacity: 0.82 }`}</style>
+      <style>{`
+        button:hover { opacity: 0.82 }
+        @keyframes lbFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
 
-      <div style={{ textAlign: "center", marginBottom: 40 }}>
+      <div style={{ textAlign: "center", marginBottom: 40, animation: "lbFadeUp 0.5s 0.05s both" }}>
         <div style={{ fontSize: 9, letterSpacing: 8, color: C.textFaint, marginBottom: 12 }}>TRPG SESSION SUPPORT</div>
         <div style={{ fontSize: 24, color: C.gold, letterSpacing: 6, marginBottom: 6, fontWeight: 700 }}>幻想ナラトグラフ</div>
         <Divider color={C.goldDim} style={{ maxWidth: 240, margin: "0 auto 10px" }} />
@@ -205,13 +208,13 @@ function Lobby({ user, displayName, onProfile }) {
 
       {view === "top" && (
         <div style={{ display: "flex", gap: 16 }}>
-          <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180 }}>
+          <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.20s both" }}>
             <div style={{ textAlign: "center", padding: "24px 32px" }}>
               <div style={{ fontSize: 22, color: C.red, marginBottom: 10 }}>⚙</div>
               <div style={{ fontSize: 12, color: C.red, letterSpacing: 2 }}>GMとして部屋を作る</div>
             </div>
           </LobbyCard>
-          <LobbyCard color={C.blue} onClick={() => setView("join")} style={{ minWidth: 180 }}>
+          <LobbyCard color={C.blue} onClick={() => setView("join")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.32s both" }}>
             <div style={{ textAlign: "center", padding: "24px 32px" }}>
               <div style={{ fontSize: 22, color: C.blue, marginBottom: 10 }}>◆</div>
               <div style={{ fontSize: 12, color: C.blue, letterSpacing: 2 }}>部屋に参加する</div>
@@ -221,7 +224,7 @@ function Lobby({ user, displayName, onProfile }) {
       )}
 
       {view === "create" && (
-        <LobbyCard color={C.red} style={{ minWidth: 280 }}>
+        <LobbyCard color={C.red} style={{ minWidth: 280, animation: "lbFadeUp 0.4s 0.05s both" }}>
           <div style={{ textAlign: "center", padding: "24px 32px" }}>
             <div style={{ fontSize: 11, color: C.textDim, marginBottom: 20 }}>GMとして新しいセッションを開始します</div>
             <button onClick={createRoom} disabled={loading} style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "12px 32px", width: "100%", letterSpacing: 2 }) }}>
@@ -234,7 +237,7 @@ function Lobby({ user, displayName, onProfile }) {
       )}
 
       {view === "join" && (
-        <LobbyCard color={C.blue} style={{ minWidth: 300 }}>
+        <LobbyCard color={C.blue} style={{ minWidth: 300, animation: "lbFadeUp 0.4s 0.05s both" }}>
           <div style={{ textAlign: "center", padding: "24px 32px" }}>
             <div style={{ fontSize: 11, color: C.textDim, marginBottom: 16 }}>GMから共有された部屋コードを入力してください</div>
             <input
@@ -421,7 +424,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
 
   return (
     <div style={S.root}>
-      <style>{`button:hover { opacity: 0.82 } @keyframes spin { 50% { transform: scale(1.12) } } ::-webkit-scrollbar { width: 3px } ::-webkit-scrollbar-thumb { background: #1a1e2a } input, textarea, select { outline: none }`}</style>
+      <style>{`
+        button:hover { opacity: 0.82 }
+        @keyframes spin { 50% { transform: scale(1.12) } }
+        @keyframes lbFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar { width: 3px } ::-webkit-scrollbar-thumb { background: #1a1e2a }
+        input, textarea, select { outline: none }
+      `}</style>
 
       {/* ヘッダー */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
@@ -444,7 +453,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
         {/* 左列 */}
         <div style={{ flex: "0 0 260px" }}>
           {isGm && (
-            <div style={S.card}>
+            <div style={{ ...S.card, animation: "lbFadeUp 0.4s 0.08s both" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div style={S.h2}>① シナリオ</div>
                 <button onClick={() => setShowProfile(true)} style={{ ...btn("rgba(255,255,255,0.03)", C.border, C.textDim, { padding: "2px 8px", fontSize: 9 }) }}>📋 管理</button>
@@ -462,7 +471,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
           )}
 
           {isGm && (
-            <div style={S.card}>
+            <div style={{ ...S.card, animation: "lbFadeUp 0.4s 0.20s both" }}>
               <div style={S.h2}>追加ルール</div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 11 }}>
                 <input type="checkbox" checked={room.config?.useAdditionalActions || false} onChange={() => toggleExtraRule("useAdditionalActions")} />
@@ -483,10 +492,10 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
             </div>
           )}
 
-          <div style={S.card}>
+          <div style={{ ...S.card, animation: `lbFadeUp 0.4s ${isGm ? "0.32s" : "0.10s"} both` }}>
             <div style={S.h2}>参加者</div>
-            {Object.values(room.players || {}).map(p => (
-              <div key={p.uid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #0d1018" }}>
+            {Object.values(room.players || {}).map((p, i) => (
+              <div key={p.uid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #0d1018", animation: `lbFadeUp 0.35s ${0.1 + i * 0.08}s both` }}>
                 {p.customPortrait
                   ? <img src={p.customPortrait} style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 4, background: "rgba(255,255,255,0.04)" }} />
                   : <CharSprite spriteRow={p.spriteRow ?? -1} spriteCol={p.spriteCol ?? -1} size={40} />
@@ -505,7 +514,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
           </div>
 
           {isGm && (
-            <div style={S.card}>
+            <div style={{ ...S.card, animation: "lbFadeUp 0.4s 0.44s both" }}>
               <div style={{ fontSize: 10, color: allReady ? "#4caf50" : C.textDim, marginBottom: 8 }}>
                 {allReady ? "全員準備完了！" : "PLの準備を待っています…"}
               </div>
@@ -530,7 +539,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 <button onClick={() => setCustomForm(true)} style={{ ...btn("rgba(255,255,255,0.04)", C.border, C.textDim, { padding: "4px 10px", fontSize: 10 }) }}>＋ カスタム</button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(78px,1fr))", gap: 5, marginBottom: 16, maxHeight: 380, overflowY: "auto" }}>
-                {CHARACTERS.map(c => {
+                {CHARACTERS.map((c, i) => {
                   const taken = Object.values(room.players || {}).some(p => p.charId === c.id && p.uid !== user.uid);
                   const banned = (room.scenarioData?.bannedChars || []).includes(c.name);
                   const disabled = taken || banned;
@@ -539,7 +548,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                     <div
                       key={c.id}
                       onClick={() => { if (!disabled) setSelectedChar(isSel ? null : c); }}
-                      style={{ border: `2px solid ${isSel ? C.gold : disabled ? "#1e2535" : "rgba(255,255,255,0.05)"}`, borderRadius: 5, padding: 4, cursor: disabled ? "not-allowed" : "pointer", background: isSel ? C.goldBg : disabled ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.02)", opacity: disabled ? 0.35 : 1, textAlign: "center" }}
+                      style={{ border: `2px solid ${isSel ? C.gold : disabled ? "#1e2535" : "rgba(255,255,255,0.05)"}`, borderRadius: 5, padding: 4, cursor: disabled ? "not-allowed" : "pointer", background: isSel ? C.goldBg : disabled ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.02)", opacity: disabled ? 0.35 : 1, textAlign: "center", animation: `lbFadeUp 0.28s ${Math.min(i * 0.015, 0.5).toFixed(2)}s both` }}
                     >
                       <CharSprite spriteRow={c.spriteRow} spriteCol={c.spriteCol} size={66} style={{ margin: "0 auto" }} />
                       <div style={{ fontSize: 8, color: isSel ? C.gold : C.textDim, marginTop: 2, lineHeight: 1.3 }}>{c.name}</div>
@@ -596,13 +605,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 14 }}>
-                {Object.entries(PERSONALITY_SKILLS).map(([id, sk]) => {
+                {Object.entries(PERSONALITY_SKILLS).map(([id, sk], i) => {
                   const isSel = selectedSkillId === parseInt(id);
                   return (
                     <div
                       key={id}
                       onClick={() => setSelectedSkillId(parseInt(id))}
-                      style={{ padding: "7px 9px", borderRadius: 4, cursor: "pointer", background: isSel ? C.goldBg : "rgba(255,255,255,0.02)", border: `1px solid ${isSel ? C.goldDim : "#111828"}` }}
+                      style={{ padding: "7px 9px", borderRadius: 4, cursor: "pointer", background: isSel ? C.goldBg : "rgba(255,255,255,0.02)", border: `1px solid ${isSel ? C.goldDim : "#111828"}`, animation: `lbFadeUp 0.3s ${Math.min(i * 0.03, 0.55).toFixed(2)}s both` }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
                         <span style={{ fontSize: 11, color: isSel ? C.gold : C.text }}>《{sk.name}》</span>
@@ -653,8 +662,8 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
               <div style={S.h2}>参加PLの状況</div>
               {Object.values(room.players || {}).filter(p => p.role !== "gm").length === 0
                 ? <div style={{ fontSize: 10, color: C.textFaint }}>まだ参加者がいません。URLをコピーしてPLに共有してください。</div>
-                : Object.values(room.players || {}).filter(p => p.role !== "gm").map(p => (
-                  <div key={p.uid} style={{ padding: "10px 0", borderBottom: "1px solid #0d1018" }}>
+                : Object.values(room.players || {}).filter(p => p.role !== "gm").map((p, i) => (
+                  <div key={p.uid} style={{ padding: "10px 0", borderBottom: "1px solid #0d1018", animation: `lbFadeUp 0.35s ${i * 0.1}s both` }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <CharSprite spriteRow={p.spriteRow ?? -1} spriteCol={p.spriteCol ?? -1} size={56} />
                       <div>

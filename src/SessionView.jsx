@@ -180,24 +180,81 @@ export const PS_ONCE_FLAG = "psUsedThisSession";
 
 // ─── BackstoryScreen ──────────────────────────────────────────────
 export function BackstoryScreen({ gs, isGm, onProceed }) {
-  const [visible, setVisible] = useState(false);
-  const proceeding = useRef(false);
-  useEffect(() => { setTimeout(() => setVisible(true), 100); },[]);
+  const text = gs.scenarioData?.backstory || "（バックストーリー未設定）";
+  const [displayedLen, setDisplayedLen] = useState(0);
+  const [done, setDone]                 = useState(false);
+  const [headerVisible, setHeaderVisible] = useState(false);
+  const proceeding  = useRef(false);
+  const intervalRef = useRef(null);
+
+  // ヘッダーを先にフェードイン、その後タイプライター開始
+  useEffect(() => {
+    const t1 = setTimeout(() => setHeaderVisible(true), 200);
+    const t2 = setTimeout(() => {
+      intervalRef.current = setInterval(() => {
+        setDisplayedLen(prev => {
+          const next = prev + 1;
+          if (next >= text.length) {
+            clearInterval(intervalRef.current);
+            setDone(true);
+            return text.length;
+          }
+          return next;
+        });
+      }, 28);
+    }, 700);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearInterval(intervalRef.current); };
+  }, [text]);
+
   const handleClick = () => {
+    if (!done) {
+      // 途中クリック → 即座に全文表示（スキップ）
+      clearInterval(intervalRef.current);
+      setDisplayedLen(text.length);
+      setDone(true);
+      return;
+    }
+    // 全文表示済み → GMのみ次フェーズへ
     if (!isGm || proceeding.current) return;
     proceeding.current = true;
     onProceed();
   };
+
   return (
-    <div style={{ background: "#04060a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", cursor: "pointer", padding: "40px 60px", boxSizing: "border-box" }} onClick={handleClick}>
-      <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } } @keyframes pulse { 0%,100% { opacity: 0.5 } 50% { opacity: 1 } }`}</style>
-      <div style={{ maxWidth: 760, animation: "fadeIn 1.2s ease", opacity: visible ? 1 : 0, transition: "opacity 1s" }}>
-        <div style={{ fontSize: 11, color: "#4a6080", letterSpacing: 4, textAlign: "center", marginBottom: 16 }}>{gs.scenarioData?.name || "シナリオ"}</div>
-        <div style={{ fontSize: 15, color: "#b8c8d8", lineHeight: 2.2, whiteSpace: "pre-wrap", textAlign: "justify" }}>{gs.scenarioData?.backstory || "（バックストーリー未設定）"}</div>
-        {isGm
-          ? <div style={{ textAlign: "center", marginTop: 40, animation: "pulse 2s ease infinite" }}><span style={{ fontSize: 11, color: "#3a5070", letterSpacing: 3 }}>▼ クリックして探索フェイズへ ▼</span></div>
-          : <div style={{ textAlign: "center", marginTop: 40 }}><span style={{ fontSize: 10, color: "#2a3545", letterSpacing: 2 }}>GMがフェイズを進めるまでお待ちください…</span></div>
-        }
+    <div
+      onClick={handleClick}
+      style={{ background: "#04060a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", cursor: "pointer", padding: "40px 60px", boxSizing: "border-box" }}
+    >
+      <style>{`
+        @keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes pulse   { 0%,100% { opacity: 0.5 } 50% { opacity: 1 } }
+        @keyframes blink   { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
+        @keyframes promptIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+      `}</style>
+
+      <div style={{ maxWidth: 760, width: "100%" }}>
+        {/* シナリオタイトル */}
+        <div style={{ fontSize: 11, color: "#4a6080", letterSpacing: 4, textAlign: "center", marginBottom: 20, opacity: headerVisible ? 1 : 0, transition: "opacity 1s ease" }}>
+          {gs.scenarioData?.name || "シナリオ"}
+        </div>
+
+        {/* タイプライター本文 */}
+        <div style={{ fontSize: 15, color: "#b8c8d8", lineHeight: 2.3, whiteSpace: "pre-wrap", textAlign: "justify", minHeight: "4em" }}>
+          {text.slice(0, displayedLen)}
+          {!done && (
+            <span style={{ animation: "blink 0.7s step-end infinite", color: "#4a8090", fontWeight: "bold" }}>|</span>
+          )}
+        </div>
+
+        {/* 完了後プロンプト */}
+        {done && (
+          <div style={{ textAlign: "center", marginTop: 40, animation: "promptIn 0.8s ease forwards" }}>
+            {isGm
+              ? <span style={{ fontSize: 11, color: "#3a5070", letterSpacing: 3, animation: "pulse 2s ease infinite", display: "inline-block" }}>▼ クリックして探索フェイズへ ▼</span>
+              : <span style={{ fontSize: 10, color: "#2a3545", letterSpacing: 2 }}>GMがフェイズを進めるまでお待ちください…</span>
+            }
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3419,49 +3476,167 @@ export function SessionEndView({ gs, upd, isGm }) {
   const isVictory = gs.battle?.result === "pc_win";
   const pcs = gs.pcs || [];
 
+  const ac  = isVictory ? C.gold    : C.red;
+  const ab  = isVictory ? C.goldDim : C.redBorder;
+  const abg = isVictory ? C.goldBg  : C.redBg;
+
+  useEffect(() => {
+    const t = setTimeout(() => { isVictory ? sfx.victory() : sfx.defeat(); }, 300);
+    return () => clearTimeout(t);
+  }, []);
+
+  const PARTICLES = isVictory
+    ? [{ x: 8, d: 0, s: 6.2 }, { x: 22, d: 1.3, s: 8 }, { x: 38, d: 0.6, s: 7.1 },
+       { x: 52, d: 2.1, s: 5.8 }, { x: 67, d: 0.9, s: 9 }, { x: 80, d: 1.7, s: 6.6 },
+       { x: 91, d: 3.2, s: 7.4 }, { x: 14, d: 2.7, s: 8.3 }, { x: 45, d: 0.3, s: 5.5 },
+       { x: 74, d: 1.1, s: 7.8 }]
+    : [];
+
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
-      <div style={{ background: "#0c1020", border: `2px solid ${isVictory ? C.gold : C.red}`, padding: 36, borderRadius: 10, maxWidth: 520, width: "90%", textAlign: "center" }}>
-        <div style={{ fontSize: 24, color: isVictory ? C.gold : C.red, fontWeight: "bold", marginBottom: 8, letterSpacing: 4 }}>
-          {isVictory ? "CLEAR" : "GAME OVER"}
-        </div>
-        <div style={{ fontSize: 13, color: C.textDim, marginBottom: 24 }}>
-          {isVictory ? "最終決戦を制覇しました。セッション終了です。" : "最終決戦に敗れました。セッション終了です。"}
-        </div>
+    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608", position: "relative", overflow: "hidden" }}>
+      <style>{`
+        @keyframes endTitleIn {
+          0%   { opacity: 0; transform: scale(0.68) translateY(12px); }
+          65%  { opacity: 1; transform: scale(1.06) translateY(-3px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes endGlowV {
+          0%,100% { text-shadow: 0 0 18px ${C.gold}88, 0 0 36px ${C.gold}44; }
+          50%     { text-shadow: 0 0 28px ${C.gold}cc, 0 0 56px ${C.gold}66, 0 0 80px ${C.gold}22; }
+        }
+        @keyframes endGlowD {
+          0%,100% { text-shadow: 0 0 18px ${C.red}88, 0 0 36px ${C.red}44; }
+          50%     { text-shadow: 0 0 28px ${C.red}cc, 0 0 56px ${C.red}66, 0 0 80px ${C.red}22; }
+        }
+        @keyframes endFadeUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes endCardIn {
+          from { opacity: 0; transform: translateY(22px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes endBgPulse {
+          0%,100% { opacity: 1; }
+          50%     { opacity: 0.6; }
+        }
+        @keyframes endParticle {
+          0%   { transform: translateY(-30px) rotate(0deg);   opacity: 0; }
+          8%   { opacity: 0.85; }
+          90%  { opacity: 0.4; }
+          100% { transform: translateY(110vh) rotate(540deg); opacity: 0; }
+        }
+      `}</style>
 
-        {/* PC一覧サマリー */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 24 }}>
-          {pcs.map(pc => {
-            const lives = pc.resources?.残り人数?.cur ?? 0;
-            const spells = pc.resources?.スペルカード?.cur ?? 0;
-            const graze = pc.resources?.グレイズ?.cur ?? 0;
-            const isDead = lives <= 0;
-            return (
-              <div key={pc.uid} style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${isDead ? C.redBorder : C.border}`, borderRadius: 6, padding: "10px 14px", minWidth: 100 }}>
-                <div style={{ fontSize: 12, color: isDead ? C.red : C.text, fontWeight: "bold", marginBottom: 6 }}>{pc.charName}</div>
-                <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.8 }}>
-                  <div>残り人数: <span style={{ color: lives > 0 ? C.green : C.red }}>{lives}</span></div>
-                  <div>スペカ: <span style={{ color: C.blue }}>{spells}</span></div>
-                  <div>グレイズ: <span style={{ color: C.gold }}>{graze}</span></div>
+      {/* 背景グロー */}
+      <div style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        background: `radial-gradient(ellipse 65% 45% at 50% 28%, ${ac}18 0%, transparent 70%)`,
+        animation: "endBgPulse 3s ease-in-out infinite",
+      }} />
+
+      {/* 勝利パーティクル */}
+      {PARTICLES.map((p, i) => (
+        <div key={i} style={{
+          position: "absolute", top: -30, left: `${p.x}%`,
+          color: C.gold, fontSize: 13, pointerEvents: "none",
+          animation: `endParticle ${p.s}s ${p.d}s ease-in infinite`,
+        }}>◆</div>
+      ))}
+
+      {/* メインカード */}
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 540, width: "90%", textAlign: "center" }}>
+        <div style={{
+          position: "relative",
+          background: "linear-gradient(180deg, #0d1122 0%, #07090f 100%)",
+          border: `2px solid ${ab}`,
+          boxShadow: `0 0 36px ${ac}28, inset 0 0 24px ${ac}08`,
+          borderRadius: 10,
+          padding: "38px 32px 30px",
+        }}>
+          {/* コーナー装飾 */}
+          {[{ t: 7, l: 10 }, { t: 7, r: 10 }, { b: 7, l: 10 }, { b: 7, r: 10 }].map((pos, i) => (
+            <div key={i} style={{ position: "absolute", ...pos, color: ac, fontSize: 11, opacity: 0.75 }}>◆</div>
+          ))}
+
+          {/* タイトル */}
+          <div style={{
+            fontSize: 40, fontWeight: "bold", letterSpacing: 10,
+            color: ac,
+            animation: `endTitleIn 0.75s cubic-bezier(0.22,0.61,0.36,1) forwards, ${isVictory ? "endGlowV" : "endGlowD"} 2.8s 0.8s ease-in-out infinite`,
+            marginBottom: 6,
+          }}>
+            {isVictory ? "CLEAR" : "GAME OVER"}
+          </div>
+
+          {/* サブタイトル */}
+          <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 4, marginBottom: 4, animation: "endFadeUp 0.5s 0.55s both" }}>
+            {isVictory ? "◆ 最終決戦制覇 ◆" : "◆ 最終決戦敗北 ◆"}
+          </div>
+
+          {/* 区切り線 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0 18px", animation: "endFadeUp 0.5s 0.65s both" }}>
+            <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${ab}99, transparent)` }} />
+            <span style={{ color: ac, fontSize: 10 }}>◆</span>
+            <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${ab}99, transparent)` }} />
+          </div>
+
+          {/* フレーバーテキスト */}
+          <div style={{ fontSize: 12, color: C.textDim, marginBottom: 22, lineHeight: 1.85, animation: "endFadeUp 0.5s 0.72s both" }}>
+            {isVictory ? "最終決戦を制覇しました。セッション終了です。" : "最終決戦に敗れました。セッション終了です。"}
+          </div>
+
+          {/* PCサマリーカード */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 26 }}>
+            {pcs.map((pc, i) => {
+              const lives  = pc.resources?.残り人数?.cur   ?? 0;
+              const spells = pc.resources?.スペルカード?.cur ?? 0;
+              const graze  = pc.resources?.グレイズ?.cur    ?? 0;
+              const isDead = lives <= 0;
+              return (
+                <div key={pc.uid} style={{
+                  background: isDead ? "rgba(160,30,30,0.1)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${isDead ? C.redBorder : ab}55`,
+                  borderRadius: 6, padding: "10px 14px", minWidth: 108,
+                  animation: `endCardIn 0.5s ${0.9 + i * 0.13}s both`,
+                  position: "relative",
+                }}>
+                  {isDead && <div style={{ position: "absolute", top: 4, right: 7, fontSize: 11, color: C.red, opacity: 0.6 }}>✝</div>}
+                  <div style={{ fontSize: 12, color: isDead ? C.red : C.text, fontWeight: "bold", marginBottom: 7 }}>{pc.charName}</div>
+                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 2 }}>
+                    <div>残り人数　<span style={{ color: lives > 0 ? C.green : C.red, fontWeight: "bold" }}>{lives}</span></div>
+                    <div>スペカ　　<span style={{ color: C.blue }}>{spells}</span></div>
+                    <div>グレイズ　<span style={{ color: C.gold }}>{graze}</span></div>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {isGm && (
-          <button
-            onClick={() => {
-              if (window.confirm("セッションを終了しますか？ルームが閉じられます。")) {
-                upd(p => ({ ...p, sessionPhase: "ended", log: ["📖 セッション終了。", ...p.log] }));
-              }
-            }}
-            style={{ padding: "10px 24px", background: isVictory ? C.goldBg : C.redBg, border: `1px solid ${isVictory ? C.goldDim : C.redBorder}`, borderRadius: 6, color: isVictory ? C.gold : C.red, fontSize: 13, cursor: "pointer", letterSpacing: 1 }}
-          >
-            セッション終了
-          </button>
-        )}
-        {!isGm && <div style={{ fontSize: 10, color: C.textDim }}>GMがセッションを終了するのを待っています...</div>}
+          {/* 終了ボタン / 待機テキスト */}
+          {isGm ? (
+            <button
+              onClick={() => {
+                if (window.confirm("セッションを終了しますか？ルームが閉じられます。")) {
+                  upd(p => ({ ...p, sessionPhase: "ended", log: ["📖 セッション終了。", ...p.log] }));
+                }
+              }}
+              style={{
+                padding: "11px 30px", background: abg,
+                border: `1px solid ${ab}`, borderRadius: 6,
+                color: ac, fontSize: 13, cursor: "pointer", letterSpacing: 2,
+                boxShadow: `0 0 14px ${ac}22`,
+                animation: `endFadeUp 0.5s ${1.0 + pcs.length * 0.13}s both`,
+              }}
+            >
+              セッション終了
+            </button>
+          ) : (
+            <div style={{ fontSize: 10, color: C.textDim, animation: `endFadeUp 0.5s ${1.0 + pcs.length * 0.13}s both` }}>
+              GMがセッションを終了するのを待っています...
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -6237,7 +6412,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       : /^(🛡|💠)/.test(e) ? C.blue
                       : /^⚖️/.test(e) ? C.gold
                       : C.textDim;
-                    return <div key={i} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1 }}>{e}</div>;
+                    return <div key={e.slice(0, 60)} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1, animation: "logSlideIn 0.32s ease forwards" }}>{e}</div>;
                   })}
                 </div>
               )}
@@ -6720,11 +6895,11 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {(gs.log || []).map((entry, i) => (
-              <div key={i} style={{ 
-                fontSize: 10, color: "#6a7a8a", padding: "4px 0", 
+            {(gs.log || []).map((entry) => (
+              <div key={entry.slice(0, 60)} style={{
+                fontSize: 10, color: "#6a7a8a", padding: "4px 0",
                 borderBottom: "1px solid rgba(255,255,255,0.02)",
-                lineHeight: 1.4 
+                lineHeight: 1.4, animation: "logSlideIn 0.32s ease forwards"
               }}>
                 {entry}
               </div>
