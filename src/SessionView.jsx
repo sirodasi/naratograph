@@ -227,6 +227,11 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
           50% { box-shadow: inset 0 0 15px ${C.blue}; background: rgba(100, 181, 246, 0.3); }
           100% { box-shadow: inset 0 0 2px ${C.blue}; background: rgba(100, 181, 246, 0.1); }
         }
+        @keyframes bulletIn {
+          0%   { transform: scale(0); opacity: 0; }
+          60%  { transform: scale(1.4); opacity: 1; }
+          100% { transform: scale(1);  opacity: 1; }
+        }
       `}</style>
 
       {/* アクティブ時の内側装飾枠 */}
@@ -264,7 +269,7 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
               {danmakuCount > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "center", padding: 3 }}>
                   {[...Array(Math.min(danmakuCount, 9))].map((_, i) => (
-                    <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: isNpc ? C.blue : C.red, boxShadow: `0 0 4px ${isNpc ? C.blue : C.red}88` }} />
+                    <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: isNpc ? C.blue : C.red, boxShadow: `0 0 4px ${isNpc ? C.blue : C.red}88`, animation: `bulletIn 0.28s ease-out ${i * 0.04}s both` }} />
                   ))}
                   {danmakuCount > 9 && <span style={{ fontSize: 8, color: isNpc ? C.blue : C.red }}>{danmakuCount}</span>}
                 </div>
@@ -552,6 +557,43 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       });
     }
   }, [b.phase, b.familiarAction, upd]);
+
+  // ── スペルカード宣言フラッシュ ──────────────────────────────────────
+  const [spellFlash, setSpellFlash] = useState(null);
+  const flashKey = useRef({ round: -1, known: new Set() });
+  useEffect(() => {
+    const curr = b.spellUsedBy || {};
+    const fk = flashKey.current;
+    if (b.round !== fk.round) { fk.round = b.round; fk.known = new Set(); }
+    for (const [id, spellName] of Object.entries(curr)) {
+      if (!fk.known.has(id)) {
+        fk.known.add(id);
+        const attacker = pcs.find(p => p.uid === id) || npcs.find(n => n.id === id);
+        const isNpcAtk  = !pcs.find(p => p.uid === id);
+        setSpellFlash({ name: spellName, attackerName: attacker?.charName || attacker?.name || "???", color: isNpcAtk ? C.red : C.blue, spriteRow: attacker?.spriteRow ?? -1, spriteCol: attacker?.spriteCol ?? -1 });
+        break;
+      }
+    }
+  }, [b.spellUsedBy, b.round]);
+  useEffect(() => {
+    if (!spellFlash) return;
+    const t = setTimeout(() => setSpellFlash(null), 2800);
+    return () => clearTimeout(t);
+  }, [spellFlash]);
+
+  // ── フェーズチェンジバナー ────────────────────────────────────────
+  const [phaseBanner, setPhaseBanner] = useState(null);
+  const prevBannerPhase = useRef(null);
+  const BANNER_PHASES = { pc_shot_intro: "PC ショット", npc_shot_intro: "NPC ショット", pc_evade_intro: "PC 回避", npc_evade_intro: "NPC 回避", pc_dropout: "PC 脱落", npc_dropout: "NPC 脱落" };
+  useEffect(() => {
+    if (b.phase === prevBannerPhase.current) return;
+    prevBannerPhase.current = b.phase;
+    const label = BANNER_PHASES[b.phase];
+    if (!label) return;
+    setPhaseBanner(label);
+    const t = setTimeout(() => setPhaseBanner(null), 1600);
+    return () => clearTimeout(t);
+  }, [b.phase]);
 
   const handleSupportFire = (userUid) => {
     upd(p => ({
@@ -2878,7 +2920,52 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   }
 
   return (
-    <div style={{ width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "#040608", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
+      <style>{`
+        @keyframes spellFlashIn {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+          12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+          22%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          75%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -50%) scale(1.04); }
+        }
+        @keyframes phaseBannerAnim {
+          0%   { opacity: 0; transform: translateX(-50%) translateY(-8px) scaleX(0.92); }
+          18%  { opacity: 1; transform: translateX(-50%) translateY(0)    scaleX(1); }
+          72%  { opacity: 1; transform: translateX(-50%) translateY(0)    scaleX(1); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(4px)  scaleX(0.96); }
+        }
+      `}</style>
+
+      {/* スペルカード宣言フラッシュ */}
+      {spellFlash && (
+        <div style={{ position: "absolute", top: "50%", left: "50%", zIndex: 30, pointerEvents: "none", animation: "spellFlashIn 2.8s forwards", textAlign: "center" }}>
+          <div style={{ background: "rgba(4,4,12,0.92)", border: `2px solid ${spellFlash.color}`, borderRadius: 2, padding: "20px 40px", boxShadow: `0 0 48px ${spellFlash.color}55, 0 0 100px ${spellFlash.color}22, inset 0 0 32px rgba(0,0,0,0.7)` }}>
+            {[{ top: -6, left: 12 }, { top: -6, right: 12 }, { bottom: -6, left: 12 }, { bottom: -6, right: 12 }].map((pos, i) => (
+              <div key={i} style={{ position: "absolute", width: 10, height: 10, background: spellFlash.color, transform: "rotate(45deg)", ...pos }} />
+            ))}
+            <div style={{ fontSize: 9, color: spellFlash.color, letterSpacing: 5, marginBottom: 10, opacity: 0.9 }}>◆ SPELL CARD ◆</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 10 }}>
+              <CharSprite spriteRow={spellFlash.spriteRow} spriteCol={spellFlash.spriteCol} size={48} style={{ borderRadius: 2, border: `1px solid ${spellFlash.color}66` }} />
+              <div>
+                <div style={{ fontSize: 18, color: "#fff", fontWeight: "bold", letterSpacing: 2, whiteSpace: "nowrap", textShadow: `0 0 16px ${spellFlash.color}88` }}>{spellFlash.name}</div>
+                <div style={{ fontSize: 10, color: spellFlash.color, letterSpacing: 3, marginTop: 4, opacity: 0.85 }}>{spellFlash.attackerName}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* フェーズチェンジバナー */}
+      {phaseBanner && (
+        <div style={{ position: "absolute", top: "18%", left: "50%", zIndex: 20, pointerEvents: "none", animation: "phaseBannerAnim 1.6s forwards" }}>
+          <div style={{ fontSize: 22, fontWeight: "bold", color: C.gold, letterSpacing: 8, whiteSpace: "nowrap", textShadow: `0 0 24px ${C.gold}, 0 0 48px ${C.gold}66` }}>
+            {phaseBanner}
+          </div>
+          <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${C.gold}, transparent)`, marginTop: 6, opacity: 0.6 }} />
+        </div>
+      )}
+
       <BattleDiceTray diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} label={gs.dice?.label} />
 
       {/* フェーズバッジ（最上部・グリッドと重ならない） */}
