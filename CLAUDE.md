@@ -109,7 +109,7 @@ rooms/{roomCode}/
 | File | Responsibility |
 |---|---|
 | [App.jsx](src/App.jsx) | Root: Firebase listeners, phase routing, BFS pathfinding (`getDistances`), map rendering |
-| [SessionView.jsx](src/SessionView.jsx) | **~6400-line monolith**: multiple exported functions (see below) |
+| [SessionView.jsx](src/SessionView.jsx) | **~7200-line monolith**: multiple exported functions (see below) |
 | [Lobby.jsx](src/Lobby.jsx) | Auth flow, room prep, character + skill selection, extra rule toggles |
 | [ScenarioEditor.jsx](src/ScenarioEditor.jsx) | GM tool for authoring scenarios, quests, enemies, danmaku skills |
 | [firebase.js](src/firebase.js) | Firebase init + auth providers |
@@ -118,15 +118,17 @@ rooms/{roomCode}/
 
 | Function | Approx. line | Responsibility |
 |---|---|---|
-| `BattleView` | 491 | Danmaku combat UI and phase state machine |
-| `BonusPhaseView` | ~3100 | Post-solve bonus action phase |
-| `SessionEndView` | ~3230 | End-of-session summary |
-| `PCCard` | ~3340 | Per-PC card with scene/action UI |
-| `ScenePanel` | ~4170 | Scene player action panel (move, explore, quest, etc.) |
-| `RightPanel` | ~5700 | GM sidebar: newspaper, cycle control, scene launching |
-| `BattleRightPanel` | ~6300 | Battle info sidebar rendered inside `RightPanel` |
+| `BattleView` | ~680 | Danmaku combat UI and phase state machine |
+| `BonusPhaseView` | ~3520 | Post-solve bonus action phase |
+| `SessionEndView` | ~3660 | End-of-session summary |
+| `PCCard` | ~3880 | Per-PC card with scene/action UI |
+| `ScenePanel` | ~4920 | Scene player action panel (move, explore, quest, etc.) |
+| `RightPanel` | ~6230 | GM sidebar: newspaper, cycle control, scene launching |
+| `BattleRightPanel` | ~6850 | Battle info sidebar rendered inside `RightPanel` |
 
 `BattleRightPanel` is a **separate top-level function**, not a closure inside `BattleView`. Functions defined inside `BattleView` are not accessible from `BattleRightPanel`; shared logic must be defined at module level or passed as props.
+
+`BattleRightPanel`'s log tab snapshots `gs.log.length` on mount via `useRef((gs.log || []).length)`, then renders only `log.slice(0, currentLen - snapshot)` to scope display to entries added during the current battle (logs are prepended, so newer entries are at the front).
 
 ### Data Files
 
@@ -297,3 +299,52 @@ Log entries in `gs.log[]` are color-coded by emoji prefix rendered in `RightPane
 | others | `C.text` (default) |
 
 New entries are prepended: `[newMsg, ...p.log]`.
+
+## Visual Effects & Sound
+
+### Sound effects (`src/audio.js`)
+
+`sfx` exports browser-synthesized methods using Web Audio API — no external files. Methods include `bullet`, `spell`, `phase(name)`, `diceRoll`, `diceResult(maxDie)`, `hit`, `victory`, `defeat`, `questSolve`, `cluePlaced`, `cycle(idx)`. `_enabled` is persisted in `localStorage["sfxMuted"]` and toggled via `sfx.toggle()`.
+
+**Dice sfx routing**:
+- **Battle dice**: `BattleDiceTray` (inside `BattleView`) fires `sfx.diceRoll()` on rolling-start and `sfx.diceResult(maxDie)` on rolling-end via a `useRef(prevAnim)` watcher.
+- **Explore dice**: `RightPanel` has a parallel `useEffect` watching `gs.dice?.rolling` that fires the same sfx — but **guards with `if (gs.battle?.active) return;`** to avoid double-firing during battle.
+
+### Cinematic overlay pattern
+
+`SessionApp` (in `App.jsx`) detects game events and shows transient full-screen overlays. The pattern is consistent:
+
+```javascript
+const [flash, setFlash] = useState(null);
+const prevRef = useRef(null);  // or undefined for "first-run skip"
+useEffect(() => {
+  const cur = /* derive from gs */;
+  const prev = prevRef.current;
+  if (prev === null /* or undefined */) { prevRef.current = cur; return; }  // skip on join
+  prevRef.current = cur;
+  if (/* transition detected */) {
+    setFlash(/* content */);
+    sfx.someEvent();
+    const t = setTimeout(() => setFlash(null), DURATION_MS);
+    return () => clearTimeout(t);
+  }
+}, [/* deps */]);
+```
+
+Active overlay states in `SessionApp`: `cycleOverlay`, `questSolveFlash`, `clueFlash`, `sceneStartFlash`, `phaseFlash`. Each renders a `position: fixed` element with `pointer-events: none`, a unique `zIndex` (150–160), and a CSS `@keyframes` animation (defined in the global `<style>` block near the top of the render).
+
+**Guard against duplicate triggers**: scene/phase flashes guard with `!gs.battle?.active` so they don't overlay the battle UI when state changes mid-fight.
+
+### Animation keyframes location
+
+- **Global keyframes** (used across phases): defined in `App.jsx`'s top-level `<style>` block — `logSlideIn`, `modalIn`, `backdropIn`, `resFlashUp/Down`, `questSolveAnim`, `clueBannerAnim`, `cycleOverlayAnim`, `badStatusIn`, `battleFadeIn`, `spotTipIn`, `sceneStartAnim`, `phaseFlashAnim`, `phaseStripe`.
+- **Component-local keyframes**: defined in inline `<style>` blocks inside the component using them (e.g. `RightPanel` defines `scenePanelIn`, `diceIn`, `diceResultIn`; `BattleView` defines `spellFlashIn`, `phaseBannerAnim`, `brRing`/`brGlow`/`brCardIn` for the battle result cinematic).
+- **MapView animations**: `mySpotGlow`, `myPortraitGlow`, `pulseRing` live in `MapView`'s local style.
+
+### MapView PC layer
+
+PCs on the map are rendered in a **separate absolute-positioned layer** after the spot list, not as children of spot divs. Their `left`/`top` use CSS `transition: left 0.52s cubic-bezier(0.4,0,0.2,1), top 0.52s ...` with a stable `key={pc.uid}`, so React reuses the DOM node and the browser animates the move when `pc.currentSpot` changes. Multiple PCs on the same spot are horizontally offset via `(idx - (N-1)/2) * 26px`.
+
+### Battle background particles
+
+`BattleParticleCanvas` (module-level in `SessionView.jsx`) is a 48-bullet canvas particle system rendered inside `BattleView`'s main return at `zIndex: 0`. Battle content is wrapped in a sibling div with `zIndex: 1` so it stacks above. The canvas uses `requestAnimationFrame` + `ResizeObserver`; cleanup cancels both on unmount.
