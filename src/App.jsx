@@ -461,13 +461,13 @@ function SessionApp({ roomCode, user }) {
     prevCluesRef.current = len;
   }, [gs.clues]);
 
-  // シーン開始を検出してタイトルカード
+  // シーン開始を検出してタイトルカード（バトル中は抑止）
   useEffect(() => {
     const curUid = gs.currentScene?.pcUid || null;
     const prev   = prevScenePcRef.current;
     if (prev === undefined) { prevScenePcRef.current = curUid; return; }
     prevScenePcRef.current = curUid;
-    if (curUid && curUid !== prev) {
+    if (curUid && curUid !== prev && !gs.battle?.active) {
       const pc = (gs.pcs || []).find(p => p.uid === curUid);
       if (pc) {
         setSceneStartFlash({ charName: pc.charName || pc.name || "?", uid: curUid });
@@ -475,7 +475,7 @@ function SessionApp({ roomCode, user }) {
         return () => clearTimeout(t);
       }
     }
-  }, [gs.currentScene?.pcUid]);
+  }, [gs.currentScene?.pcUid, gs.battle?.active]);
 
   // フェーズ遷移（sessionPhase / battle.active）を検出
   useEffect(() => {

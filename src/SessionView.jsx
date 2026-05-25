@@ -1941,8 +1941,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
           {canProceed &&
             !(isPc && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction == null) &&
-            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction == null) &&
-            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction == null) && (
+            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction == null) && (
             <button
               onClick={() => handleProceedToShotRoll(isPc, nextPhase)}
               style={{ ...buttonStyle, marginTop: 30, width: 200 }}
@@ -6848,6 +6847,10 @@ function BattleDiceTray({ diceResult, diceAnim, label }) {
 function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   const [battleTab, setBattleTab] = useState("info");
   const b = gs.battle;
+
+  // バトル開始時点のログ長をスナップショット → 戦闘中に追加されたログのみ表示
+  const battleStartLogLenRef = useRef((gs.log || []).length);
+  const battleLogs = (gs.log || []).slice(0, Math.max(0, (gs.log || []).length - battleStartLogLenRef.current));
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
   const npcCombatant = b.participants.npcs.find(n => n.id === b.npcCombatant);
 
@@ -7215,7 +7218,10 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {(gs.log || []).map((entry) => (
+            {battleLogs.length === 0 && (
+              <div style={{ fontSize: 10, color: C.textFaint, padding: 6, textAlign: "center" }}>戦闘ログはまだありません</div>
+            )}
+            {battleLogs.map((entry) => (
               <div key={entry.slice(0, 60)} style={{
                 fontSize: 10, color: "#6a7a8a", padding: "4px 0",
                 borderBottom: "1px solid rgba(255,255,255,0.02)",
