@@ -712,31 +712,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     }));
   }, [b.phase, alivePcs.length, aliveNpcs.length, unactedPcs.length, unactedNpcs.length, b.actedPcs?.length, b.actedNpcs?.length, upd]);
 
-  // 使い魔: スキップ → ショットイントロで自動援護射撃（PC/NPC両対応）
+  // 使い魔: スキップ → ショットイントロで自動援護射撃（PC/NPC両対応・状態は独立管理）
   useEffect(() => {
-    if (b.familiarAction !== "skip_to_support") return;
-    if (b.phase === "pc_shot_intro") {
+    if (b.phase === "pc_shot_intro" && b.pcFamiliarAction === "skip_to_support") {
       upd(p => {
         const pc = p.pcs.find(x => x.uid === p.battle.pcCombatant);
         if (!pc || !hasOfficialSkill(pc, "使い魔")) return p;
         return {
           ...p,
-          battle: { ...p.battle, supportDice: (p.battle.supportDice || 0) + 1, familiarAction: "done" },
+          battle: { ...p.battle, supportDice: (p.battle.supportDice || 0) + 1, pcFamiliarAction: "done" },
           log: [`💠 ${pc.charName} の使い魔が自動援護射撃！攻撃ダイス+1`, ...p.log],
         };
       });
-    } else if (b.phase === "npc_shot_intro") {
+    } else if (b.phase === "npc_shot_intro" && b.npcFamiliarAction === "skip_to_support") {
       upd(p => {
         const npc = p.battle.participants.npcs.find(n => n.id === p.battle.npcCombatant);
         if (!npc || !hasOfficialSkill(npc, "使い魔")) return p;
         return {
           ...p,
-          battle: { ...p.battle, supportDice: (p.battle.supportDice || 0) + 1, familiarAction: "done" },
+          battle: { ...p.battle, supportDice: (p.battle.supportDice || 0) + 1, npcFamiliarAction: "done" },
           log: [`💠 ${npc.name} の使い魔が自動援護射撃！攻撃ダイス+1`, ...p.log],
         };
       });
     }
-  }, [b.phase, b.familiarAction, upd]);
+  }, [b.phase, b.pcFamiliarAction, b.npcFamiliarAction, upd]);
 
   // ── サウンドON/OFF ────────────────────────────────────────────────
   const [sfxMuted, setSfxMuted] = useState(!sfx.enabled);
@@ -837,9 +836,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         const pc = p.pcs.find(x => x.uid === targetId);
         const npc = p.battle.participants.npcs.find(n => n.id === targetId);
         const name = pc?.charName || npc?.name || targetId;
+        const isPcSide = targetId === p.battle.pcCombatant;
         return {
           ...p,
-          battle: { ...p.battle, grids: { ...p.battle.grids, [targetId]: grid }, familiarAction: "done" },
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [targetId]: grid },
+            ...(isPcSide ? { pcFamiliarAction: "done" } : { npcFamiliarAction: "done" }),
+          },
           log: [`🛡 使い魔が自動でかばった！${die}番マス ${success ? "弾幕除去" : "弾幕なし"}（${name}のマス）`, ...p.log],
         };
       });
@@ -1842,7 +1846,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           supportDice: 0,
           usedIntervention: {},
           extraInterventionPool: null,
-          familiarAction: null,
+          pcFamiliarAction: null,
+          npcFamiliarAction: null,
           tempSelectedPc: null,
           tempSelectedNpc: null
         },
@@ -1871,30 +1876,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             </div>
           </SpellCard>
           {/* 使い魔: PC先攻のショット直前に援護射撃 or スキップ（→後でかばう自動発動）を確認 */}
-          {isPc && canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction == null && (
+          {isPc && canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.pcFamiliarAction == null && (
             <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: C.blue, marginBottom: 4 }}>🐾 使い魔 — 援護射撃する？</div>
               <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>スキップすると後でかばうが自動発動します</div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button
-                  onClick={() => { handleSupportFire(b.pcCombatant); upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "support" } })); }}
+                  onClick={() => { handleSupportFire(b.pcCombatant); upd(p => ({ ...p, battle: { ...p.battle, pcFamiliarAction: "support" } })); }}
                   style={btnFull("rgba(100,181,246,0.18)", C.blueBorder, C.blue, { flex: 1, fontSize: 10 })}>
                   💠 援護射撃する
                 </button>
                 <button
-                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_cover" } }))}
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, pcFamiliarAction: "skip_to_cover" } }))}
                   style={btnFull("rgba(255,255,255,0.04)", C.border, C.textDim, { flex: 1, fontSize: 10 })}>
                   ⏭ スキップ
                 </button>
               </div>
             </div>
           )}
-          {isPc && canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction === "skip_to_cover" && (
+          {isPc && canProceed && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.pcFamiliarAction === "skip_to_cover" && (
             <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ かばうを後で自動発動します</div>
           )}
 
           {/* 使い魔: NPC先攻のショット直前に援護射撃 or スキップ（→後でかばう自動発動）を確認 */}
-          {!isPc && canProceed && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction == null && (
+          {!isPc && canProceed && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.npcFamiliarAction == null && (
             <div style={{ marginTop: 12, marginBottom: 4, padding: 10, background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: C.red, marginBottom: 4 }}>🐾 使い魔 — 援護射撃する？</div>
               <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>スキップすると後でかばうが自動発動します</div>
@@ -1902,21 +1907,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                 <button
                   onClick={() => upd(p => ({
                     ...p,
-                    battle: { ...p.battle, supportDice: (p.battle.supportDice || 0) + 1, familiarAction: "support" },
+                    battle: { ...p.battle, supportDice: (p.battle.supportDice || 0) + 1, npcFamiliarAction: "support" },
                     log: [`💠 ${combatantNpc?.name} の使い魔が援護射撃！攻撃ダイス+1`, ...p.log],
                   }))}
                   style={btnFull("rgba(192,57,43,0.18)", C.redBorder, C.red, { flex: 1, fontSize: 10 })}>
                   💠 援護射撃する
                 </button>
                 <button
-                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_cover" } }))}
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, npcFamiliarAction: "skip_to_cover" } }))}
                   style={btnFull("rgba(255,255,255,0.04)", C.border, C.textDim, { flex: 1, fontSize: 10 })}>
                   ⏭ スキップ
                 </button>
               </div>
             </div>
           )}
-          {!isPc && canProceed && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction === "skip_to_cover" && (
+          {!isPc && canProceed && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.npcFamiliarAction === "skip_to_cover" && (
             <div style={{ fontSize: 9, color: C.gold, marginTop: 8 }}>✅ かばうを後で自動発動します</div>
           )}
 
@@ -1940,8 +1945,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           })()}
 
           {canProceed &&
-            !(isPc && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.familiarAction == null) &&
-            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.familiarAction == null) && (
+            !(isPc && b.startOrder === "pc" && hasOfficialSkill(combatantPc, "使い魔") && b.pcFamiliarAction == null) &&
+            !(!isPc && b.startOrder === "npc" && hasOfficialSkill(combatantNpc, "使い魔") && b.npcFamiliarAction == null) && (
             <button
               onClick={() => handleProceedToShotRoll(isPc, nextPhase)}
               style={{ ...buttonStyle, marginTop: 30, width: 200 }}
@@ -2410,12 +2415,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           const canPcFamiliarDecide = isGm || user.uid === b.pcCombatant;
 
           // Case A: PC has 使い魔, NPC先攻 → after NPC shot, offer かばう to PC
-          const isCoverDecision = !isPc && b.startOrder === "npc" && hasPcFamiliar && b.familiarAction == null;
-          const isAutoFamiliarCover = !isPc && hasPcFamiliar && b.familiarAction === "skip_to_cover";
+          const isCoverDecision = !isPc && b.startOrder === "npc" && hasPcFamiliar && b.pcFamiliarAction == null;
+          const isAutoFamiliarCover = !isPc && hasPcFamiliar && b.pcFamiliarAction === "skip_to_cover";
 
           // Case D: NPC has 使い魔, PC先攻 → after PC shot, offer かばう to GM (protects NPC)
-          const isNpcCoverDecision = isPc && b.startOrder === "pc" && hasNpcFamiliar && b.familiarAction == null;
-          const isNpcAutoFamiliarCover = isPc && hasNpcFamiliar && b.familiarAction === "skip_to_cover";
+          const isNpcCoverDecision = isPc && b.startOrder === "pc" && hasNpcFamiliar && b.npcFamiliarAction == null;
+          const isNpcAutoFamiliarCover = isPc && hasNpcFamiliar && b.npcFamiliarAction === "skip_to_cover";
 
           if (isCoverDecision && canPcFamiliarDecide) return (
             <div style={{ marginBottom: 8, padding: 10, background: "rgba(200,160,64,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
@@ -2432,7 +2437,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                         if (success) grid[die - 1] -= 1;
                         return {
                           ...p,
-                          battle: { ...p.battle, grids: { ...p.battle.grids, [b.pcCombatant]: grid }, familiarAction: "cover" },
+                          battle: { ...p.battle, grids: { ...p.battle.grids, [b.pcCombatant]: grid }, pcFamiliarAction: "cover" },
                           log: [`🛡 ${combatantPc?.charName} がかばった！${die}番マス ${success ? "弾幕除去" : "弾幕なし"}`, ...p.log],
                         };
                       });
@@ -2442,7 +2447,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   🛡 かばう
                 </button>
                 <button
-                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_support" } }))}
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, pcFamiliarAction: "skip_to_support" } }))}
                   style={btnFull("rgba(255,255,255,0.04)", C.border, C.textDim, { flex: 1, fontSize: 10 })}>
                   ⏭ スキップ
                 </button>
@@ -2473,7 +2478,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                         if (success) grid[die - 1] -= 1;
                         return {
                           ...p,
-                          battle: { ...p.battle, grids: { ...p.battle.grids, [b.npcCombatant]: grid }, familiarAction: "cover" },
+                          battle: { ...p.battle, grids: { ...p.battle.grids, [b.npcCombatant]: grid }, npcFamiliarAction: "cover" },
                           log: [`🛡 ${combatantNpc?.name} の使い魔がかばった！${die}番マス ${success ? "弾幕除去" : "弾幕なし"}`, ...p.log],
                         };
                       });
@@ -2483,7 +2488,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   🛡 かばう
                 </button>
                 <button
-                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, familiarAction: "skip_to_support" } }))}
+                  onClick={() => upd(p => ({ ...p, battle: { ...p.battle, npcFamiliarAction: "skip_to_support" } }))}
                   style={btnFull("rgba(255,255,255,0.04)", C.border, C.textDim, { flex: 1, fontSize: 10 })}>
                   ⏭ スキップ
                 </button>
@@ -2513,10 +2518,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         {(() => {
           const hasPcFamiliar = hasOfficialSkill(combatantPc, "使い魔");
           const hasNpcFamiliar = hasOfficialSkill(combatantNpc, "使い魔");
-          const isCoverDecision = !isPc && b.startOrder === "npc" && hasPcFamiliar && b.familiarAction == null;
-          const isAutoFamiliarCover = !isPc && hasPcFamiliar && b.familiarAction === "skip_to_cover";
-          const isNpcCoverDecision = isPc && b.startOrder === "pc" && hasNpcFamiliar && b.familiarAction == null;
-          const isNpcAutoFamiliarCover = isPc && hasNpcFamiliar && b.familiarAction === "skip_to_cover";
+          const isCoverDecision = !isPc && b.startOrder === "npc" && hasPcFamiliar && b.pcFamiliarAction == null;
+          const isAutoFamiliarCover = !isPc && hasPcFamiliar && b.pcFamiliarAction === "skip_to_cover";
+          const isNpcCoverDecision = isPc && b.startOrder === "pc" && hasNpcFamiliar && b.npcFamiliarAction == null;
+          const isNpcAutoFamiliarCover = isPc && hasNpcFamiliar && b.npcFamiliarAction === "skip_to_cover";
           const blocked = isCoverDecision || isAutoFamiliarCover || isNpcCoverDecision || isNpcAutoFamiliarCover;
           return canProceed && !b.spellChoose && !b.homingSelect && !b.wideShotSelect && !b.highSpeedSelect && !b.bigPowerSelect && !b.eraseSelect && !blocked && (
             <button
@@ -3080,7 +3085,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           pcCombatant: pcUid,
           npcCombatant: npcId,
           usedIntervention: {},
-          familiarAction: null,
+          pcFamiliarAction: null,
+          npcFamiliarAction: null,
           usedds: {},
           homingSelect: null,
           wideShotSelect: null,
