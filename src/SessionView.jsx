@@ -3132,7 +3132,24 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ fontSize: 16, color: C.gold, marginBottom: 20, textAlign: "center" }}>ラウンド {b.round}：対戦者選出</div>
           
           {!isGm ? (
-            <div style={{ textAlign: "center", color: C.textDim }}>GMが対戦者を選出しています...</div>
+            b.pcCombatant === user.uid ? (
+              <div>
+                <div style={{ textAlign: "center", fontSize: 12, color: C.blue, marginBottom: 6 }}>
+                  ▶ あなたが対戦者に選出されました
+                </div>
+                {b.npcCombatant && combatantNpc && (
+                  <div style={{ textAlign: "center", fontSize: 10, color: C.textDim, marginBottom: 14 }}>
+                    VS {combatantNpc.name}
+                  </div>
+                )}
+                {renderSpellStep(true, "round_start")}
+                <div style={{ textAlign: "center", fontSize: 10, color: C.textFaint, marginTop: 16 }}>
+                  GMがラウンドを開始するのを待っています...
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", color: C.textDim }}>GMが対戦者を選出しています...</div>
+            )
           ) : (
             <div>
               <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>1. 出撃するPCを選択</div>
