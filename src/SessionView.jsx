@@ -526,6 +526,8 @@ export function buildSpellCard(card) {
 
   // 構造化データの timing が round_end なら effectTiming に反映
   if (structured?.timing === "round_end") parsed.effectTiming = "round_end";
+  // 構造化データの timing は宣言タイミング判定の正本（テキスト解析より優先）
+  if (structured?.timing) parsed.timing = structured.timing;
   // 構造化データが full/partial なら手動フラグを解除
   if (structured && structured.auto !== "manual") parsed.manual = false;
 
@@ -973,10 +975,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
     // ── 構造化データによる自動処理（auto: "full" / "partial"） ──────────
     if (structured?.steps?.length > 0 && (structured.auto === "full" || structured.auto === "partial")) {
-      // round_end: pendingSpell として保存し、ラウンド終了時に applyPendingSpell で処理
+      // round_end: pcPendingSpell/npcPendingSpell として保存し、ラウンド終了時に applyPendingSpells で処理
       if (structured.timing === "round_end") {
         upd(p => ({
-          ...mergeConsumeWithBattle(p, { pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } }),
+          ...mergeConsumeWithBattle(p, { [isPcAttacker ? "pcPendingSpell" : "npcPendingSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } }),
           log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
         }));
         return;
@@ -1095,7 +1097,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     // effectTiming が round_end のものは grids に反映せず pendingSpell に保存
     if (spellCard.effectTiming === "round_end") {
       upd(p => ({
-        ...mergeConsumeWithBattle(p, { pendingSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } }),
+        ...mergeConsumeWithBattle(p, { [isPcAttacker ? "pcPendingSpell" : "npcPendingSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
       }));
       return;
@@ -1106,7 +1108,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       upd(p => ({
         ...mergeConsumeWithBattle(p, {
           spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-          manualSpell: { ...slimSpellForStorage(spellCard), attackerId, defenderId, defenderPos: defPos },
+          [isPcAttacker ? "pcManualSpell" : "npcManualSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, defenderPos: defPos },
         }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (効果はGMが手動処理)`, ...p.log],
       }));
@@ -1268,44 +1270,42 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     });
   };
 
-  // ラウンド終了時の pendingSpell 適用
-  const applyPendingSpell = () => {
-    // Firebase はスリム形 (text/name/manual+位置情報) で保存されているため再構築する
-    const ps = expandStoredSpell(b.pendingSpell);
-    if (!ps) return;
+  // ラウンド終了時の pendingSpell 適用（PC/NPC 両方）
+  const applyPendingSpells = () => {
+    const pcPs  = expandStoredSpell(b.pcPendingSpell);
+    const npcPs = expandStoredSpell(b.npcPendingSpell);
+    const spells = [pcPs, npcPs].filter(Boolean);
+    if (spells.length === 0) return;
 
-    // 構造化データがある場合はステップを適用
-    if (ps.structured?.auto === "full" && ps.structured.steps?.length > 0) {
-      let defGrid = [...(b.grids?.[ps.defenderId] || [0,0,0,0,0,0])];
-      let atkGrid = [...(b.grids?.[ps.attackerId] || [0,0,0,0,0,0])];
-      for (const step of ps.structured.steps) {
-        const result = applyStep(step, defGrid, atkGrid, ps.attPos || 1, ps.defPos || 1);
-        defGrid = result.defGrid;
-        atkGrid = result.atkGrid;
+    upd(p => {
+      let nextGrids = { ...p.battle.grids };
+      const logs = [];
+      for (const ps of spells) {
+        if (ps.structured?.auto === "full" && ps.structured.steps?.length > 0) {
+          let defGrid = [...(nextGrids[ps.defenderId] || [0,0,0,0,0,0])];
+          let atkGrid = [...(nextGrids[ps.attackerId] || [0,0,0,0,0,0])];
+          for (const step of ps.structured.steps) {
+            const result = applyStep(step, defGrid, atkGrid, ps.attPos || 1, ps.defPos || 1);
+            defGrid = result.defGrid;
+            atkGrid = result.atkGrid;
+          }
+          nextGrids[ps.defenderId] = defGrid;
+          nextGrids[ps.attackerId] = atkGrid;
+        }
+        // テキスト解析ベース/手動はグリッド変更なし（GM手動処理）
+        logs.push(`⏰ ${ps.name} の効果が発動した`);
       }
-      upd(p => ({
+      return {
         ...p,
         battle: {
           ...p.battle,
-          grids: { ...p.battle.grids, [ps.defenderId]: defGrid, [ps.attackerId]: atkGrid },
-          pendingSpell: null,
+          grids: nextGrids,
+          pcPendingSpell: null,
+          npcPendingSpell: null,
         },
-        log: [`⏰ ${ps.name} の効果が発動した`, ...p.log],
-      }));
-      return;
-    }
-
-    // 既存の処理（テキスト解析ベースまたは手動）
-    const grid = b.grids?.[ps.attackerId] || [0,0,0,0,0,0];
-    upd(p => ({
-      ...p,
-      battle: {
-        ...p.battle,
-        grids: ps.manual ? p.battle.grids : { ...p.battle.grids, [ps.attackerId]: grid },
-        pendingSpell: null,
-      },
-      log: [`⏰ ${ps.name} の効果が発動した`, ...p.log],
-    }));
+        log: [...logs.reverse(), ...p.log],
+      };
+    });
   };
 
   const updateCombatantPosition = (combatantId, targetCellNum) => {
@@ -1335,10 +1335,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     });
   };
 
-  const clearManualSpell = () => {
+  const clearManualSpell = (isPcAttacker) => {
+    const key = isPcAttacker ? "pcManualSpell" : "npcManualSpell";
     upd(p => ({
       ...p,
-      battle: { ...p.battle, manualSpell: null }
+      battle: { ...p.battle, [key]: null }
     }));
   };
 
@@ -1848,6 +1849,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
+          pcPendingSpell: null,
+          npcPendingSpell: null,
+          pcManualSpell: null,
+          npcManualSpell: null,
           tempSelectedPc: null,
           tempSelectedNpc: null
         },
@@ -2080,8 +2085,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   };
 
   const renderManualSpellControls = () => {
-    const spell = expandStoredSpell(b.manualSpell || b.pendingSpell);
-    if (!spell || !isGm) return null;
+    if (!isGm) return null;
+    // PC/NPC それぞれの手動スペルカード（pendingSpell が manual の場合も含む）
+    const pcSpell  = expandStoredSpell(b.pcManualSpell  || (b.pcPendingSpell  && b.pcPendingSpell.manual  ? b.pcPendingSpell  : null));
+    const npcSpell = expandStoredSpell(b.npcManualSpell || (b.npcPendingSpell && b.npcPendingSpell.manual ? b.npcPendingSpell : null));
+    if (!pcSpell && !npcSpell) return null;
 
     const pcId = b.pcCombatant;
     const npcId = b.npcCombatant;
@@ -2117,25 +2125,28 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
       </div>
     );
 
-    return (
-      <div style={{ background: "rgba(0,0,0,0.82)", padding: 12, borderRadius: 10, border: `1px solid ${C.goldDim}`, marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <div style={{ fontSize: 11, color: C.gold, marginBottom: 4 }}>🛠️ 手動スペル処理</div>
-            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>{spell.name}</div>
-            <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.textBody || spell.text}</div>
-            {spell.condition && (
-              <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
-            )}
-            <div style={{ fontSize: 9, color: C.textDim, marginTop: 4 }}>
-              PC/NPC の移動と弾幕数を調整できます。
-            </div>
-          </div>
-          <button onClick={clearManualSpell} style={{ ...btnFull("rgba(255,255,255,0.08)", C.border, C.text), height: 32, alignSelf: "flex-start" }}>
-            完了
-          </button>
+    const renderSpellInfo = (spell, isPcSide) => (
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap", paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontSize: 11, color: isPcSide ? C.blue : C.red, marginBottom: 4 }}>🛠️ 手動スペル処理（{isPcSide ? "PC" : "NPC"}）</div>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>{spell.name}</div>
+          <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5 }}>{spell.textBody || spell.text}</div>
+          {spell.condition && (
+            <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {spell.condition}</div>
+          )}
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+        <button onClick={() => clearManualSpell(isPcSide)} style={{ ...btnFull("rgba(255,255,255,0.08)", C.border, C.text), height: 32, alignSelf: "flex-start" }}>
+          完了
+        </button>
+      </div>
+    );
+
+    return (
+      <div style={{ background: "rgba(0,0,0,0.82)", padding: 12, borderRadius: 10, border: `1px solid ${C.goldDim}`, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+        {pcSpell  && renderSpellInfo(pcSpell, true)}
+        {npcSpell && renderSpellInfo(npcSpell, false)}
+        <div style={{ fontSize: 9, color: C.textDim }}>PC/NPC の移動と弾幕数を調整できます。</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {renderEntityEditor(pcId, "PC", pcGrid, pcPos)}
           {renderEntityEditor(npcId, "NPC", npcGrid, npcPos)}
         </div>
@@ -2509,9 +2520,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
         {renderSpellStep(isPc, "standard")}
 
-        {b.pendingSpell && (
+        {b.pcPendingSpell && (
           <div style={{ marginTop: 8, padding: "5px 8px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 4 }}>
-            <div style={{ fontSize: 9, color: "#ef9a9a" }}>⏰ 宣言済: {b.pendingSpell.name}（ラウンド終了時に効果）</div>
+            <div style={{ fontSize: 9, color: "#ef9a9a" }}>⏰ 宣言済 (PC): {b.pcPendingSpell.name}（ラウンド終了時に効果）</div>
+          </div>
+        )}
+        {b.npcPendingSpell && (
+          <div style={{ marginTop: 8, padding: "5px 8px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 4 }}>
+            <div style={{ fontSize: 9, color: "#ef9a9a" }}>⏰ 宣言済 (NPC): {b.npcPendingSpell.name}（ラウンド終了時に効果）</div>
           </div>
         )}
 
@@ -3099,7 +3115,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           npcLastResort: false,
           spellUsedBy: {},
           wallPassBy: null,
-          pendingSpell: null,
+          pcPendingSpell: null,
+          npcPendingSpell: null,
+          pcManualSpell: null,
+          npcManualSpell: null,
           lastShotDice: null,
           supportDice: 0,
         },
@@ -3122,9 +3141,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   const isActed = (b.actedPcs || []).includes(p.uid);
                   const isSelected = b.tempSelectedPc === p.uid;
                   return (
-                    <button 
+                    <button
                       key={p.uid}
-                      onClick={() => upd(pState => ({ ...pState, battle: { ...pState.battle, tempSelectedPc: p.uid } }))}
+                      onClick={() => upd(pState => ({ ...pState, battle: { ...pState.battle, tempSelectedPc: p.uid, pcCombatant: p.uid } }))}
                       style={btnFull(isSelected ? C.blueBg : "rgba(255,255,255,0.05)", isSelected ? C.blue : C.border, isSelected ? C.blue : (isActed ? C.textFaint : C.text))}
                     >
                       {p.charName} {isActed ? "(行動済)" : ""}
@@ -3139,9 +3158,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   const isActed = (b.actedNpcs || []).includes(n.id);
                   const isSelected = b.tempSelectedNpc === n.id;
                   return (
-                    <button 
+                    <button
                       key={n.id}
-                      onClick={() => upd(pState => ({ ...pState, battle: { ...pState.battle, tempSelectedNpc: n.id } }))}
+                      onClick={() => upd(pState => ({ ...pState, battle: { ...pState.battle, tempSelectedNpc: n.id, npcCombatant: n.id } }))}
                       style={btnFull(isSelected ? C.redBg : "rgba(255,255,255,0.05)", isSelected ? C.red : C.border, isSelected ? C.red : (isActed ? C.textFaint : C.text))}
                     >
                       {n.name} {isActed ? "(行動済)" : ""}
@@ -3449,27 +3468,36 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
               ) : null;
             })()}
 
-            {b.pendingSpell && (() => {
-              const ps = expandStoredSpell(b.pendingSpell);
+            {(b.pcPendingSpell || b.npcPendingSpell) && (() => {
+              const renderPending = (storedSpell, sideLabel, sideColor) => {
+                if (!storedSpell) return null;
+                const ps = expandStoredSpell(storedSpell);
+                return (
+                  <div style={{ padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: `1px solid ${sideColor}`, borderRadius: 5 }}>
+                    <div style={{ fontSize: 11, color: sideColor, marginBottom: 4 }}>⏰ {ps.name}（{sideLabel}）— ラウンド終了時の効果が発動します</div>
+                    <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{ps.textBody || ps.text}</div>
+                    {ps.condition && (
+                      <div style={{ fontSize: 9, color: C.red, marginBottom: 6 }}>⚠ {ps.condition}</div>
+                    )}
+                    {ps.manual && (
+                      <div style={{ fontSize: 9, color: "#5a6070", marginBottom: 6 }}>★ GMが手動で効果を処理してください</div>
+                    )}
+                  </div>
+                );
+              };
               return (
-                <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(239,154,154,0.1)", border: "1px solid #c62828", borderRadius: 5 }}>
-                  <div style={{ fontSize: 11, color: "#ef9a9a", marginBottom: 4 }}>⏰ {ps.name} — ラウンド終了時の効果が発動します</div>
-                  <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginBottom: 8 }}>{ps.textBody || ps.text}</div>
-                  {ps.condition && (
-                    <div style={{ fontSize: 9, color: C.red, marginBottom: 6 }}>⚠ {ps.condition}</div>
-                  )}
-                  {ps.manual && (
-                    <div style={{ fontSize: 9, color: "#5a6070", marginBottom: 6 }}>★ GMが手動で効果を処理してください</div>
-                  )}
+                <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {renderPending(b.pcPendingSpell,  "PC",  C.blueBorder)}
+                  {renderPending(b.npcPendingSpell, "NPC", "#c62828")}
                   {isGm && (
-                    <button onClick={applyPendingSpell} style={{ ...btnFull("rgba(239,154,154,0.2)", "#c62828", "#ef9a9a"), marginTop: 4 }}>
+                    <button onClick={applyPendingSpells} style={{ ...btnFull("rgba(239,154,154,0.2)", "#c62828", "#ef9a9a") }}>
                       効果を適用して次へ
                     </button>
                   )}
                 </div>
               );
             })()}
-            {(isGm || user.uid === b.pcCombatant) && !b.pendingSpell && !b.slowBulletSelect && (
+            {(isGm || user.uid === b.pcCombatant) && !b.pcPendingSpell && !b.npcPendingSpell && !b.slowBulletSelect && (
               <button onClick={handleCleanup} style={btnFull(C.goldBg, C.goldDim, C.gold)}>次ラウンドへ ⏭️</button>
             )}
           </SpellCard>
