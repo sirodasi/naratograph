@@ -13,6 +13,7 @@ import {
   AREA_COLORS, CYCLES, CYCLE_COLORS,
   OFFICIAL_DANMAKU_SKILLS,
 } from "./data/gameData";
+import { SPOT_DETAILS } from "./data/spots";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
 
@@ -262,14 +263,62 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
               </div>
             )}
 
-            {isHov && (
-              <div style={{ position: "absolute", background: "rgba(6,8,14,0.97)", border: "1px solid #1e2535", borderRadius: 4, padding: "4px 8px", fontSize: 10, color: "#c8b89a", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20, left: spot.x > 60 ? "auto" : "calc(100% + 6px)", right: spot.x > 60 ? "calc(100% + 6px)" : "auto", top: "50%", transform: "translateY(-50%)" }}>
-                {isDream ? "◇ 夢の世界" : `[${spot.roll}] ${spot.name}`}
-                {pcsHere.length > 0 && <span style={{ color: "#ef9a9a" }}><br />{pcsHere.map(p => p.charName || p.name).join("・")}</span>}
-                {hasClue && <span style={{ color: "#00e5ff" }}><br />💡 手がかりあり</span>}
-                {newsMarker && <span style={{ color: "#ffb74d" }}><br />{newsMarker} 新聞の特殊効果あり</span>}
-              </div>
-            )}
+            {isHov && (() => {
+              const detail = !isDream ? SPOT_DETAILS[spot.id] : null;
+              const tags   = detail?.tags || [];
+              const fullDesc = detail?.desc || "";
+              const shortDesc = fullDesc.split(/\n|アドバイス/)[0].trim().slice(0, 90);
+              const eventCount = detail?.events?.length || 0;
+              return (
+                <div style={{
+                  position: "absolute",
+                  background: "rgba(6,8,14,0.97)",
+                  border: "1px solid #2a3550",
+                  borderRadius: 4,
+                  padding: "8px 10px",
+                  fontSize: 10,
+                  color: "#c8b89a",
+                  pointerEvents: "none",
+                  zIndex: 25,
+                  left:  spot.x > 60 ? "auto" : "calc(100% + 6px)",
+                  right: spot.x > 60 ? "calc(100% + 6px)" : "auto",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 240,
+                  whiteSpace: "normal",
+                  lineHeight: 1.55,
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+                  animation: "spotTipIn 0.18s ease both",
+                }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4, borderBottom: "1px solid #1e2535", paddingBottom: 4 }}>
+                    <span style={{ fontSize: 9, color: "#5a6a82", letterSpacing: 1 }}>[{isDream ? "◇" : spot.roll}]</span>
+                    <span style={{ fontSize: 12, color: "#e8d8b8", fontWeight: "bold" }}>{isDream ? "夢の世界" : spot.name}</span>
+                  </div>
+
+                  {!isDream && tags.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 5 }}>
+                      {tags.map(t => (
+                        <span key={t} style={{ padding: "1px 6px", background: "rgba(200,160,64,0.12)", border: "1px solid rgba(200,160,64,0.35)", borderRadius: 8, fontSize: 9, color: "#c8a040" }}>{t}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {!isDream && shortDesc && (
+                    <div style={{ fontSize: 9, color: "rgba(200,184,154,0.65)", marginBottom: 5 }}>
+                      {shortDesc}{fullDesc.length > shortDesc.length ? "…" : ""}
+                    </div>
+                  )}
+
+                  {!isDream && eventCount > 0 && (
+                    <div style={{ fontSize: 9, color: "#8aa0c0", marginBottom: 3 }}>📜 イベント {eventCount} 種</div>
+                  )}
+
+                  {pcsHere.length > 0 && <div style={{ fontSize: 10, color: "#ef9a9a", marginTop: 4 }}>● {pcsHere.map(p => p.charName || p.name).join("・")}</div>}
+                  {hasClue && <div style={{ fontSize: 10, color: "#00e5ff", marginTop: 2 }}>💡 手がかりあり</div>}
+                  {newsMarker && <div style={{ fontSize: 10, color: "#ffb74d", marginTop: 2 }}>{newsMarker} 新聞の特殊効果あり</div>}
+                </div>
+              );
+            })()}
           </div>
         );
       })}
@@ -352,10 +401,15 @@ function SessionApp({ roomCode, user }) {
   const [cycleOverlay, setCycleOverlay]       = useState(null);
   const [questSolveFlash, setQuestSolveFlash] = useState(null);
   const [clueFlash, setClueFlash]             = useState(false);
+  const [sceneStartFlash, setSceneStartFlash] = useState(null);
+  const [phaseFlash, setPhaseFlash]           = useState(null);
   const timerRef      = useRef(null);
   const prevCycleRef  = useRef({ day: null, cycleIdx: null });
   const prevQuestsRef = useRef(null);
   const prevCluesRef  = useRef(null);
+  const prevScenePcRef    = useRef(undefined);
+  const prevSessionPhase  = useRef(null);
+  const prevBattleActive  = useRef(null);
 
   const CYCLE_ICONS = ["☀", "🌤", "🌅", "🌙"];
 
@@ -406,6 +460,55 @@ function SessionApp({ roomCode, user }) {
     }
     prevCluesRef.current = len;
   }, [gs.clues]);
+
+  // シーン開始を検出してタイトルカード
+  useEffect(() => {
+    const curUid = gs.currentScene?.pcUid || null;
+    const prev   = prevScenePcRef.current;
+    if (prev === undefined) { prevScenePcRef.current = curUid; return; }
+    prevScenePcRef.current = curUid;
+    if (curUid && curUid !== prev) {
+      const pc = (gs.pcs || []).find(p => p.uid === curUid);
+      if (pc) {
+        setSceneStartFlash({ charName: pc.charName || pc.name || "?", uid: curUid });
+        const t = setTimeout(() => setSceneStartFlash(null), 2400);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [gs.currentScene?.pcUid]);
+
+  // フェーズ遷移（sessionPhase / battle.active）を検出
+  useEffect(() => {
+    const curPhase  = gs.sessionPhase;
+    const curBattle = !!gs.battle?.active;
+    const prevPhase = prevSessionPhase.current;
+    const prevBatt  = prevBattleActive.current;
+    if (prevPhase === null) {
+      prevSessionPhase.current = curPhase;
+      prevBattleActive.current = curBattle;
+      return;
+    }
+
+    let flash = null;
+    if (prevBatt === false && curBattle === true) {
+      flash = { title: "弾幕ごっこ", subtitle: "DANMAKU BATTLE", icon: "⚔", color: "#e07060" };
+    } else if (prevPhase !== curPhase) {
+      if (curPhase === "explore" && prevPhase === "intro") {
+        flash = { title: "探索フェイズ", subtitle: "EXPLORE", icon: "✦", color: "#64b5f6" };
+      } else if (curPhase === "battle_bonus") {
+        flash = { title: "ボーナスフェイズ", subtitle: "BONUS", icon: "✨", color: "#c8a040" };
+      }
+    }
+
+    prevSessionPhase.current = curPhase;
+    prevBattleActive.current = curBattle;
+
+    if (flash) {
+      setPhaseFlash(flash);
+      const t = setTimeout(() => setPhaseFlash(null), 2600);
+      return () => clearTimeout(t);
+    }
+  }, [gs.sessionPhase, gs.battle?.active]);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
@@ -925,6 +1028,28 @@ function SessionApp({ roomCode, user }) {
           60%  { opacity: 1; transform: scale(1.005) translateY(-1px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
+        @keyframes spotTipIn {
+          from { opacity: 0; transform: translateY(-50%) translateX(-4px); }
+          to   { opacity: 1; transform: translateY(-50%) translateX(0); }
+        }
+        @keyframes sceneStartAnim {
+          0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.6); }
+          14%  { opacity: 1; transform: translate(-50%,-50%) scale(1.05); }
+          24%  { transform: translate(-50%,-50%) scale(1); }
+          72%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%,-50%) scale(0.96); }
+        }
+        @keyframes phaseFlashAnim {
+          0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.85) rotateX(35deg); }
+          14%  { opacity: 1; transform: translate(-50%,-50%) scale(1.04) rotateX(0); }
+          24%  { transform: translate(-50%,-50%) scale(1) rotateX(0); }
+          72%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%,-50%) scale(0.97); }
+        }
+        @keyframes phaseStripe {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(200%); }
+        }
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -965,6 +1090,58 @@ function SessionApp({ roomCode, user }) {
         <div style={{ position: "fixed", top: 14, left: "50%", zIndex: 155, pointerEvents: "none", animation: "clueBannerAnim 2.4s forwards" }}>
           <div style={{ background: "rgba(4,8,16,0.96)", border: "1px solid rgba(0,229,255,0.65)", borderRadius: 20, padding: "7px 22px", fontSize: 11, color: "#00e5ff", letterSpacing: 2, boxShadow: "0 0 24px rgba(0,229,255,0.3)", whiteSpace: "nowrap" }}>
             💡 手がかりが配置された
+          </div>
+        </div>
+      )}
+
+      {/* シーン開始タイトルカード */}
+      {sceneStartFlash && (
+        <div style={{ position: "fixed", top: "50%", left: "50%", zIndex: 158, pointerEvents: "none", animation: "sceneStartAnim 2.4s forwards" }}>
+          <div style={{
+            position: "relative",
+            background: "linear-gradient(135deg, rgba(8,4,20,0.96), rgba(20,10,38,0.96))",
+            border: "1px solid #6e4ea8",
+            borderRadius: 2,
+            padding: "26px 64px",
+            textAlign: "center",
+            boxShadow: "0 0 56px rgba(110,78,168,0.45), 0 0 120px rgba(110,78,168,0.2), inset 0 0 40px rgba(0,0,0,0.7)",
+            minWidth: 320,
+          }}>
+            {[{ top: -6, left: 14 }, { top: -6, right: 14 }, { bottom: -6, left: 14 }, { bottom: -6, right: 14 }].map((pos, i) => (
+              <div key={i} style={{ position: "absolute", width: 10, height: 10, background: "#c8a040", transform: "rotate(45deg)", ...pos }} />
+            ))}
+            <div style={{ fontSize: 9, color: "rgba(200,160,64,0.6)", letterSpacing: 6, marginBottom: 10 }}>◆ SCENE ◆</div>
+            <div style={{ fontSize: 26, color: "#e8d8b8", fontWeight: "bold", letterSpacing: 4, textShadow: "0 0 22px rgba(200,160,64,0.7)" }}>🎬 {sceneStartFlash.charName}</div>
+            <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(200,160,64,0.6), transparent)", margin: "12px 0 8px" }} />
+            <div style={{ fontSize: 10, color: "rgba(200,184,154,0.65)", letterSpacing: 4 }}>のシーン</div>
+          </div>
+        </div>
+      )}
+
+      {/* フェーズ遷移カード */}
+      {phaseFlash && (
+        <div style={{ position: "fixed", top: "50%", left: "50%", zIndex: 159, pointerEvents: "none", animation: "phaseFlashAnim 2.6s forwards" }}>
+          <div style={{
+            position: "relative",
+            background: "rgba(4,4,12,0.96)",
+            border: `2px solid ${phaseFlash.color}`,
+            borderRadius: 2,
+            padding: "26px 72px",
+            textAlign: "center",
+            boxShadow: `0 0 56px ${phaseFlash.color}55, 0 0 120px ${phaseFlash.color}22, inset 0 0 40px rgba(0,0,0,0.7)`,
+            overflow: "hidden",
+            minWidth: 340,
+          }}>
+            <div style={{ position: "absolute", inset: 0, opacity: 0.18, pointerEvents: "none" }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: `linear-gradient(90deg, transparent, ${phaseFlash.color}, transparent)`, animation: "phaseStripe 1.4s ease-out" }} />
+            </div>
+            {[{ top: -7, left: 16 }, { top: -7, right: 16 }, { bottom: -7, left: 16 }, { bottom: -7, right: 16 }].map((pos, i) => (
+              <div key={i} style={{ position: "absolute", width: 12, height: 12, background: phaseFlash.color, transform: "rotate(45deg)", ...pos }} />
+            ))}
+            <div style={{ fontSize: 36, marginBottom: 6, lineHeight: 1 }}>{phaseFlash.icon}</div>
+            <div style={{ fontSize: 26, fontWeight: "bold", color: phaseFlash.color, letterSpacing: 6, textShadow: `0 0 22px ${phaseFlash.color}aa` }}>{phaseFlash.title}</div>
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${phaseFlash.color}88, transparent)`, margin: "10px 0 6px" }} />
+            <div style={{ fontSize: 9, color: "rgba(200,184,154,0.55)", letterSpacing: 6 }}>{phaseFlash.subtitle}</div>
           </div>
         </div>
       )}
