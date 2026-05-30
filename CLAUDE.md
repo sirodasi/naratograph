@@ -318,6 +318,10 @@ New entries are prepended: `[newMsg, ...p.log]`.
 - **Battle dice**: `BattleDiceTray` (inside `BattleView`) fires `sfx.diceRoll()` on rolling-start and `sfx.diceResult(maxDie)` on rolling-end via a `useRef(prevAnim)` watcher.
 - **Explore dice**: `RightPanel` has a parallel `useEffect` watching `gs.dice?.rolling` that fires the same sfx — but **guards with `if (gs.battle?.active) return;`** to avoid double-firing during battle.
 
+### Reduced motion (`src/motion.js`)
+
+`motion` centralizes animation suppression. `motion.reduced` is the composite of the OS `prefers-reduced-motion` media query **and** an in-app toggle (`localStorage["reduceMotion"]`). `motion.init()` (called once in `App`) injects a `<style id="reduce-motion-style">` into `<head>` and reflects the composite into `<html data-reduce-motion="1">`; the injected CSS clamps all `animation-duration`/`transition-duration` to ~1ms and `animation-iteration-count` to 1 under that attribute, so every keyframe/transition across all screens is neutralized in one place. **JS canvas animations are not covered by CSS** — `BattleParticleCanvas` separately early-returns when `motion.reduced`. Toggle UI lives in the `RightPanel` tab bar (🎬/🚫 button, disabled when `motion.osForced`).
+
 ### Cinematic overlay pattern
 
 `SessionApp` (in `App.jsx`) detects game events and shows transient full-screen overlays. The pattern is consistent:

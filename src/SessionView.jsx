@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CharSprite } from "./Lobby";
 import { sfx } from "./audio";
+import { motion } from "./motion";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
@@ -571,6 +572,7 @@ export function expandStoredSpell(stored) {
 function BattleParticleCanvas() {
   const ref = useRef(null);
   useEffect(() => {
+    if (motion.reduced) return;  // 演出抑制時はパーティクルを描画しない（JS canvas は CSS で止まらない）
     const cv = ref.current;
     if (!cv) return;
     const ctx = cv.getContext("2d");
@@ -6411,6 +6413,8 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [logSearch, setLogSearch] = useState("");
   const [logFilter, setLogFilter] = useState("all");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [motionReduced, setMotionReduced] = useState(motion.reduced);
+  const toggleMotion = () => { motion.toggle(); setMotionReduced(motion.reduced); };
 
   // 探索フェーズのダイス効果音（バトル中は BattleDiceTray が担当するため除外）
   const prevExploreDiceRef = useRef(false);
@@ -6638,7 +6642,8 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {TABS.map(([id, label]) => (
                 <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
               ))}
-              <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
+              <div onClick={toggleMotion} title={motion.osForced ? "OS設定により演出は常に抑制されています" : (motionReduced ? "演出: 抑制中（クリックで通常）" : "演出: 通常（クリックで抑制）")} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: motion.osForced ? "not-allowed" : "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent", opacity: motion.osForced ? 0.5 : 1 }}>{motionReduced ? "🚫" : "🎬"}</div>
+              <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
@@ -7070,7 +7075,8 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               ))}
             </div>
             <div style={{ fontSize: 8, color: C.textFaint, marginTop: 12, lineHeight: 1.6 }}>
-              ※ 入力欄にカーソルがあるときは無効になります
+              ※ 入力欄にカーソルがあるときは無効になります<br />
+              ※ タブ右の 🎬 で演出（アニメーション）の抑制を切り替えられます
             </div>
             <button onClick={() => setShowShortcuts(false)} style={{ ...btnFull("rgba(255,255,255,0.05)", C.border, C.textDim), marginTop: 12 }}>閉じる</button>
           </SpellCard>

@@ -7,6 +7,7 @@ import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
+import { motion } from "./motion";
 
 import {
   SPOTS, EDGES, NEWSPAPER,
@@ -1237,6 +1238,8 @@ export default function App() {
   const [roomPhase, setRoomPhase] = useState(null);
 
   useEffect(() => {
+    motion.init();  // 演出抑制の <html> 属性反映 + OS設定変化の監視
+
     const params = new URLSearchParams(window.location.search);
     const r = params.get("room");
     if (r) setRoomCode(r.toUpperCase());
