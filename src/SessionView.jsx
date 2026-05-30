@@ -3935,6 +3935,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [gmEdit, setGmEdit]         = useState(false);
   const [resFlash, setResFlash]     = useState({});
   const prevResRef                  = useRef(null);
+  const prevOnceFlagRef             = useRef(null);
 
   const resources     = pc.resources || INIT_RESOURCES();
   const items         = pc.items     || INIT_ITEMS();
@@ -3949,6 +3950,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const useItem = itemName => {
     const data = ITEM_DATA[itemName];
     if (!data) return;
+    sfx.itemUse();
     onUpdatePc(data.use(pc, gs));
     setItemModal(null);
   };
@@ -4055,6 +4057,14 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       });
     }
   }, [pc.resources]); // eslint-disable-line
+
+  // 一発限り（1セッション1回）スキルの発動を検出して効果音を鳴らす
+  useEffect(() => {
+    const cur = !!pc[PS_ONCE_FLAG];
+    if (prevOnceFlagRef.current === null) { prevOnceFlagRef.current = cur; return; }
+    if (!prevOnceFlagRef.current && cur) sfx.skillActivate();
+    prevOnceFlagRef.current = cur;
+  }, [pc[PS_ONCE_FLAG]]);
 
   return (
     <div style={{ border: `1px solid ${isActing ? C.blue : C.border}`, borderRadius: 2, marginBottom: 6, overflow: "hidden", transition: "border 0.2s, box-shadow 0.2s", boxShadow: isActing ? `0 0 16px ${C.blue}28` : "none", background: isActing ? `${C.blue}06` : "transparent" }}>

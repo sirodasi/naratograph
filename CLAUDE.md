@@ -304,7 +304,12 @@ New entries are prepended: `[newMsg, ...p.log]`.
 
 ### Sound effects (`src/audio.js`)
 
-`sfx` exports browser-synthesized methods using Web Audio API — no external files. Methods include `bullet`, `spell`, `phase(name)`, `diceRoll`, `diceResult(maxDie)`, `hit`, `victory`, `defeat`, `questSolve`, `cluePlaced`, `cycle(idx)`. `_enabled` is persisted in `localStorage["sfxMuted"]` and toggled via `sfx.toggle()`.
+`sfx` exports browser-synthesized methods using Web Audio API — no external files. Methods include `bullet`, `spell`, `phase(name)`, `diceRoll`, `diceResult(maxDie)`, `hit`, `victory`, `defeat`, `questSolve`, `cluePlaced`, `sceneStart`, `sceneEnd`, `skillActivate`, `itemUse`, `cycle(idx)`. `_enabled` is persisted in `localStorage["sfxMuted"]` and toggled via `sfx.toggle()`.
+
+**Scene / skill / item sfx routing**:
+- **Scene start/end**: fired in `SessionApp`'s scene-detection `useEffect` (App.jsx) — `sfx.sceneStart()` when `currentScene.pcUid` goes null→value, `sfx.sceneEnd()` when it goes value→null. Battle-active guard suppresses both.
+- **Once-per-session skill activation**: `PCCard` has a `useEffect` watching `pc[PS_ONCE_FLAG]`; fires `sfx.skillActivate()` on the false→true transition, capturing all once-skills (カリスマ/不夜城/ご執心/用意周到/直感) in one place regardless of which button triggered them.
+- **Item use**: `sfx.itemUse()` fired at the top of `PCCard`'s `useItem`.
 
 **Dice sfx routing**:
 - **Battle dice**: `BattleDiceTray` (inside `BattleView`) fires `sfx.diceRoll()` on rolling-start and `sfx.diceResult(maxDie)` on rolling-end via a `useRef(prevAnim)` watcher.

@@ -208,6 +208,51 @@ export const sfx = {
     } catch {}
   },
 
+  // ── シーン開始: 幕が上がる柔らかな上昇音 ────────────────────────────
+  sceneStart() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      // 神秘的な上昇二音 + ふわっと広がる高音
+      tone("triangle", 392,     t,        0.3, 0.1,  587.33);
+      tone("triangle", 587.33,  t + 0.12, 0.4, 0.09, 880);
+      tone("sine",     1174.66, t + 0.26, 0.5, 0.05, 1567.98);
+    } catch {}
+  },
+
+  // ── シーン終了: 静かに幕が下りる下降音 ──────────────────────────────
+  sceneEnd() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      tone("sine", 659.25, t,        0.28, 0.08, 523.25);
+      tone("sine", 440,    t + 0.16, 0.45, 0.07, 329.63);
+    } catch {}
+  },
+
+  // ── 個性スキル発動: 魔法的なキラキラチャイム ────────────────────────
+  skillActivate() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      // 明るい和音 + キラキラ上昇
+      [[659.25, 0], [830.61, 0.06], [987.77, 0.12]].forEach(([f, d]) =>
+        tone("triangle", f, t + d, 0.35, 0.1)
+      );
+      tone("sine", 1318.51, t + 0.2, 0.4, 0.06, 1975.53);
+    } catch {}
+  },
+
+  // ── アイテム使用: 軽いポップ音 ──────────────────────────────────────
+  itemUse() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      tone("triangle", 784,    t,        0.1,  0.09, 1046.5);
+      tone("sine",     1046.5, t + 0.07, 0.14, 0.05, 1318.51);
+    } catch {}
+  },
+
   // ── サイクル進行（時間帯: 0=朝, 1=昼, 2=夕, 3=夜）─────────────────
   cycle(cycleIdx) {
     if (!_enabled) return;

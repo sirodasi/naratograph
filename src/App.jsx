@@ -467,13 +467,19 @@ function SessionApp({ roomCode, user }) {
     const prev   = prevScenePcRef.current;
     if (prev === undefined) { prevScenePcRef.current = curUid; return; }
     prevScenePcRef.current = curUid;
-    if (curUid && curUid !== prev && !gs.battle?.active) {
+    if (gs.battle?.active) return;
+    if (curUid && curUid !== prev) {
+      // シーン開始
       const pc = (gs.pcs || []).find(p => p.uid === curUid);
       if (pc) {
         setSceneStartFlash({ charName: pc.charName || pc.name || "?", uid: curUid });
+        sfx.sceneStart();
         const t = setTimeout(() => setSceneStartFlash(null), 2400);
         return () => clearTimeout(t);
       }
+    } else if (!curUid && prev) {
+      // シーン終了（currentScene が null になった）
+      sfx.sceneEnd();
     }
   }, [gs.currentScene?.pcUid, gs.battle?.active]);
 
