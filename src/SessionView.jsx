@@ -6700,7 +6700,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {TABS.map(([id, label]) => (
                 <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
               ))}
-              <div onClick={toggleMotion} title={motion.osForced ? "OS設定により演出は常に抑制されています" : (motionReduced ? "演出: 抑制中（クリックで通常）" : "演出: 通常（クリックで抑制）")} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: motion.osForced ? "not-allowed" : "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent", opacity: motion.osForced ? 0.5 : 1 }}>{motionReduced ? "🚫" : "🎬"}</div>
+              <div onClick={toggleMotion} title={motionReduced ? "演出: 抑制中（クリックで通常に戻す）" : "演出: 通常（クリックで抑制）"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{motionReduced ? "🚫" : "🎬"}</div>
               <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
             </div>
 
