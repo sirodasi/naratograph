@@ -3927,12 +3927,123 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
   );
 }
 
+// ─── CharDetailModal（キャラクター詳細・読み取り専用） ────────────────
+function CharDetailModal({ pc, onClose }) {
+  const skill   = pc.ps || null;
+  const ability = pc.as || null;
+  const danmaku = pc.ds || null;
+  const spellTexts = [
+    ...(pc.spellCards || []),
+    ...(pc.growthSpellUnlocked && pc.growthSpellCard ? [pc.growthSpellCard] : []),
+  ].filter(Boolean);
+  const spells  = spellTexts.map(t => buildSpellCard(t)).filter(Boolean);
+  const bonds   = pc.bonds || [];
+  const badStatus = pc.badStatus || [];
+  const resKeys = ["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
+  const resources = pc.resources || {};
+
+  const Section = ({ label, children }) => (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>{label}</div>
+      {children}
+    </div>
+  );
+
+  const renderSkill = (s, accentColor) => (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        {s.type && <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[s.type] || accentColor}18`, border: `1px solid ${SKILL_TYPE_COLOR[s.type] || accentColor}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[s.type] || accentColor }}>{s.type}</span>}
+        <span style={{ fontSize: 11, color: accentColor }}>《{s.name}》</span>
+      </div>
+      <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.7 }}>{s.desc}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={onClose}>
+      <SpellCard
+        color={C.gold}
+        title={`✦ ${pc.charName}`}
+        headerRight={(pc.tags || []).length > 0 ? <span style={{ fontSize: 9, color: C.gold }}>《{pc.tags.join("》《")}》</span> : null}
+        style={{ maxWidth: 460, width: "92%", maxHeight: "86vh", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
+        contentStyle={{ padding: 0 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ padding: "12px 16px", maxHeight: "calc(86vh - 70px)", overflowY: "auto" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+            {pc.customPortrait
+              ? <img src={pc.customPortrait} style={{ width: 56, height: 56, borderRadius: 6, objectFit: "cover", border: `1px solid ${C.goldDim}` }} />
+              : <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={56} />}
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {resKeys.map(k => {
+                const r = resources[k] || { cur: 0, max: 1 };
+                return (
+                  <div key={k} style={{ padding: "3px 7px", background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 3, textAlign: "center", minWidth: 44 }}>
+                    <div style={{ fontSize: 7, color: C.textFaint }}>{k}</div>
+                    <div style={{ fontSize: 12, color: C.gold }}>{r.cur}{r.max > 1 && <span style={{ fontSize: 7, color: C.textFaint }}>/{r.max}</span>}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {skill && <Section label="個性スキル">{renderSkill(skill, skill.type !== "オート" ? C.gold : "#81c784")}</Section>}
+          {ability && <Section label="能力スキル">{renderSkill(ability, "#90caf9")}</Section>}
+          {danmaku && <Section label="弾幕スキル">{renderSkill({ ...danmaku, type: danmaku.type || null }, C.red)}</Section>}
+
+          {spells.length > 0 && (
+            <Section label="スペルカード">
+              {spells.map((sp, i) => (
+                <div key={i} style={{ marginBottom: 8, padding: "7px 10px", background: "rgba(200,160,64,0.06)", border: `1px solid ${C.goldDim}55`, borderRadius: 4 }}>
+                  <div style={{ fontSize: 11, color: C.gold, marginBottom: 3 }}>{sp.name}</div>
+                  <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.6 }}>{sp.textBody || sp.text}</div>
+                  {sp.condition && <div style={{ fontSize: 9, color: C.red, marginTop: 3 }}>⚠ {sp.condition}</div>}
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {bonds.length > 0 && (
+            <Section label="絆">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {bonds.map(b => {
+                  const isFrom = b.endsWith("からの絆");
+                  return (
+                    <span key={b} style={{ padding: "2px 8px", background: isFrom ? "rgba(156,39,176,0.1)" : "rgba(200,160,64,0.1)", border: `1px solid ${isFrom ? C.purpleBorder : C.goldDim}50`, borderRadius: 10, fontSize: 10, color: isFrom ? C.purple : C.gold }}>《{b}》</span>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
+
+          {badStatus.length > 0 && (
+            <Section label="変調">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {badStatus.map(bs => {
+                  const bData = Object.values(BAD_STATUS_TABLE).find(x => x.name === bs);
+                  return (
+                    <div key={bs} style={{ padding: "4px 8px", background: "rgba(224,112,96,0.15)", border: `1px solid ${C.redBorder}`, borderRadius: 4 }}>
+                      <div style={{ fontSize: 10, color: C.red, fontWeight: "bold" }}>《{bs}》</div>
+                      <div style={{ fontSize: 8, color: C.textDim, lineHeight: 1.4 }}>{bData?.desc}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
+        </div>
+      </SpellCard>
+    </div>
+  );
+}
+
 // ─── PCCard ───────────────────────────────────────────────────────
 export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SPOTS }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
+  const [detailModal, setDetailModal] = useState(false);
   const [resFlash, setResFlash]     = useState({});
   const prevResRef                  = useRef(null);
   const prevOnceFlagRef             = useRef(null);
@@ -4079,9 +4190,14 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
             {(pc.tags || []).length > 0 && `《${pc.tags.join("》《")}》`}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <span style={{ fontSize: 9, color: "#f9a825" }}>やる気{resources.やる気?.cur || 0}/{resources.やる気?.max || 3}</span>
           <span style={{ fontSize: 9, color: "#ab47bc" }}>霊力{resources.霊力?.cur || 0}</span>
+          <button
+            onClick={e => { e.stopPropagation(); setDetailModal(true); }}
+            title="詳細を表示"
+            style={{ width: 20, height: 20, fontSize: 11, lineHeight: 1, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.textDim, padding: 0 }}
+          >🔍</button>
         </div>
       </div>
 
@@ -4343,6 +4459,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
 
       {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => useItem(itemModal)} onCancel={() => setItemModal(null)} />}
       {skillModal && skill && <SkillActivateModal skillName={skill.name} skillType={skill.type} desc={skill.desc} onConfirm={activateSkill} onCancel={() => setSkillModal(null)} />}
+      {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );
 }
@@ -6291,6 +6408,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
   const [sceneSelect, setSceneSelect] = useState("");
+  const [logSearch, setLogSearch] = useState("");
+  const [logFilter, setLogFilter] = useState("all");
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // 探索フェーズのダイス効果音（バトル中は BattleDiceTray が担当するため除外）
   const prevExploreDiceRef = useRef(false);
@@ -6375,6 +6495,43 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const TABS = isGm
     ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["log", "ログ"]]
     : [["progress", "進行"],["pcs", "PC一覧"], ["log", "ログ"]];
+
+  // ── キーボードショートカット（GM操作の高速化） ──────────────────────
+  // 最新の ma / TABS をハンドラに渡すため ref に保持（リスナーは mount 時1回登録）
+  const maRef   = useRef(ma);   maRef.current = ma;
+  const tabsRef = useRef(TABS); tabsRef.current = TABS;
+  useEffect(() => {
+    const onKey = (e) => {
+      // 入力欄フォーカス中・修飾キー併用時はショートカット無効
+      const tag = (e.target?.tagName || "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target?.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+        e.preventDefault();
+        setShowShortcuts(v => !v);
+        return;
+      }
+      if (e.key === "Escape") { setShowShortcuts(false); return; }
+      // 数字キー: タブ切替
+      if (/^[1-9]$/.test(e.key)) {
+        const idx = parseInt(e.key, 10) - 1;
+        const t = tabsRef.current[idx];
+        if (t) { e.preventDefault(); setTab(t[0]); }
+        return;
+      }
+      // M: 効果音ミュート切替
+      if (e.key === "m" || e.key === "M") { e.preventDefault(); sfx.toggle(); return; }
+      // Enter: 状況に応じた主要アクションを実行（GMのみ）
+      if (e.key === "Enter" && isGm && maRef.current) {
+        e.preventDefault();
+        maRef.current.fn();
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isGm]);
 
   const joinQuest = () => {
     const myPc = gs.pcs.find(p => p.uid === user.uid);
@@ -6481,6 +6638,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {TABS.map(([id, label]) => (
                 <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
               ))}
+              <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
@@ -6699,23 +6857,70 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 </div>
               )}
 
-              {tab === "log" && (
-                <div>
-                  <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>セッションログ</div>
-                  {(gs.log ||[]).length === 0 && <div style={{ fontSize: 10, color: C.textFaint }}>なし</div>}
-                  {(gs.log ||[]).map((e, i) => {
-                    const lc = /^(🏆|🎉)/.test(e) ? C.gold
-                      : /^💀/.test(e) ? C.red
-                      : /^(🔮|💜)/.test(e) ? C.purple
-                      : /^✨/.test(e) ? C.green
-                      : /^(💡|🔍)/.test(e) ? "#00bcd4"
-                      : /^(🛡|💠)/.test(e) ? C.blue
-                      : /^⚖️/.test(e) ? C.gold
-                      : C.textDim;
-                    return <div key={e.slice(0, 60)} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1, animation: "logSlideIn 0.32s ease forwards" }}>{e}</div>;
-                  })}
-                </div>
-              )}
+              {tab === "log" && (() => {
+                const logCategory = (e) =>
+                  /^(⚔|✦|★|💀|⚖️)/.test(e) ? "combat"
+                  : /^(🔵|🛡|💙|💠|🏃|🎬)/.test(e) ? "player"
+                  : /^(✅|🎉|🌟|✨)/.test(e) ? "success"
+                  : /^(💰|🏆)/.test(e) ? "reward"
+                  : "other";
+                const logColor = (e) =>
+                  /^(🏆|🎉)/.test(e) ? C.gold
+                  : /^💀/.test(e) ? C.red
+                  : /^(🔮|💜)/.test(e) ? C.purple
+                  : /^✨/.test(e) ? C.green
+                  : /^(💡|🔍)/.test(e) ? "#00bcd4"
+                  : /^(🛡|💠)/.test(e) ? C.blue
+                  : /^⚖️/.test(e) ? C.gold
+                  : C.textDim;
+                const FILTERS = [
+                  { key: "all", label: "すべて", color: C.textDim },
+                  { key: "combat", label: "戦闘", color: C.red },
+                  { key: "player", label: "行動", color: C.blue },
+                  { key: "success", label: "成功", color: C.green },
+                  { key: "reward", label: "報酬", color: C.gold },
+                ];
+                const allLogs = gs.log || [];
+                const q = logSearch.trim();
+                const filtered = allLogs.filter(e =>
+                  (logFilter === "all" || logCategory(e) === logFilter) &&
+                  (q === "" || e.includes(q))
+                );
+                return (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>
+                      <span style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2 }}>セッションログ</span>
+                      <span style={{ fontSize: 8, color: C.textFaint }}>{filtered.length}/{allLogs.length}</span>
+                    </div>
+                    <input
+                      value={logSearch}
+                      onChange={e => setLogSearch(e.target.value)}
+                      placeholder="🔍 ログを検索..."
+                      style={{ ...iStyle, width: "100%", boxSizing: "border-box", fontSize: 10, padding: "5px 8px", marginBottom: 6 }}
+                    />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 8 }}>
+                      {FILTERS.map(f => {
+                        const active = logFilter === f.key;
+                        return (
+                          <button key={f.key} onClick={() => setLogFilter(f.key)}
+                            style={{ padding: "2px 9px", fontSize: 9, cursor: "pointer", borderRadius: 10,
+                              background: active ? `${f.color}22` : "rgba(255,255,255,0.02)",
+                              border: `1px solid ${active ? f.color : C.border}`,
+                              color: active ? f.color : C.textFaint }}>
+                            {f.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {allLogs.length === 0 && <div style={{ fontSize: 10, color: C.textFaint }}>なし</div>}
+                    {allLogs.length > 0 && filtered.length === 0 && <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: 8 }}>該当するログがありません</div>}
+                    {filtered.map((e) => {
+                      const lc = logColor(e);
+                      return <div key={e.slice(0, 60)} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1, animation: "logSlideIn 0.32s ease forwards" }}>{e}</div>;
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
             {paperModal && (() => { 
@@ -6846,6 +7051,31 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
           </>
         )}
       </div>
+
+      {showShortcuts && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 130, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setShowShortcuts(false)}>
+          <SpellCard color={C.gold} title="✦ キーボードショートカット" style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                ["1 〜 4", "タブ切り替え（進行／PC一覧／描写／ログ）"],
+                ...(isGm ? [["Enter", "状況に応じた主要アクションを実行"]] : []),
+                ["M", "効果音 ON / OFF"],
+                ["?", "このヘルプを開閉"],
+                ["Esc", "ヘルプを閉じる"],
+              ].map(([key, desc]) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <kbd style={{ minWidth: 44, textAlign: "center", padding: "3px 8px", fontSize: 11, color: C.gold, background: "rgba(200,160,64,0.12)", border: `1px solid ${C.goldDim}`, borderRadius: 4, fontFamily: "'Noto Serif JP', serif" }}>{key}</kbd>
+                  <span style={{ fontSize: 10, color: C.textDim }}>{desc}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 8, color: C.textFaint, marginTop: 12, lineHeight: 1.6 }}>
+              ※ 入力欄にカーソルがあるときは無効になります
+            </div>
+            <button onClick={() => setShowShortcuts(false)} style={{ ...btnFull("rgba(255,255,255,0.05)", C.border, C.textDim), marginTop: 12 }}>閉じる</button>
+          </SpellCard>
+        </div>
+      )}
     </div>
   );
 }

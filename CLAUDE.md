@@ -119,12 +119,15 @@ rooms/{roomCode}/
 | Function | Approx. line | Responsibility |
 |---|---|---|
 | `BattleView` | ~680 | Danmaku combat UI and phase state machine |
-| `BonusPhaseView` | ~3520 | Post-solve bonus action phase |
-| `SessionEndView` | ~3660 | End-of-session summary |
-| `PCCard` | ~3880 | Per-PC card with scene/action UI |
-| `ScenePanel` | ~4920 | Scene player action panel (move, explore, quest, etc.) |
-| `RightPanel` | ~6230 | GM sidebar: newspaper, cycle control, scene launching |
-| `BattleRightPanel` | ~6850 | Battle info sidebar rendered inside `RightPanel` |
+| `CharDetailModal` | ~3930 | Read-only character sheet (spell cards full text, skills, bonds, 変調); opened via the 🔍 button on `PCCard` |
+| `BonusPhaseView` | ~3650 | Post-solve bonus action phase |
+| `SessionEndView` | ~3790 | End-of-session summary |
+| `PCCard` | ~4010 | Per-PC card with scene/action UI |
+| `ScenePanel` | ~5050 | Scene player action panel (move, explore, quest, etc.) |
+| `RightPanel` | ~6400 | GM sidebar: newspaper, cycle control, scene launching, log search/filter, keyboard shortcuts |
+| `BattleRightPanel` | ~7050 | Battle info sidebar rendered inside `RightPanel` |
+
+`RightPanel` registers a `window` keydown listener (GM-operation shortcuts): `1`–`4` switch tabs, `Enter` runs the current `getMainAction()` (`ma`) result, `M` toggles sfx, `?` opens the shortcut help modal. The handler reads `ma`/`TABS` through refs (`maRef`/`tabsRef`) updated every render so the listener (registered once on mount) always sees current values; it no-ops while an `INPUT`/`TEXTAREA`/`SELECT`/contentEditable is focused or a modifier key is held. The log tab has a text search box + category filter chips (combat/player/success/reward) driven by emoji-prefix classification.
 
 `BattleRightPanel` is a **separate top-level function**, not a closure inside `BattleView`. Functions defined inside `BattleView` are not accessible from `BattleRightPanel`; shared logic must be defined at module level or passed as props.
 
