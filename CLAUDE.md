@@ -110,6 +110,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `currentScene` | Active scene state (`{ pcUid, phase, isAutoSuccess?, ... }`); `null` when no scene. `isAutoSuccess: true` is set by 瀟洒 skill to force success in `explore_result` regardless of dice. |
 | `resources` | Shared party resources (やる気, 残り人数, etc.) |
 | `log[]` | Session event log (prepend new entries: `[newMsg, ...p.log]`) |
+| `diceHistory[]` | Roll history `{ label, results[], max, t }`; written by `animateDice` on roll-confirm (prepend, capped at 50). Surfaced in `RightPanel`'s 進行 tab (collapsible) and exported by `SessionEndView`. |
 
 ### Major Components
 

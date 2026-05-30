@@ -96,6 +96,7 @@ const DEFAULT_GS = {
   banner: null,
   actedPcs: [],
   dice: { rolling: false, results: [], label: "" },
+  diceHistory: [],
   currentScene: null,
 };
 
@@ -561,7 +562,13 @@ function SessionApp({ roomCode, user }) {
       if (f >= 14) {
         clearInterval(timerRef.current);
         const res = Array(count).fill(0).map(rollD6);
-        upd(p => ({ ...p, dice: { rolling: false, results: res, label } }));
+        // ダイス確定 → 結果反映と履歴追記を1回の upd でまとめる（二重書き込み防止）
+        const entry = { label: label || "ダイス", results: res, max: Math.max(...res), t: Date.now() };
+        upd(p => ({
+          ...p,
+          dice: { rolling: false, results: res, label },
+          diceHistory: [entry, ...(p.diceHistory || [])].slice(0, 50),
+        }));
         if (cb) cb(res);
       }
     }, 80);

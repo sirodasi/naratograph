@@ -3728,6 +3728,43 @@ export function SessionEndView({ gs, upd, isGm }) {
        { x: 74, d: 1.1, s: 7.8 }]
     : [];
 
+  // セッションログを txt でダウンロード（ふりかえり用）
+  const exportLog = () => {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const L = [];
+    L.push("幻想ナラトグラフ セッション記録");
+    L.push(`出力日時: ${now.toLocaleString()}`);
+    L.push(`結果: ${isVictory ? "最終決戦制覇（CLEAR）" : "最終決戦敗北（GAME OVER）"}`);
+    L.push("");
+    L.push("■ 参加キャラクター");
+    pcs.forEach(pc => {
+      L.push(`  ${pc.charName}  残り人数:${pc.resources?.残り人数?.cur ?? 0} / スペカ:${pc.resources?.スペルカード?.cur ?? 0} / グレイズ:${pc.resources?.グレイズ?.cur ?? 0}`);
+    });
+    L.push("");
+    L.push("■ セッションログ（時系列・古い順）");
+    [...(gs.log || [])].reverse().forEach(l => L.push(`  ${l}`));
+    const hist = gs.diceHistory || [];
+    if (hist.length > 0) {
+      L.push("");
+      L.push("■ ダイス履歴（新しい順）");
+      hist.forEach(h => {
+        const tStr = h.t ? new Date(h.t).toLocaleTimeString() : "";
+        L.push(`  [${tStr}] ${h.label}: ${(h.results || []).join(" ")}（最大${h.max}）`);
+      });
+    }
+    const blob = new Blob([L.join("\r\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `naratograph-${stamp}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608", position: "relative", overflow: "hidden" }}>
       <style>{`
@@ -3847,6 +3884,20 @@ export function SessionEndView({ gs, upd, isGm }) {
                 </div>
               );
             })}
+          </div>
+
+          {/* ログ書き出し（全員） */}
+          <div style={{ marginBottom: 14, animation: `endFadeUp 0.5s ${0.95 + pcs.length * 0.13}s both` }}>
+            <button
+              onClick={exportLog}
+              style={{
+                padding: "7px 20px", background: "rgba(255,255,255,0.04)",
+                border: `1px solid ${C.border}`, borderRadius: 6,
+                color: C.textDim, fontSize: 11, cursor: "pointer", letterSpacing: 1,
+              }}
+            >
+              📥 セッションログを保存（.txt）
+            </button>
           </div>
 
           {/* 終了ボタン / 待機テキスト */}
@@ -6419,6 +6470,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [logSearch, setLogSearch] = useState("");
   const [logFilter, setLogFilter] = useState("all");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showDiceHistory, setShowDiceHistory] = useState(false);
   const [motionReduced, setMotionReduced] = useState(motion.reduced);
   const toggleMotion = () => { motion.toggle(); setMotionReduced(motion.reduced); };
 
@@ -6768,6 +6820,30 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                         ))}
                       </div>
                       {!gs.dice?.rolling && <div style={{ fontSize: 16, color: C.gold }}>{gs.dice?.results.join("")}</div>}
+                    </div>
+                  )}
+
+                  {(gs.diceHistory || []).length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <div onClick={() => setShowDiceHistory(v => !v)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>
+                        <span>🎲 ダイス履歴 ({gs.diceHistory.length})</span>
+                        <span style={{ fontSize: 9 }}>{showDiceHistory ? "▲" : "▼"}</span>
+                      </div>
+                      {showDiceHistory && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {gs.diceHistory.slice(0, 20).map((h, i) => {
+                            const mc = h.max === 6 ? C.gold : h.max === 1 ? C.red : C.textDim;
+                            const tStr = h.t ? new Date(h.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                            return (
+                              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderLeft: `2px solid ${mc}55`, borderBottom: `1px solid ${C.border}18`, fontSize: 10 }}>
+                                <span style={{ color: C.textFaint, fontSize: 8, minWidth: 32 }}>{tStr}</span>
+                                <span style={{ flex: 1, color: C.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.label}</span>
+                                <span style={{ color: mc, fontWeight: "bold", fontFamily: "monospace" }}>{(h.results || []).join(" ")}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
