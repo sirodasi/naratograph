@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, get } from "firebase/database";
+import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
 import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS } from "./SessionView";
@@ -404,6 +404,8 @@ function SessionApp({ roomCode, user }) {
   const [clueFlash, setClueFlash]             = useState(false);
   const [sceneStartFlash, setSceneStartFlash] = useState(null);
   const [phaseFlash, setPhaseFlash]           = useState(null);
+  const [connected, setConnected]   = useState(true);
+  const [presence, setPresence]     = useState({});
   const timerRef      = useRef(null);
   const prevCycleRef  = useRef({ day: null, cycleIdx: null });
   const prevQuestsRef = useRef(null);
@@ -516,6 +518,33 @@ function SessionApp({ roomCode, user }) {
       return () => clearTimeout(t);
     }
   }, [gs.sessionPhase, gs.battle?.active]);
+
+  // ── 接続状態の監視 + 自分のプレゼンス登録 ──────────────────────────────
+  useEffect(() => {
+    if (!user?.uid) return;
+    const connRef = ref(db, ".info/connected");
+    const presRef = ref(db, `rooms/${roomCode}/presence/${user.uid}`);
+    const unsub = onValue(connRef, snap => {
+      const isConnected = snap.val() === true;
+      setConnected(isConnected);
+      if (isConnected) {
+        // 切断時に自動削除されるよう予約してからオンライン登録
+        onDisconnect(presRef).remove().catch(() => {});
+        set(presRef, { online: true, name: user.displayName || "?", ts: serverTimestamp() }).catch(() => {});
+      }
+    });
+    return () => {
+      unsub();
+      remove(presRef).catch(() => {});
+    };
+  }, [roomCode, user?.uid]);
+
+  // ── 全参加者のプレゼンスを購読 ─────────────────────────────────────────
+  useEffect(() => {
+    const presRef = ref(db, `rooms/${roomCode}/presence`);
+    const unsub = onValue(presRef, snap => setPresence(snap.val() || {}));
+    return () => unsub();
+  }, [roomCode]);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
@@ -1057,6 +1086,10 @@ function SessionApp({ roomCode, user }) {
           0%   { transform: translateX(-100%); }
           100% { transform: translateX(200%); }
         }
+        @keyframes connPulse {
+          0%, 100% { opacity: 1; }
+          50%      { opacity: 0.3; }
+        }
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -1089,8 +1122,18 @@ function SessionApp({ roomCode, user }) {
         doNewspaper={doNewspaper} doAdvanceCycle={doAdvanceCycle}
         doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
         pendingAction={pendingAction} setPendingAction={setPendingAction}
-        SPOTS={SPOTS}
+        SPOTS={SPOTS} presence={presence}
       />
+
+      {/* 接続状態インジケータ（切断時のみ表示） */}
+      {!connected && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, pointerEvents: "none", display: "flex", justifyContent: "center" }}>
+          <div style={{ marginTop: 8, background: "rgba(20,8,8,0.97)", border: "1px solid #e07060", borderRadius: 20, padding: "6px 20px", fontSize: 11, color: "#ef9a9a", letterSpacing: 1, boxShadow: "0 0 24px rgba(224,112,96,0.4)", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#e07060", animation: "connPulse 1.1s ease-in-out infinite" }} />
+            接続が切れました — 再接続を試みています…
+          </div>
+        </div>
+      )}
 
       {/* 手がかり配置バナー */}
       {clueFlash && (

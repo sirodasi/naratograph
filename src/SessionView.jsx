@@ -4040,7 +4040,7 @@ function CharDetailModal({ pc, onClose }) {
 }
 
 // ─── PCCard ───────────────────────────────────────────────────────
-export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SPOTS }) {
+export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SPOTS, isOnline = false }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
@@ -4182,7 +4182,13 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   return (
     <div style={{ border: `1px solid ${isActing ? C.blue : C.border}`, borderRadius: 2, marginBottom: 6, overflow: "hidden", transition: "border 0.2s, box-shadow 0.2s", boxShadow: isActing ? `0 0 16px ${C.blue}28` : "none", background: isActing ? `${C.blue}06` : "transparent" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", background: isActing ? C.blueBg : expanded ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.01)" }} onClick={() => setExpanded(v => !v)}>
-        <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={36} />
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={36} />
+          <span
+            title={isOnline ? "オンライン" : "オフライン"}
+            style={{ position: "absolute", right: -1, bottom: -1, width: 9, height: 9, borderRadius: "50%", background: isOnline ? "#4caf50" : "#5a6070", border: "1.5px solid #0b0d14", boxShadow: isOnline ? "0 0 5px rgba(76,175,80,0.8)" : "none" }}
+          />
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 11, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pc.charName}</span>
@@ -6405,7 +6411,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 }
 
 // ─── RightPanel ───────────────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS, presence = {} }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
@@ -6783,6 +6789,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                           getSpot={getSpot}
                           SPOTS={SPOTS}
                           room={room}
+                          isOnline={!!presence[pc.uid]?.online}
                         />
                       ))
                   }

@@ -31,7 +31,7 @@ Tests live in [src/__tests__/](src/__tests__/). Firebase is mocked via [src/__te
 
 ### Tech Stack
 
-- **React 19** (functional components + hooks only, no class components)
+- **React 19** (functional components + hooks only; the sole class component is `ErrorBoundary`, which React requires to be a class)
 - **Firebase 12** (Realtime Database + Google OAuth)
 - **Vite 8** with `@vitejs/plugin-react` (Oxc transform)
 - **Styling**: Inline styles throughout; color constants live in [src/styles/colors.js](src/styles/colors.js)
@@ -84,10 +84,17 @@ rooms/{roomCode}/
 ├── scenario, scenarioData
 ├── config/{ useAdditionalActions, useClueEvents, useRandomPlacement, useLastResort }
 ├── state   ← gs object (entire game state)
-└── scene   ← background/portrait data for scene mode
+├── scene   ← background/portrait data for scene mode
+└── presence/{uid}/{ online, name, ts }  ← live presence (onDisconnect-managed)
 ```
 
 `config` lives at `rooms/{roomCode}/config`, **not** inside `gs`. Components that need config must receive `room` as a prop (not just `gs`).
+
+### Connection & Presence
+
+`SessionApp` watches Firebase `.info/connected`; on disconnect it shows a fixed top banner (`connected` state). On (re)connect it registers `rooms/{roomCode}/presence/{uid}` with an `onDisconnect().remove()` so the entry self-cleans when the tab closes or drops. The full `presence` map is subscribed and passed to `RightPanel` → `PCCard` as `isOnline` (green/grey dot on the portrait). Presence writes use `serverTimestamp()` for `ts`.
+
+A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) wraps `<App>` in [main.jsx](src/main.jsx) — the **only** sanctioned class component (React error boundaries cannot be functional). It shows a reload-prompt fallback instead of a white screen; game state survives because it lives in Firebase.
 
 ### Key `gs` Fields
 
