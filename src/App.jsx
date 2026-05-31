@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { db, auth } from "./firebase";
+import { db, auth, storage } from "./firebase";
 import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "firebase/database";
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
 import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
@@ -760,6 +761,22 @@ function SessionApp({ roomCode, user }) {
     }
   }, [synced, room, mode]);
 
+  // ─── BGM ファイルのアップロード / 削除（GM）──────────────────────
+  // ファイルを Firebase Storage に上げ、生成URLを gs.bgm.{phase} に保存して全員で共有する。
+  const uploadBgm = async (phase, file) => {
+    if (!file) return;
+    const sref = storageRef(storage, `rooms/${roomCode}/bgm/${phase}`);
+    await uploadBytes(sref, file, { contentType: file.type || "audio/mpeg" });
+    const url = await getDownloadURL(sref);
+    upd(p => ({ ...p, bgm: { ...(p.bgm || {}), [phase]: url } }));
+  };
+
+  const clearBgm = async (phase) => {
+    const sref = storageRef(storage, `rooms/${roomCode}/bgm/${phase}`);
+    try { await deleteObject(sref); } catch { /* 既に無い場合は無視 */ }
+    upd(p => ({ ...p, bgm: { ...(p.bgm || {}), [phase]: "" } }));
+  };
+
   // ─── フェイズ遷移・進行処理 ────────────────────────────────────
 
   const doTransitionToExplore = () => {
@@ -1139,6 +1156,7 @@ function SessionApp({ roomCode, user }) {
         doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
         pendingAction={pendingAction} setPendingAction={setPendingAction}
         SPOTS={SPOTS} presence={presence}
+        uploadBgm={uploadBgm} clearBgm={clearBgm}
       />
 
       {/* 接続状態インジケータ（切断時のみ表示） */}
