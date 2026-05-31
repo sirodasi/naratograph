@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
-import { CharSprite } from "./Lobby";
+import { CharSprite, CHARACTERS } from "./Lobby";
 import { sfx } from "./audio";
 import { motion } from "./motion";
+import { bgm } from "./bgm";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount } from "./data/effectHandlers";
+import { getPreBattleFlavorRoll } from "./scenarios";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
@@ -336,7 +338,8 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
             >
               <div style={{ position: "absolute", top: 2, left: 3, fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{num}</div>
 
-              {danmakuCount > 0 && (
+              {/* 駒のいないマス: 弾幕をドット雲で表示 */}
+              {danmakuCount > 0 && !hasChar && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "center", padding: 3 }}>
                   {[...Array(Math.min(danmakuCount, 9))].map((_, i) => (
                     <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: isNpc ? C.blue : C.red, boxShadow: `0 0 4px ${isNpc ? C.blue : C.red}88`, animation: `bulletIn 0.28s ease-out ${i * 0.04}s both` }} />
@@ -348,6 +351,21 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
               {hasChar && (
                 <div style={{ position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
                   {sprite}
+                </div>
+              )}
+
+              {/* 駒のいるマス: 弾幕は数バッジ化して駒の上に重ねず常に視認できるようにする */}
+              {hasChar && danmakuCount > 0 && (
+                <div style={{
+                  position: "absolute", top: 1, right: 1, zIndex: 3,
+                  minWidth: 15, height: 15, padding: "0 3px", boxSizing: "border-box",
+                  borderRadius: 8, background: isNpc ? C.blue : C.red, color: "#fff",
+                  fontSize: 9, fontWeight: "bold", lineHeight: "15px", textAlign: "center",
+                  border: "1px solid rgba(0,0,0,0.5)",
+                  boxShadow: `0 0 6px ${isNpc ? C.blue : C.red}`,
+                  animation: "bulletIn 0.28s ease-out both",
+                }}>
+                  {danmakuCount}
                 </div>
               )}
             </div>
@@ -452,6 +470,53 @@ export function markSkillUsed(usedds, attackerId, skillName) {
     ...base,
     [attackerId]: [...(base[attackerId] || []), skillName],
   };
+}
+
+// ─── 戦闘NPC生成 / 勝敗判定（純粋関数・クエスト戦/決戦で共用） ─────────
+// シナリオの enemy データ（クエスト enemy / extraEnemies / finalBattleEnemies 等）を
+// 戦闘中の NPC オブジェクトに変換する。回避力・グレイズも含め全戦闘で統一する。
+// opts.primary または enemy.primary が真なら primary フラグを付与（決戦の主敵）。
+export function buildBattleNpc(enemy, id, opts = {}) {
+  if (!enemy) return null;
+  const npc = {
+    id,
+    name: enemy.name || "敵",
+    resources: {
+      残り人数: { cur: enemy.life, max: 5 },
+      スペルカード: { cur: enemy.spellcard, max: 5 },
+      攻撃力: { cur: enemy.attack, max: 99 },
+      回避力: { cur: enemy.evade || 3, max: 3 },
+      グレイズ: { cur: 0, max: 5 },
+    },
+    ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
+    spellCards: [
+      { name: enemy.sc1name, desc: enemy.sc1effect, ...(enemy.sc1ref ? { ref: enemy.sc1ref } : {}) },
+      { name: enemy.sc2name, desc: enemy.sc2effect, ...(enemy.sc2ref ? { ref: enemy.sc2ref } : {}) },
+    ].filter(s => s.name),
+  };
+  if (opts.primary || enemy.primary) npc.primary = true;
+  if (enemy.customPortrait) npc.customPortrait = enemy.customPortrait;
+  return npc;
+}
+
+// 戦闘中のNPC立ち絵を解決する。カスタム画像 > 名前一致のキャラスプライト > 絵文字 の優先順。
+export function renderEnemySprite(npc, size = 40) {
+  if (npc?.customPortrait) {
+    return <img src={npc.customPortrait} alt="" style={{ width: "92%", height: "92%", objectFit: "cover", borderRadius: 3 }} />;
+  }
+  const match = npc?.name ? CHARACTERS.find(c => c.name === npc.name) : null;
+  if (match) return <CharSprite spriteRow={match.spriteRow} spriteCol={match.spriteCol} size={size} />;
+  return <div style={{ fontSize: Math.round(size * 0.6) }}>👿</div>;
+}
+
+// NPC陣営が敗北（＝PC勝利条件を満たす）かを判定する。
+// primary（主敵）が1体でも指定されていれば「全ての主敵が脱落」で敗北＝決戦は主敵撃破で終了。
+// primary が無ければ従来通り「全NPC脱落」。
+export function isNpcSideDefeated(npcs) {
+  const list = npcs || [];
+  const isDead = n => (n.resources?.残り人数?.cur || 0) <= 0;
+  const primaries = list.filter(n => n.primary);
+  return primaries.length > 0 ? primaries.every(isDead) : list.every(isDead);
 }
 
 // ショット時の総ダイス数を計算（使い魔習得者は -1、最低 1）
@@ -677,7 +742,7 @@ function SpellDeclareItem({ spell, cardColor, declareSpell, isPcAttacker }) {
   );
 }
 
-export function BattleView({ gs, upd, user, isGm, animateDice }) {
+export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const b = gs.battle;
   if (!b) return null;
 
@@ -689,6 +754,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   const alivePcs = pcs.filter(p => (p.resources?.残り人数?.cur || 0) > 0);
   const aliveNpcs = npcs.filter(n => (n.resources?.残り人数?.cur || 0) > 0);
+  // NPC陣営の敗北（=PC勝利条件）。主敵指定があれば「全主敵脱落」、無ければ「全NPC脱落」。
+  const npcsDefeated = isNpcSideDefeated(npcs);
 
   let unactedPcs = alivePcs.filter(p => !(b.actedPcs || []).includes(p.uid));
   let unactedNpcs = aliveNpcs.filter(n => !(b.actedNpcs || []).includes(n.id));
@@ -757,7 +824,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         fk.known.add(id);
         const attacker = pcs.find(p => p.uid === id) || npcs.find(n => n.id === id);
         const isNpcAtk  = !pcs.find(p => p.uid === id);
-        setSpellFlash({ name: spellName, attackerName: attacker?.charName || attacker?.name || "???", color: isNpcAtk ? C.red : C.blue, spriteRow: attacker?.spriteRow ?? -1, spriteCol: attacker?.spriteCol ?? -1 });
+        const charMatch = isNpcAtk ? CHARACTERS.find(c => c.name === attacker?.name) : null;
+        setSpellFlash({ name: spellName, attackerName: attacker?.charName || attacker?.name || "???", color: isNpcAtk ? C.red : C.blue, spriteRow: attacker?.spriteRow ?? charMatch?.spriteRow ?? -1, spriteCol: attacker?.spriteCol ?? charMatch?.spriteCol ?? -1, customPortrait: attacker?.customPortrait || null });
         sfx.spell(isNpcAtk);
         break;
       }
@@ -790,12 +858,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   const prevCleanupRef = useRef(null);
   useEffect(() => {
     if (b.phase !== "cleanup") { prevCleanupRef.current = null; return; }
-    const result = aliveNpcs.length === 0 ? "victory" : alivePcs.length === 0 ? "defeat" : null;
+    const result = npcsDefeated ? "victory" : alivePcs.length === 0 ? "defeat" : null;
     if (result && result !== prevCleanupRef.current) {
       prevCleanupRef.current = result;
       result === "victory" ? sfx.victory() : sfx.defeat();
     }
-  }, [b.phase, aliveNpcs.length, alivePcs.length]);
+  }, [b.phase, npcsDefeated, alivePcs.length]);
 
   const handleSupportFire = (userUid) => {
     upd(p => ({
@@ -2839,6 +2907,41 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             <div style={{ fontSize: 11, color: C.textDim }}>相手: {npcs.map(n => n.name).join(", ")}</div>
           </div>
 
+          {/* 決戦のみ: GMが任意で追加エネミーを投入できる */}
+          {(() => {
+            const isFinal = b.isFinal ?? (b.type === "mass" && !b.questId);
+            const optionals = gs.scenarioData?.finalBattleOptionalEnemies || [];
+            if (!isFinal || optionals.length === 0) return null;
+            const currentNpcs = b.participants?.npcs || [];
+            return (
+              <div style={{ marginBottom: 16, padding: 10, background: "rgba(192,57,43,0.06)", border: `1px solid ${C.redBorder}40`, borderRadius: 6 }}>
+                <div style={{ fontSize: 10, color: C.red, letterSpacing: 1, marginBottom: 8 }}>⚔️ 追加エネミー（任意投入）</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {optionals.map((opt, i) => {
+                    const optId = `npc_opt_${i}`;
+                    const added = currentNpcs.some(n => n.id === optId);
+                    return (
+                      <button key={i}
+                        onClick={() => upd(p => {
+                          const cur = p.battle.participants?.npcs || [];
+                          const next = added ? cur.filter(n => n.id !== optId) : [...cur, buildBattleNpc(opt, optId)];
+                          return { ...p, battle: { ...p.battle, participants: { ...p.battle.participants, npcs: next } } };
+                        })}
+                        style={btnFull(
+                          added ? C.redBg : "rgba(255,255,255,0.05)",
+                          added ? C.redBorder : C.border,
+                          added ? C.red : C.textDim,
+                          { fontSize: 10, padding: "5px 10px" }
+                        )}>
+                        {added ? "✓ " : "＋ "}{opt.name || `敵${i + 1}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>参加するPCを選択</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -2927,7 +3030,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
 
   if (b.phase === "result") {
     const isVictory  = b.result === "pc_win";
-    const isMass     = b.type === "mass";
+    // 「最終決戦（final）」か否か。type:"mass" は集団戦の演出/機構を表すだけで、
+    // セッション終了などの最終決戦セマンティクスは isFinal で判定する（集団戦クエストと区別）。
+    // 後方互換: 旧セーブの最終決戦は isFinal 未設定だが mass かつ questId 無し。
+    const isFinal    = b.isFinal ?? (b.type === "mass" && !b.questId);
     const questId    = b.questId;
     const relatedQ   = questId ? (gs.quests || []).find(q => String(q.id) === String(questId)) : null;
 
@@ -2947,14 +3053,18 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           });
         }
 
-        const nextSessionPhase = (isVictory && isMass) ? "end" : "explore";
+        const nextSessionPhase = (isVictory && isFinal) ? "end" : "explore";
         const logLine = isVictory
-          ? (isMass ? "🏆 最終決戦制覇！セッション終了！" : `🏆 弾幕ごっこ勝利！クエスト「${relatedQ?.name || ""}」が解決されました。`)
-          : (isMass ? "💀 最終決戦敗北...セッション終了。" : "💀 弾幕ごっこ敗北...探索フェイズへ戻ります。");
+          ? (isFinal ? "🏆 最終決戦制覇！セッション終了！" : `🏆 弾幕ごっこ勝利！クエスト「${relatedQ?.name || ""}」が解決されました。`)
+          : (isFinal ? "💀 最終決戦敗北...セッション終了。" : "💀 弾幕ごっこ敗北...探索フェイズへ戻ります。");
 
+        // クエスト戦（集団戦含む）終了時、参加PC全員を行動済みにする（単体戦は scenePcUid のみ）。
         const scenePcUid = p.battle?.scenePcUid;
-        const nextActedPcs = scenePcUid && !(p.actedPcs || []).includes(scenePcUid)
-          ? [...(p.actedPcs || []), scenePcUid]
+        const finishedUids = questId
+          ? (p.battle?.participantPcUids || (scenePcUid ? [scenePcUid] : []))
+          : [];
+        const nextActedPcs = finishedUids.length
+          ? [...new Set([...(p.actedPcs || []), ...finishedUids])]
           : (p.actedPcs || []);
 
         const recoveredPcs = nextSessionPhase === "explore"
@@ -2985,8 +3095,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
     const borderColor = isVictory ? C.gold : C.red;
     const titleColor  = isVictory ? C.gold : C.red;
     const title       = isVictory
-      ? (isMass ? "🏆 最終決戦制覇！" : "🎉 勝利！")
-      : (isMass ? "💀 最終決戦敗北..." : "💀 敗北...");
+      ? (isFinal ? "🏆 最終決戦制覇！" : "🎉 勝利！")
+      : (isFinal ? "💀 最終決戦敗北..." : "💀 敗北...");
 
     const acColor = isVictory ? C.gold : C.red;
     const acColorDim = isVictory ? C.goldDim : C.redBorder;
@@ -3032,20 +3142,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
           <div style={{ padding: "16px 20px", background: "rgba(0,0,0,0.55)",
             border: `1px solid ${acColorDim}`, borderRadius: 6, marginBottom: 20,
             animation: "brFadeUp 0.45s ease 0.65s both" }}>
-            {isVictory && !isMass && relatedQ && (
+            {isVictory && !isFinal && relatedQ && (
               <>
                 <div style={{ fontSize: 10, color: C.textFaint, letterSpacing: 3, marginBottom: 6 }}>クエスト解決</div>
                 <div style={{ fontSize: 14, color: "#fff", letterSpacing: 1 }}>「{relatedQ.name}」</div>
               </>
             )}
-            {isVictory && isMass && (
+            {isVictory && isFinal && (
               <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.8 }}>
                 全ての強敵を撃破しました。<br />セッションが終了します。
               </div>
             )}
             {!isVictory && (
               <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.8 }}>
-                {isMass ? "最終決戦に敗れました。セッションが終了します。" : "残念でした。探索フェイズへ戻ります。"}
+                {isFinal ? "最終決戦に敗れました。セッションが終了します。" : "残念でした。探索フェイズへ戻ります。"}
               </div>
             )}
           </div>
@@ -3054,7 +3164,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             {isGm ? (
               <button onClick={finishBattle}
                 style={{ ...btnFull(isVictory ? C.goldBg : C.redBg, acColorDim, acColor), padding: "10px", letterSpacing: 2, fontSize: 12 }}>
-                {isMass ? "セッション終了" : "探索フェイズへ戻る"}
+                {isFinal ? "セッション終了" : "探索フェイズへ戻る"}
               </button>
             ) : (
               <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>
@@ -3212,7 +3322,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%", background: "#040608" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "#040608", overflow: "hidden" }}>
+      {/* シーン背景を暗めに流用（GMがシーン背景を設定していれば戦闘背景になる） */}
+      {sceneData?.bg && (
+        <img src={sceneData.bg} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.26, filter: "brightness(0.6) saturate(0.9) blur(1px)", pointerEvents: "none" }} />
+      )}
+      {/* アトモスフィア層: 上部の妖光グラデーション＋下部ビネット（背景画像が無くても奥行きを出す） */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 75% 55% at 50% 30%, rgba(60,40,90,0.35) 0%, transparent 62%), radial-gradient(ellipse 90% 60% at 50% 108%, rgba(0,0,0,0.65) 0%, transparent 55%)" }} />
       <BattleParticleCanvas />
     <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
       <style>{`
@@ -3260,7 +3376,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
             ))}
             <div style={{ fontSize: 9, color: spellFlash.color, letterSpacing: 5, marginBottom: 10, opacity: 0.9 }}>◆ SPELL CARD ◆</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 10 }}>
-              <CharSprite spriteRow={spellFlash.spriteRow} spriteCol={spellFlash.spriteCol} size={48} style={{ borderRadius: 2, border: `1px solid ${spellFlash.color}66` }} />
+              {spellFlash.customPortrait
+                ? <img src={spellFlash.customPortrait} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 2, border: `1px solid ${spellFlash.color}66` }} />
+                : <CharSprite spriteRow={spellFlash.spriteRow} spriteCol={spellFlash.spriteCol} size={48} style={{ borderRadius: 2, border: `1px solid ${spellFlash.color}66` }} />}
               <div>
                 <div style={{ fontSize: 18, color: "#fff", fontWeight: "bold", letterSpacing: 2, whiteSpace: "nowrap", textShadow: `0 0 16px ${spellFlash.color}88` }}>{spellFlash.name}</div>
                 <div style={{ fontSize: 10, color: spellFlash.color, letterSpacing: 3, marginTop: 4, opacity: 0.85 }}>{spellFlash.attackerName}</div>
@@ -3340,7 +3458,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
                   handleEvadeMove(false, num);
                 }
               }}
-              sprite={<div style={{ fontSize: 24 }}>👿</div>}
+              sprite={renderEnemySprite(n, 40)}
             />
           );
         })}
@@ -3379,7 +3497,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice }) {
         {(b.phase === "pc_dropout" || b.phase === "npc_dropout") && renderDropout(b.phase === "pc_dropout")}
 
         {b.phase === "cleanup" && (() => {
-          const allNpcsDead = aliveNpcs.length === 0;
+          const allNpcsDead = npcsDefeated;
           const allPcsDead  = alivePcs.length === 0;
 
           if (allNpcsDead) return (
@@ -5181,6 +5299,44 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     };
   });
 
+  // クエスト解決のための弾幕ごっこを開始する。演出判定の有無に関わらず同じ戦闘を立ち上げる。
+  const startQuestBattle = q => {
+    const enemy = q?.enemy;
+    if (!enemy) return;
+    const isMassQuest = !!q.massBattle;
+    // 集団戦時は enemy + extraEnemies、その場（クエスト場所）にいる全PCが参加する。
+    const enemyList = [enemy, ...(isMassQuest ? (q.extraEnemies || []) : [])].filter(Boolean);
+    const questLoc = sc.questLocation || pc.currentSpot;
+    const massPcUids = gs.pcs.filter(x => x.currentSpot === questLoc).map(x => x.uid);
+    upd(p => {
+      const stamp = Date.now();
+      const npcs = enemyList.map((en, i) => buildBattleNpc(en, `enemy_${i}_${stamp}`)).filter(Boolean);
+      const scenePcUid = p.currentScene?.pcUid;
+      const participantPcUids = isMassQuest
+        ? (massPcUids.length ? massPcUids : [scenePcUid].filter(Boolean))
+        : [scenePcUid].filter(Boolean);
+      return {
+        ...p,
+        currentScene: null,
+        battle: {
+          active: true,
+          type: isMassQuest ? "mass" : "normal",
+          phase: "setup",
+          questId: q.id,
+          scenePcUid,
+          participantPcUids,
+          participants: { npcs },
+        },
+        log: [
+          isMassQuest
+            ? `⚖️ クエスト「${q.name}」解決のため集団戦を開始！`
+            : `⚖️ クエスト「${q.name}」解決のため弾幕ごっこを開始！`,
+          ...p.log,
+        ],
+      };
+    });
+  };
+
   const placeClueWithAnimation = count => {
     animateDice(count * 2, count === 1 ? "手がかり1つ配置" : "手がかり2つ配置", res => {
       upd(p => {
@@ -5995,44 +6151,68 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       if (!enemy) return (
                         <div style={{ fontSize: 11, color: C.red }}>敵データが設定されていません</div>
                       );
+                      const flavor = getPreBattleFlavorRoll(q);
                       return (
                         <button onClick={() => {
-                          upd(p => ({
-                            ...p,
-                            currentScene: null,
-                            battle: {
-                              active: true,
-                              type: "normal",
-                              phase: "setup",
-                              questId: q.id,
-                              scenePcUid: p.currentScene?.pcUid,
-                              participantPcUids: [p.currentScene?.pcUid].filter(Boolean),
-                              participants: {
-                                npcs: [{
-                                  id: "enemy_" + Date.now(),
-                                  name: enemy.name,
-                                  resources: {
-                                    残り人数: { cur: enemy.life,     max: 5 },
-                                    スペルカード: { cur: enemy.spellcard, max: 5 },
-                                    攻撃力:    { cur: enemy.attack,   max: 99 },
-                                    回避力:    { cur: enemy.evade || 3, max: 3 },
-                                    グレイズ:  { cur: 0,             max: 5 }
-                                  },
-                                  ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
-                                  spellCards: [
-                                    { name: enemy.sc1name, desc: enemy.sc1effect, ...(enemy.sc1ref ? { ref: enemy.sc1ref } : {}) },
-                                    { name: enemy.sc2name, desc: enemy.sc2effect, ...(enemy.sc2ref ? { ref: enemy.sc2ref } : {}) }
-                                  ].filter(s => s.name)
-                                }]
-                              }
-                            },
-                            log: [`⚖️ クエスト「${q.name}」解決のため弾幕ごっこを開始！`, ...p.log]
-                          }));
+                          // 演出判定が設定されている場合は、弾幕ごっこ開始前に演出フェーズを挟む。
+                          if (flavor) {
+                            upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "quest_flavor_roll", flavorTarget: flavor.target, flavorRoll: null } }));
+                          } else {
+                            startQuestBattle(q);
+                          }
                         }} style={btnFull(C.redBg, C.redBorder, C.red)}>
-                          ⚔️ 弾幕ごっこを開始する
+                          {flavor ? "▶ 演出判定へ進む" : "⚔️ 弾幕ごっこを開始する"}
                         </button>
                       );
                     })()}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {sc.phase === "quest_flavor_roll" && (() => {
+            const q = gs.quests?.find(x => x.id === sc.questId);
+            const scenePc = gs.pcs.find(p => p.uid === sc.pcUid);
+            const target = sc.flavorTarget || 6;
+            const rolled = sc.flavorRoll;
+            const canRoll = sc.pcUid === user?.uid || isGm;
+            return (
+              <div style={{ animation: "fadeUp 0.3s ease" }}>
+                <div style={{ textAlign: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: C.gold }}>演出判定（目標値: {target}）</div>
+                  <div style={{ fontSize: 9, color: C.textFaint, marginTop: 3 }}>※ 演出のための判定です。スペシャル・ファンブルは発生しません</div>
+                </div>
+
+                {rolled ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 12, color: rolled.success ? C.green : C.textDim, marginBottom: 14, padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
+                      {scenePc?.charName}： {rolled.dice.join(", ")} → 最大 {Math.max(...rolled.dice)}（{rolled.success ? "成功" : "失敗"}）
+                    </div>
+                    {isGm ? (
+                      <button onClick={() => startQuestBattle(q)} style={btnFull(C.redBg, C.redBorder, C.red)}>
+                        ⚔️ 弾幕ごっこを開始する
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: 10, color: C.textFaint }}>GMが弾幕ごっこを開始します…</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 6, border: `1px solid ${C.border}` }}>
+                    {canRoll ? (
+                      <button onClick={() => animateDice(2, "演出判定", res => {
+                        const max = Math.max(...res);
+                        upd(p => ({
+                          ...p,
+                          currentScene: { ...p.currentScene, flavorRoll: { dice: res, success: max >= target } },
+                          log: [`🎭 ${scenePc?.charName} は弾幕ごっこ開始前の演出判定で ${res.join(", ")} を出した。`, ...p.log]
+                        }));
+                      })} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
+                        🎲 演出判定を行う
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: 11, color: C.textFaint }}>{scenePc?.charName} の演出判定を待っています…</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -6473,6 +6653,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [showDiceHistory, setShowDiceHistory] = useState(false);
   const [motionReduced, setMotionReduced] = useState(motion.reduced);
   const toggleMotion = () => { motion.toggle(); setMotionReduced(motion.reduced); };
+  const [showBgm, setShowBgm] = useState(false);
+  const [bgmMuted, setBgmMuted] = useState(bgm.muted);
+  const [bgmVol, setBgmVol] = useState(bgm.volume);
 
   // 探索フェーズのダイス効果音（バトル中は BattleDiceTray が担当するため除外）
   const prevExploreDiceRef = useRef(false);
@@ -6700,9 +6883,50 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {TABS.map(([id, label]) => (
                 <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
               ))}
+              <div onClick={() => setShowBgm(v => !v)} title="BGM設定" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: bgmMuted ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{bgmMuted ? "🔈" : "🎵"}</div>
               <div onClick={toggleMotion} title={motionReduced ? "演出: 抑制中（クリックで通常に戻す）" : "演出: 通常（クリックで抑制）"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{motionReduced ? "🚫" : "🎬"}</div>
               <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
             </div>
+
+            {showBgm && (
+              <div style={{ padding: "10px 12px", borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.015)", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <button
+                    onClick={() => setBgmMuted(bgm.toggleMute())}
+                    style={{ padding: "4px 10px", fontSize: 11, cursor: "pointer", borderRadius: 4, background: bgmMuted ? "rgba(255,255,255,0.03)" : "rgba(200,160,64,0.2)", border: `1px solid ${bgmMuted ? C.border : C.goldDim}`, color: bgmMuted ? C.textFaint : C.gold }}
+                  >{bgmMuted ? "🔈 BGM OFF" : "🎵 BGM ON"}</button>
+                  <input
+                    type="range" min="0" max="1" step="0.05" value={bgmVol}
+                    onChange={e => { const v = parseFloat(e.target.value); setBgmVol(v); bgm.setVolume(v); }}
+                    style={{ flex: 1, accentColor: C.gold, cursor: "pointer" }}
+                    title="音量"
+                  />
+                  <span style={{ fontSize: 9, color: C.textFaint, minWidth: 28, textAlign: "right" }}>{Math.round(bgmVol * 100)}%</span>
+                </div>
+                <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.6, marginBottom: isGm ? 8 : 0 }}>
+                  ※ BGMは各自のブラウザでローカル再生されます{!bgm.unlocked && "（画面をクリックすると再生開始）"}
+                </div>
+                {isGm && (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                    <div style={{ fontSize: 9, color: C.red, letterSpacing: 1, marginBottom: 6 }}>▶ GM: フェーズ別BGMのURL設定</div>
+                    {[["explore", "探索/導入"], ["battle", "弾幕ごっこ"], ["end", "セッション終了"]].map(([key, label]) => (
+                      <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                        <span style={{ fontSize: 9, color: C.textDim, minWidth: 56 }}>{label}</span>
+                        <input
+                          value={(gs.bgm || {})[key] || ""}
+                          onChange={e => { const v = e.target.value; upd(p => ({ ...p, bgm: { ...(p.bgm || {}), [key]: v } })); }}
+                          placeholder="https://…（mp3/ogg）"
+                          style={{ ...iStyle, flex: 1, fontSize: 9, padding: "4px 6px" }}
+                        />
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.6, marginTop: 4 }}>
+                      ※ 直接再生可能な音声ファイルのURLを指定してください。著作権・利用規約はGMの責任で確認を。
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
               {tab === "progress" && (
