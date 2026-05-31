@@ -8,6 +8,7 @@ import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
 import { motion } from "./motion";
+import { bgm } from "./bgm";
 
 import {
   SPOTS, EDGES, NEWSPAPER,
@@ -98,6 +99,7 @@ const DEFAULT_GS = {
   actedPcs: [],
   dice: { rolling: false, results: [], label: "" },
   diceHistory: [],
+  bgm: { explore: "", battle: "", end: "" },
   currentScene: null,
 };
 
@@ -561,6 +563,25 @@ function SessionApp({ roomCode, user }) {
     const unsub = onValue(presRef, snap => setPresence(snap.val() || {}));
     return () => unsub();
   }, [roomCode]);
+
+  // ── BGM: 自動再生のアンロック（初回ポインタ操作） ──────────────────────
+  useEffect(() => {
+    const unlock = () => { bgm.unlock(); window.removeEventListener("pointerdown", unlock); };
+    window.addEventListener("pointerdown", unlock);
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  // ── BGM: フェーズに応じてトラックを切り替え ────────────────────────────
+  useEffect(() => {
+    const b = gs.bgm || {};
+    const url = gs.battle?.active ? (b.battle || "")
+      : gs.sessionPhase === "end" ? (b.end || "")
+      : (b.explore || "");  // intro / explore など通常時
+    bgm.setTrack(url);
+  }, [gs.bgm, gs.battle?.active, gs.sessionPhase]);
+
+  // ルーム離脱時に BGM を停止
+  useEffect(() => () => { bgm.setTrack(""); }, []);
 
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;

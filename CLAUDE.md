@@ -111,6 +111,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `resources` | Shared party resources (やる気, 残り人数, etc.) |
 | `log[]` | Session event log (prepend new entries: `[newMsg, ...p.log]`) |
 | `diceHistory[]` | Roll history `{ label, results[], max, t }`; written by `animateDice` on roll-confirm (prepend, capped at 50). Surfaced in `RightPanel`'s 進行 tab (collapsible) and exported by `SessionEndView`. |
+| `bgm` | GM-set BGM track URLs `{ explore, battle, end }`. Each client plays the phase-appropriate track locally (see BGM section). |
 
 ### Major Components
 
@@ -325,6 +326,10 @@ New entries are prepended: `[newMsg, ...p.log]`.
 **Dice sfx routing**:
 - **Battle dice**: `BattleDiceTray` (inside `BattleView`) fires `sfx.diceRoll()` on rolling-start and `sfx.diceResult(maxDie)` on rolling-end via a `useRef(prevAnim)` watcher.
 - **Explore dice**: `RightPanel` has a parallel `useEffect` watching `gs.dice?.rolling` that fires the same sfx — but **guards with `if (gs.battle?.active) return;`** to avoid double-firing during battle.
+
+### BGM (`src/bgm.js`)
+
+Background music is **GM-supplied URLs, played locally per client** (not synced playback). GM sets `gs.bgm.{explore,battle,end}` track URLs via the 🎵 panel in `RightPanel`; each client's `SessionApp` derives the active URL from phase (`gs.battle?.active` → battle, `sessionPhase === "end"` → end, else explore) and calls `bgm.setTrack(url)`. `bgm` wraps two `HTMLAudioElement`s for **crossfade** on track change. Volume/mute are personal settings in `localStorage` (`bgmVolume`/`bgmMuted`, **default muted**). Browser autoplay policy: `bgm.unlock()` is called on the first `pointerdown` (so `play()` runs inside a user gesture); before unlock, the desired track is remembered and started on unlock. Invalid URLs / autoplay rejections are swallowed silently.
 
 ### Reduced motion (`src/motion.js`)
 
