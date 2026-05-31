@@ -236,6 +236,8 @@ const EMPTY_ENEMY = () => ({
   life: 2,        // 残り人数
   spellcard: 1,    // スペルカード
   attack: 5,       // 攻撃力
+  evade: 3,        // 回避力
+  customPortrait: null,  // 弾幕ごっこ中の立ち絵（未設定時は名前一致スプライト→絵文字）
   ds: { type: "none", name: "", desc: "", customName: "" },
   sc1name: "", sc1effect: "", sc1mode: "custom", sc1ref: "",
   sc2name: "", sc2effect: "", sc2mode: "custom", sc2ref: "",
@@ -254,6 +256,8 @@ const EMPTY_QUEST = () => ({
   location: "",
   truth: "",
   enemy: EMPTY_ENEMY(),
+  massBattle: false,     // true なら弾幕ごっこを集団戦として処理
+  extraEnemies: [],      // 集団戦時の追加敵（enemy に加えて参戦）
 });
 
 const EMPTY_SCENARIO = () => ({
@@ -269,7 +273,10 @@ const EMPTY_SCENARIO = () => ({
   notes: "",
   startSpotType: "base",  // "base" (各PCの拠点) | "fixed" (全員同じスポット)
   startSpotId: "",        // startSpotType==="fixed" のときのスポットID
+  blockedSpots: [],       // 探索フェイズ中に訪問不可のスポットID（Hard/Lunatic 追加ルール）
+  spotRebind: {},         // 拠点リダイレクト { 封鎖スポットID: 代替スポットID }
   finalBattleEnemies: [],
+  finalBattleOptionalEnemies: [],  // 決戦でGMが任意投入できる候補エネミー
   createdAt: Date.now(),
   updatedAt: Date.now(),
 });
@@ -277,6 +284,126 @@ const EMPTY_SCENARIO = () => ({
 const DIFFICULTIES = ["Easy","Normal","Hard","Lunatic"];
 const SOLUTION_TYPES = ["行為判定","弾幕ごっこ","自動解決"];
 const SOLUTION_COLORS = { "行為判定":C.blue, "弾幕ごっこ":C.red, "自動解決":C.green };
+
+// ── 立ち絵アップロード（128px 正方形にセンタークロップして dataURL 化） ──────
+function PortraitUpload({ value, onChange }) {
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+      <div style={{ width:38, height:38, borderRadius:4, border:`1px solid ${C.border}`, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(255,255,255,0.03)", flexShrink:0 }}>
+        {value ? <img src={value} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:16, opacity:0.5 }}>👿</span>}
+      </div>
+      <label style={{ padding:"4px 10px", border:`1px dashed ${C.border}`, borderRadius:3, cursor:"pointer", fontSize:9, color:C.textFaint }}>
+        {value ? "立ち絵を変更" : "立ち絵を設定"}
+        <input type="file" accept="image/*" style={{ display:"none" }} onChange={e => {
+          const f = e.target.files[0];
+          if (!f) return;
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => {
+              const size = 128;
+              const s = Math.min(img.width, img.height);
+              const canvas = document.createElement("canvas");
+              canvas.width = size; canvas.height = size;
+              canvas.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+              onChange(canvas.toDataURL("image/jpeg", 0.82));
+            };
+            img.src = ev.target.result;
+          };
+          reader.readAsDataURL(f);
+        }} />
+      </label>
+      {value && <button onClick={() => onChange(null)} style={{ background:"none", border:"none", color:C.textFaint, cursor:"pointer", fontSize:9 }}>削除</button>}
+    </div>
+  );
+}
+
+// ── 汎用エネミーエディタ（集団戦の追加敵・決戦の任意候補で共用） ──────────
+function EnemyEditor({ enemy, onChange, showPrimary = false }) {
+  const en = enemy || EMPTY_ENEMY();
+  const upd = patch => onChange({ ...en, ...patch });
+  const updDs = patch => onChange({ ...en, ds: { ...(en.ds || {}), ...patch } });
+  const sc1mode = en.sc1mode || "custom";
+  const sc2mode = en.sc2mode || "custom";
+  return (
+    <div style={{ padding:10, background:"rgba(255,255,255,0.02)", border:`1px solid ${C.border}`, borderRadius:4 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 52px 52px 52px 52px", gap:6, marginBottom:8 }}>
+        <div><Label>エネミー名 *</Label><input style={iBase} value={en.name} onChange={e => upd({ name:e.target.value })} placeholder="敵名"/></div>
+        <div><Label>残人数</Label><input type="number" min="1" max="99" style={iBase} value={en.life??2} onChange={e => upd({ life:parseInt(e.target.value)||1 })}/></div>
+        <div><Label>スペカ</Label><input type="number" min="0" max="9" style={iBase} value={en.spellcard??1} onChange={e => upd({ spellcard:parseInt(e.target.value)||0 })}/></div>
+        <div><Label>攻撃</Label><input type="number" min="0" max="99" style={iBase} value={en.attack??5} onChange={e => upd({ attack:parseInt(e.target.value)||0 })}/></div>
+        <div><Label>回避</Label><input type="number" min="0" max="3" style={iBase} value={en.evade??3} onChange={e => upd({ evade:parseInt(e.target.value)||0 })}/></div>
+      </div>
+
+      <div style={{ marginBottom:8 }}>
+        <Label>立ち絵（任意・未設定時は名前一致のキャラ絵）</Label>
+        <PortraitUpload value={en.customPortrait || null} onChange={v => upd({ customPortrait: v })}/>
+      </div>
+
+      {showPrimary && (
+        <button onClick={() => upd({ primary: !en.primary })}
+          style={{ ...btn(en.primary?C.redBg:"rgba(255,255,255,0.02)", en.primary?C.redBorder:C.border, en.primary?C.red:C.textFaint, { padding:"3px 10px", fontSize:9, marginBottom:8 }) }}>
+          {en.primary ? "☑" : "☐"} 主敵（撃破で決戦終了）
+        </button>
+      )}
+
+      <Label>弾幕スキル</Label>
+      <div style={{ display:"flex", gap:4, marginBottom:6 }}>
+        {["none","official","custom"].map(v => (
+          <button key={v} onClick={() => updDs({ type:v })}
+            style={{ ...btn((en.ds?.type||"none")===v?"rgba(200,160,64,0.2)":"rgba(255,255,255,0.02)", (en.ds?.type||"none")===v?C.goldDim:C.border, (en.ds?.type||"none")===v?C.gold:C.textFaint, { padding:"3px 8px", fontSize:9 }) }}>
+            {v==="none"?"なし":v==="official"?"公式":"カスタム"}
+          </button>
+        ))}
+      </div>
+      {en.ds?.type === "official" && (
+        <select style={{...iBase, marginBottom:6}} value={en.ds?.name || ""} onChange={e => {
+          const sk = OFFICIAL_DANMAKU_SKILLS.find(s => s.name === e.target.value);
+          updDs({ name:e.target.value, desc:sk?.desc || "" });
+        }}>
+          <option value="">スキルを選択…</option>
+          {OFFICIAL_DANMAKU_SKILLS.map(sk => <option key={sk.name} value={sk.name}>{sk.name}</option>)}
+        </select>
+      )}
+      {en.ds?.type === "custom" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:6 }}>
+          <input style={iBase} value={en.ds?.customName || ""} onChange={e => updDs({ customName:e.target.value })} placeholder="スキル名"/>
+          <textarea style={{...iBase, height:38}} value={en.ds?.desc || ""} onChange={e => updDs({ desc:e.target.value })} placeholder="スキル効果"/>
+        </div>
+      )}
+
+      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        <SpellCardEditor label="スペルカード①（任意）" name={en.sc1name||""} effect={en.sc1effect||""} mode={sc1mode} cardRef={en.sc1ref||""}
+          onChange={({name,effect,mode,ref}) => onChange({ ...en, sc1name:name, sc1effect:effect, sc1mode:mode, sc1ref:ref||"" })}/>
+        <SpellCardEditor label="スペルカード②（任意）" name={en.sc2name||""} effect={en.sc2effect||""} mode={sc2mode} cardRef={en.sc2ref||""}
+          onChange={({name,effect,mode,ref}) => onChange({ ...en, sc2name:name, sc2effect:effect, sc2mode:mode, sc2ref:ref||"" })}/>
+      </div>
+    </div>
+  );
+}
+
+// エネミーのリスト編集（追加/削除）。集団戦の extraEnemies・決戦の任意候補で共用。
+function EnemyListEditor({ enemies, onChange, addLabel = "＋ 敵を追加", showPrimary = false }) {
+  const list = enemies || [];
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      {list.map((en, i) => (
+        <div key={i}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
+            <span style={{ fontSize:9, color:C.textFaint }}>#{i+1}</span>
+            <button onClick={() => onChange(list.filter((_, j) => j !== i))}
+              style={{ background:"none", border:"none", color:C.textFaint, cursor:"pointer", fontSize:11 }}>✕ 削除</button>
+          </div>
+          <EnemyEditor enemy={en} showPrimary={showPrimary} onChange={ne => onChange(list.map((x, j) => j === i ? ne : x))}/>
+        </div>
+      ))}
+      <button onClick={() => onChange([...list, EMPTY_ENEMY()])}
+        style={btn(C.redBg, C.redBorder, C.red, { padding:"5px 14px", fontSize:10, alignSelf:"flex-start" })}>
+        {addLabel}
+      </button>
+    </div>
+  );
+}
 
 // ── Quest Editor ─────────────────────────────────────
 function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
@@ -435,23 +562,33 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
             return (
               <div style={{ padding:12, background:C.redBg, border:`1px solid ${C.redBorder}60`, borderRadius:4 }}>
                 {/* 基本ステータス */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 70px 70px", gap:8, marginBottom:4 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 58px 58px 58px 58px", gap:8, marginBottom:4 }}>
                   <div>
                     <Label>エネミー名 *</Label>
                     <input style={iBase} value={en.name} onChange={e => updEnemy("name",e.target.value)} placeholder="例: 謎の妖怪"/>
                   </div>
                   <div>
-                    <Label>残り人数</Label>
+                    <Label>残人数</Label>
                     <input type="number" min="1" max="99" style={iBase} value={en.life??2} onChange={e => updEnemy("life",parseInt(e.target.value)||1)}/>
                   </div>
                   <div>
-                    <Label>スペルカード</Label>
+                    <Label>スペカ</Label>
                     <input type="number" min="0" max="9" style={iBase} value={en.spellcard??1} onChange={e => updEnemy("spellcard",parseInt(e.target.value)||0)}/>
                   </div>
                   <div>
                     <Label>攻撃力</Label>
                     <input type="number" min="0" max="99" style={iBase} value={en.attack??5} onChange={e => updEnemy("attack",parseInt(e.target.value)||0)}/>
                   </div>
+                  <div>
+                    <Label>回避力</Label>
+                    <input type="number" min="0" max="3" style={iBase} value={en.evade??3} onChange={e => updEnemy("evade",parseInt(e.target.value)||0)}/>
+                  </div>
+                </div>
+
+                {/* 立ち絵 */}
+                <div style={{ marginBottom:6 }}>
+                  <Label>立ち絵（任意・未設定時は名前一致のキャラ絵）</Label>
+                  <PortraitUpload value={en.customPortrait || null} onChange={v => updEnemy("customPortrait", v)}/>
                 </div>
 
                 {/* 弾幕スキル */}
@@ -523,6 +660,24 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   />
                 </div>
 
+                {/* 集団戦設定（Hard/Lunatic 向け） */}
+                <div style={{ marginTop:8, padding:"8px 10px", background:"rgba(255,255,255,0.02)", border:`1px solid ${C.border}`, borderRadius:4 }}>
+                  <button onClick={() => upd("massBattle", !quest.massBattle)}
+                    style={{ ...btn(quest.massBattle?C.redBg:"rgba(255,255,255,0.02)", quest.massBattle?C.redBorder:C.border, quest.massBattle?C.red:C.textFaint, { padding:"3px 10px", fontSize:10 }) }}>
+                    {quest.massBattle ? "☑" : "☐"} 集団戦にする
+                  </button>
+                  <div style={{ fontSize:8, color:C.textFaint, marginTop:4, lineHeight:1.5 }}>
+                    上のエネミーに加え下記の追加敵が参戦し、解決場所にいる全PCで戦います。全ての敵を撃破でクエスト解決。
+                  </div>
+                  {quest.massBattle && (
+                    <div style={{ marginTop:8 }}>
+                      <Label>追加敵</Label>
+                      <EnemyListEditor enemies={quest.extraEnemies || []} addLabel="＋ 追加敵を足す"
+                        onChange={list => upd("extraEnemies", list)}/>
+                    </div>
+                  )}
+                </div>
+
                 {/* 解決場所 */}
                 <div style={{ marginTop:8 }}>
                   <Label>解決場所</Label>
@@ -530,6 +685,32 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                     <option value="">スポットを選択…</option>
                     {SPOTS.map(s => <option key={s.id} value={s.id}>{s.name}（{s.id}）</option>)}
                   </select>
+                </div>
+
+                {/* 演出判定（弾幕ごっこ開始前・Hard/Lunatic 向け） */}
+                <div style={{ marginTop:8, padding:"8px 10px", background:"rgba(255,255,255,0.02)", border:`1px solid ${C.border}`, borderRadius:4 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                    <button onClick={() => upd("preBattleFlavorRoll", quest.preBattleFlavorRoll ? null : { target: 6 })}
+                      style={{ ...btn(
+                        quest.preBattleFlavorRoll ? C.goldBg : "rgba(255,255,255,0.02)",
+                        quest.preBattleFlavorRoll ? C.goldDim : C.border,
+                        quest.preBattleFlavorRoll ? C.gold : C.textFaint,
+                        { padding:"3px 10px", fontSize:10 }
+                      )}}>
+                      {quest.preBattleFlavorRoll ? "☑" : "☐"} 開始前に演出判定を挟む
+                    </button>
+                    {quest.preBattleFlavorRoll && (
+                      <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                        <span style={{ fontSize:9, color:C.textFaint }}>目標値</span>
+                        <input type="number" min="1" max="6" style={{...iBase, width:50}}
+                          value={quest.preBattleFlavorRoll.target ?? 6}
+                          onChange={e => upd("preBattleFlavorRoll", { target: parseInt(e.target.value)||6 })}/>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize:8, color:C.textFaint, marginTop:4, lineHeight:1.5 }}>
+                    弾幕ごっこ開始前に、スペシャル・ファンブルの発生しない演出専用の行為判定を挟みます。
+                  </div>
                 </div>
               </div>
             );
@@ -727,6 +908,65 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               onChange={e => upd("notes",e.target.value)}
               placeholder="GMだけが見るメモ（セッション中には非表示）"/>
           </div>
+
+          {/* 追加ルール（Hard / Lunatic 時のみ表示） */}
+          {(sc.difficulty === "Hard" || sc.difficulty === "Lunatic") && (
+            <div style={{ background:C.card, border:`1px solid ${C.gold}40`, borderRadius:6, padding:14, marginTop:12 }}>
+              <SecTitle>追加ルール（{sc.difficulty}）</SecTitle>
+              <div style={{ fontSize:9, color:C.textFaint, marginBottom:10 }}>
+                通常ルールに含まれない変則裁定。設定したものはセッションのエンジンに自動反映されます。
+              </div>
+
+              {/* 立入禁止スポット */}
+              <Label>立入禁止スポット（探索フェイズ中に訪問不可）</Label>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(98px,1fr))",gap:4,maxHeight:180,overflowY:"auto",marginBottom:10}}>
+                {SPOTS.filter(s => s.id !== "dream").map(s => {
+                  const on = (sc.blockedSpots||[]).includes(s.id);
+                  return (
+                    <div key={s.id} onClick={() => setSc(p => {
+                      const cur = p.blockedSpots||[];
+                      const next = on ? cur.filter(x=>x!==s.id) : [...cur, s.id];
+                      const rebind = {...(p.spotRebind||{})};
+                      if (on) delete rebind[s.id];  // 封鎖解除したらリダイレクトも掃除
+                      return { ...p, blockedSpots: next, spotRebind: rebind };
+                    })} style={{
+                      padding:"3px 5px",borderRadius:4,cursor:"pointer",textAlign:"center",
+                      background:on?"rgba(224,112,96,0.18)":"rgba(255,255,255,0.02)",
+                      border:`1px solid ${on?C.redBorder:C.border}`, opacity:on?1:0.7,
+                    }}>
+                      <div style={{fontSize:8,color:on?C.red:C.textDim,lineHeight:1.3}}>[{s.roll}] {s.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 拠点リダイレクト */}
+              {(sc.blockedSpots||[]).length > 0 && (
+                <div>
+                  <Label>拠点リダイレクト（封鎖スポットが拠点のPCの代替拠点）</Label>
+                  {(sc.blockedSpots||[]).map(bid => {
+                    const bs = SPOTS.find(s=>s.id===bid);
+                    return (
+                      <div key={bid} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                        <span style={{ fontSize:10, color:C.textDim, width:120, flexShrink:0 }}>{bs?.name||bid} →</span>
+                        <select style={{...iBase, flex:1}} value={(sc.spotRebind||{})[bid]||""}
+                          onChange={e => setSc(p => {
+                            const rebind = {...(p.spotRebind||{})};
+                            if (e.target.value) rebind[bid] = e.target.value; else delete rebind[bid];
+                            return { ...p, spotRebind: rebind };
+                          })}>
+                          <option value="">（リダイレクトしない）</option>
+                          {SPOTS.filter(s=>s.id!=="dream" && !(sc.blockedSpots||[]).includes(s.id)).map(s =>
+                            <option key={s.id} value={s.id}>[{s.roll}] {s.name}</option>
+                          )}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 右列: クエスト */}
@@ -765,88 +1005,15 @@ function ScenarioForm({ initial, onSave, onCancel }) {
           </div>
           
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {(sc.finalBattleEnemies || []).map((en, i) => {
-              const sc1mode = en.sc1mode || "custom";
-              const sc2mode = en.sc2mode || "custom";
-              
-              return (
-                <div key={i} style={{ padding: 12, background: "rgba(192,57,43,0.05)", borderRadius: 5, border: `1px solid ${C.redBorder}40`, position: "relative" }}>
-                  {/* ヘッダー */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 6 }}>
-                    <span style={{ fontSize: 10, color: C.red, fontWeight: "bold" }}>ENEMY #{i + 1}</span>
-                    <button onClick={() => deleteFinalEnemy(i)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 11 }}>✕ 削除</button>
-                  </div>
-
-                  {/* 基本ステータス */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px 70px", gap: 8, marginBottom: 12 }}>
-                    <div>
-                      <Label>エネミー名 *</Label>
-                      <input style={iBase} value={en.name} onChange={e => updateFinalEnemy(i, { ...en, name: e.target.value })} placeholder="例: 堕ちた巫女" />
-                    </div>
-                    <div>
-                      <Label>残り人数</Label>
-                      <input type="number" style={iBase} value={en.life} onChange={e => updateFinalEnemy(i, { ...en, life: parseInt(e.target.value) || 1 })} />
-                    </div>
-                    <div>
-                      <Label>スペルカード</Label>
-                      <input type="number" style={iBase} value={en.spellcard} onChange={e => updateFinalEnemy(i, { ...en, spellcard: parseInt(e.target.value) || 0 })} />
-                    </div>
-                    <div>
-                      <Label>攻撃力</Label>
-                      <input type="number" style={iBase} value={en.attack} onChange={e => updateFinalEnemy(i, { ...en, attack: parseInt(e.target.value) || 1 })} />
-                    </div>
-                  </div>
-
-                  {/* 弾幕スキル設定 */}
-                  <div style={{ marginBottom: 12 }}>
-                    <Label>弾幕スキル</Label>
-                    <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-                      {["none", "official", "custom"].map(v => (
-                        <button key={v} onClick={() => updateFinalEnemy(i, { ...en, ds: { ...(en.ds || {}), type: v } })}
-                          style={{ ...btn((en.ds?.type || "none") === v ? "rgba(255,255,255,0.1)" : "transparent", C.border, (en.ds?.type || "none") === v ? C.gold : C.textFaint, { padding: "3px 8px", fontSize: 9 }) }}>
-                          {v === "none" ? "なし" : v === "official" ? "公式" : "カスタム"}
-                        </button>
-                      ))}
-                    </div>
-                    {en.ds?.type === "official" && (
-                      <select style={iBase} value={en.ds?.name || ""} onChange={e => {
-                        const sk = OFFICIAL_DANMAKU_SKILLS.find(s => s.name === e.target.value);
-                        updateFinalEnemy(i, { ...en, ds: { ...(en.ds || {}), name: e.target.value, desc: sk?.desc || "" } });
-                      }}>
-                        <option value="">スキルを選択…</option>
-                        {OFFICIAL_DANMAKU_SKILLS.map(sk => <option key={sk.name} value={sk.name}>{sk.name}</option>)}
-                      </select>
-                    )}
-                    {en.ds?.type === "custom" && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <input style={iBase} value={en.ds?.customName || ""} onChange={e => updateFinalEnemy(i, { ...en, ds: { ...(en.ds || {}), customName: e.target.value } })} placeholder="スキル名" />
-                        <textarea style={{ ...iBase, height: 40 }} value={en.ds?.desc || ""} onChange={e => updateFinalEnemy(i, { ...en, ds: { ...(en.ds || {}), desc: e.target.value } })} placeholder="スキル効果" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* スペルカード設定 */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <SpellCardEditor
-                      label="スペルカード①（任意）"
-                      name={en.sc1name || ""}
-                      effect={en.sc1effect || ""}
-                      mode={sc1mode}
-                      cardRef={en.sc1ref || ""}
-                      onChange={({ name, effect, mode, ref }) => updateFinalEnemy(i, { ...en, sc1name: name, sc1effect: effect, sc1mode: mode, sc1ref: ref || "" })}
-                    />
-                    <SpellCardEditor
-                      label="スペルカード②（任意）"
-                      name={en.sc2name || ""}
-                      effect={en.sc2effect || ""}
-                      mode={sc2mode}
-                      cardRef={en.sc2ref || ""}
-                      onChange={({ name, effect, mode, ref }) => updateFinalEnemy(i, { ...en, sc2name: name, sc2effect: effect, sc2mode: mode, sc2ref: ref || "" })}
-                    />
-                  </div>
+            {(sc.finalBattleEnemies || []).map((en, i) => (
+              <div key={i} style={{ padding: 12, background: "rgba(192,57,43,0.05)", borderRadius: 5, border: `1px solid ${C.redBorder}40` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 6 }}>
+                  <span style={{ fontSize: 10, color: C.red, fontWeight: "bold" }}>ENEMY #{i + 1}</span>
+                  <button onClick={() => deleteFinalEnemy(i)} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 11 }}>✕ 削除</button>
                 </div>
-              );
-            })}
+                <EnemyEditor enemy={en} showPrimary onChange={ne => updateFinalEnemy(i, ne)} />
+              </div>
+            ))}
 
             {(!sc.finalBattleEnemies || sc.finalBattleEnemies.length === 0) && (
               <div style={{ padding: "20px", textAlign: "center", border: `1px dashed ${C.redBorder}40`, borderRadius: 5 }}>
@@ -854,6 +1021,16 @@ function ScenarioForm({ initial, onSave, onCancel }) {
                 <div style={{ fontSize: 9, color: C.red, marginTop: 4 }}>※集団戦を行うには1人以上の敵が必要です。</div>
               </div>
             )}
+
+            {/* 任意投入候補エネミー（GMが決戦開始時に投入を選べる） */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 2 }}>追加候補エネミー（GMが任意投入）</div>
+              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 8 }}>
+                決戦の開始時、GMがここから0体以上を選んで投入できます（例: ゆっくりを引き連れた集団戦）。主敵を全滅させれば、これらが残っていても決戦は終了します。
+              </div>
+              <EnemyListEditor enemies={sc.finalBattleOptionalEnemies || []} addLabel="＋ 候補を追加"
+                onChange={list => setSc(p => ({ ...p, finalBattleOptionalEnemies: list }))} />
+            </div>
           </div>
         </div>
         </div>

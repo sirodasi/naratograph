@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
-import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS } from "./SessionView";
+import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
@@ -15,6 +15,7 @@ import {
   OFFICIAL_DANMAKU_SKILLS,
 } from "./data/gameData";
 import { SPOT_DETAILS } from "./data/spots";
+import { getBlockedSpots, resolveBaseSpot } from "./scenarios";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
 
@@ -146,6 +147,8 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const maxDist     = gs.currentScene?.selectedMoveDie || 0;
   const myPc        = (gs.pcs || []).find(p => p.uid === user?.uid);
   const mySpot      = myPc?.currentSpot;
+  // このシナリオで探索不可のスポット（例: 紅魔館封鎖）。移動先候補から除外する。
+  const blockedSpots = getBlockedSpots(gs.scenarioData, gs);
 
   if (gs.sceneMode) {
     return (
@@ -210,6 +213,8 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
           if (r === 45 && spot.id === "45") newsMarker = "🎲";
         }
 
+        const isBlocked = !isDream && blockedSpots.includes(spot.id);
+
         let isReachable = false;
         if (isMovePhase) {
           isReachable = exactDist ? distance === exactDist : (distance > 0 && distance <= maxDist);
@@ -218,6 +223,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
           if (gs.newspaper?.roll === 16 && isYoukai && spot.id === "11") {
             isReachable = false;
           }
+          if (isBlocked) isReachable = false;
         }
 
         const sx       = mapBounds.left + (spot.x / 100) * mapBounds.width;
@@ -227,6 +233,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         const isMySpot = !isDream && mySpot === spot.id;
 
         let borderCol = areaColor(spot.area).border;
+        if (isBlocked && !hasClue && !newsMarker && !isMySpot) borderCol = "#6b3a35";
         if (isMySpot && !hasClue && !isReachable) borderCol = "#c8a040";
         if (newsMarker)  borderCol = "#ffb74d";
         if (hasClue)     borderCol = "#00e5ff";
@@ -262,6 +269,13 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
             {newsMarker && (
               <div style={{ position: "absolute", bottom: -Math.round(8 * scale * 1.4), left: -Math.round(8 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px rgba(255,183,77,0.8))", zIndex: 20 }}>
                 {newsMarker}
+              </div>
+            )}
+
+            {/* 立入禁止マーカー（シナリオで封鎖されたスポット） */}
+            {isBlocked && (
+              <div style={{ position: "absolute", top: -Math.round(9 * scale * 1.4), right: -Math.round(9 * scale * 1.4), fontSize: Math.round(12 * scale * 1.4), filter: "drop-shadow(0 0 4px rgba(224,112,96,0.85))", zIndex: 20 }}>
+                🚫
               </div>
             )}
 
@@ -318,6 +332,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
                   {pcsHere.length > 0 && <div style={{ fontSize: 10, color: "#ef9a9a", marginTop: 4 }}>● {pcsHere.map(p => p.charName || p.name).join("・")}</div>}
                   {hasClue && <div style={{ fontSize: 10, color: "#00e5ff", marginTop: 2 }}>💡 手がかりあり</div>}
                   {newsMarker && <div style={{ fontSize: 10, color: "#ffb74d", marginTop: 2 }}>{newsMarker} 新聞の特殊効果あり</div>}
+                  {isBlocked && <div style={{ fontSize: 10, color: "#e07060", marginTop: 2 }}>🚫 立入禁止（このシナリオでは訪問できません）</div>}
                 </div>
               );
             })()}
@@ -657,7 +672,9 @@ function SessionApp({ roomCode, user }) {
         const charData   = CHARACTERS.find(c => c.id === p.charId) ?? null;
         const charBase   = charData?.base ?? p.base ?? "人間の里";
         const baseSpot   = SPOTS.find(s => s.name === charBase || charBase.includes(s.name));
-        const baseSpotId = baseSpot?.id ?? "11";
+        // 拠点が封鎖されているシナリオでは spotRebind で代替スポットへリダイレクト（例: 紅魔館→霧の湖）。
+        // baseSpotId 自体を付け替えることで、開始時だけでなく夜の拠点帰還にも反映される。
+        const baseSpotId = resolveBaseSpot(r?.scenarioData, baseSpot?.id ?? "11");
 
         let startSpotId = r?.scenarioData?.startSpotId ?? null;
         if (r?.scenarioData?.startSpotType === "base") startSpotId = baseSpotId;
@@ -745,7 +762,6 @@ function SessionApp({ roomCode, user }) {
   };
 
   const startGambleBattle = (quest) => {
-    const enemy = quest.enemy;
     upd(p => ({
       ...p,
       battle: {
@@ -753,24 +769,7 @@ function SessionApp({ roomCode, user }) {
         type: "normal",
         phase: "setup",
         questId: quest.id,
-        participants: {
-          npcs: [{
-            id: "enemy_" + Date.now(),
-            name: enemy.name,
-            resources: {
-              残り人数: { cur: enemy.life, max: 5 },
-              スペルカード: { cur: enemy.spellcard, max: 5 },
-              攻撃力: { cur: enemy.attack, max: 99 },
-              回避力: { cur: enemy.evade || 3, max: 3 },
-              グレイズ: { cur: 0, max: 5 }
-            },
-            ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
-            spellCards: [
-              { name: enemy.sc1name, desc: enemy.sc1effect, ...(enemy.sc1ref ? { ref: enemy.sc1ref } : {}) },
-              { name: enemy.sc2name, desc: enemy.sc2effect, ...(enemy.sc2ref ? { ref: enemy.sc2ref } : {}) }
-            ].filter(s => s.name)
-          }]
-        }
+        participants: { npcs: [buildBattleNpc(quest.enemy, "enemy_" + Date.now())].filter(Boolean) }
       }
     }));
   };
@@ -912,25 +911,14 @@ function SessionApp({ roomCode, user }) {
     const currentCycleIdx = gs.cycleIdx;
 
     const scenarioEnemies = gs.scenarioData?.finalBattleEnemies || [];
-    const battleEnemies = scenarioEnemies.map((en, idx) => ({
-      id: `npc_final_${idx}`,
-      name: en.name || `強敵${idx + 1}`,
-      resources: {
-        残り人数: { cur: en.life, max: 5 },
-        スペルカード: { cur: en.spellcard, max: 5 },
-        攻撃力: { cur: en.attack, max: 99 },
-        回避力: { cur: en.evade || 3, max: 3 }
-      },
-      ds: en.ds ?? { name: en.dsName || en.dsCustomName || "", desc: en.dsDesc || "" },
-      spellCards: [
-        { name: en.sc1name, desc: en.sc1effect, ...(en.sc1ref ? { ref: en.sc1ref } : {}) },
-        { name: en.sc2name, desc: en.sc2effect, ...(en.sc2ref ? { ref: en.sc2ref } : {}) }
-      ].filter(s => s.name)
-    }));
+    const battleEnemies = scenarioEnemies.map((en, idx) =>
+      buildBattleNpc({ ...en, name: en.name || `強敵${idx + 1}` }, `npc_final_${idx}`)
+    );
 
     const initialBattle = {
       active: true,
       type: "mass",
+      isFinal: true,
       phase: "setup",
       round: 1,
       participants: { npcs: battleEnemies },
@@ -1111,7 +1099,7 @@ function SessionApp({ roomCode, user }) {
         ) : gs.battle?.active ? (
           <div style={{ width: "100%", height: "100%", animation: "battleFadeIn 0.48s ease both" }}>
             <BattleView
-              gs={gs} upd={upd} user={user} isGm={mode === "gm"}
+              gs={gs} upd={upd} user={user} isGm={mode === "gm"} sceneData={sceneData}
               animateDice={animateDice}
               diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} diceLabel={gs.dice?.label}
             />
