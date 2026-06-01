@@ -582,6 +582,7 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "extra_support_cover_with_die_choice",
   "enemy_forced_to_attacker_number_cell",
   "enemy_move_adjacent_if_same_number",
+  "enemy_move_adjacent",
   "shift_non_25_horizontal",
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
@@ -1196,6 +1197,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 const cand = ADJACENT_MAP[defPos] || [];
                 if (cand.length > 0) moveSelect = { defenderId, candidates: cand, spellName: spellCard.name };
               }
+            } else if (ef.type === "enemy_move_adjacent") {
+              // 無条件で回避側を上下左右隣接マスへ移動（四重結界・剛欲）
+              const cand = ADJACENT_MAP[defPos] || [];
+              if (cand.length > 0) moveSelect = { defenderId, candidates: cand, spellName: spellCard.name };
             }
           }
           const moveLog = moveSelect ? "（回避側の移動先を選択してください）"

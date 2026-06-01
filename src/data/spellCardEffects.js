@@ -245,7 +245,7 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ 八雲紫
   "境符「四重結界」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "adjacent_enemy", count: 1 }],
     effects: [{ type: "enemy_move_adjacent" }],
   },
@@ -1001,7 +1001,7 @@ export const SPELL_CARD_EFFECTS = {
     steps: [{ type: "random", count: 4 }],
   },
   "剛欲「この世に存在してはならない暴食」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "self", count: 2 }],
     effects: [{ type: "enemy_move_adjacent" }],
   },
