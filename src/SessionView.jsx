@@ -580,6 +580,8 @@ export function parseSpell(text) {
 export const AUTO_HANDLED_EFFECTS = new Set([
   "extra_support_cover",
   "extra_support_cover_with_die_choice",
+  "double_support_cover",                 // 上海人形: 援護/かばう2回
+  "extra_familiar_per_round_this_phase",  // ホークビーコン: フェイズ中・毎ラウンド1回
   "enemy_forced_to_attacker_number_cell",
   "enemy_move_adjacent_if_same_number",
   "enemy_move_adjacent",
@@ -1244,6 +1246,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasRemoveFromEnemy = effList.some(e => e.type === "remove_from_enemy_cell");  // パパラッチ: 回避側マスを1除去
           const hasRemoveIfHit = effList.some(e => e.type === "remove_if_hit_enemy_cell");     // ペガサスクロス: 配置で置かれた分を除去
           const hasSelfMoveEmpty = effList.some(e => e.type === "self_move_empty");            // シンガーゴースト: 自機を空きマスへ
+          const hasExtraFamiliar = effList.some(e => e.type === "extra_familiar_per_round_this_phase"); // ホークビーコン: フェイズ中・毎ラウンド追加介入
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1284,8 +1287,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
                   ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
                   ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+                  ...(hasExtraFamiliar ? { extraFamiliarPhase: [...new Set([...(p.battle.extraFamiliarPhase || []), attackerId])] } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });
@@ -1295,20 +1299,22 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       // その他の choice step (directional_move_shoot 等) / auto=partial のランダム → テキスト解析ベース処理へ
     }
 
-    // ── 構造化 effects: extra_support_cover / extra_support_cover_with_die_choice ──
+    // ── 構造化 effects: extra_support_cover 系 / double_support_cover ──
     // ステップの有無に関わらず、これらの効果は宣言時に即座に援護/かばう権を付与する
+    // （double_support_cover（上海人形）は count 未指定 → 2回）
     if (structured?.effects?.length > 0) {
       const extraEffect = structured.effects.find(e =>
-        e.type === "extra_support_cover" || e.type === "extra_support_cover_with_die_choice"
+        e.type === "extra_support_cover" || e.type === "extra_support_cover_with_die_choice" || e.type === "double_support_cover"
       );
       if (extraEffect) {
         const withDieChoice = extraEffect.type === "extra_support_cover_with_die_choice";
+        const count = extraEffect.count ?? 2;
         upd(p => ({
           ...mergeConsumeWithBattle(p, {
             spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-            extraInterventionPool: { remaining: extraEffect.count, usedDice: [], withDieChoice },
+            extraInterventionPool: { remaining: count, usedDice: [], withDieChoice },
           }),
-          log: [`🔮 ${attackerName}：${spellCard.name}！ (援護/かばう+${extraEffect.count}回${withDieChoice ? "・ダイス任意" : ""})`, ...p.log],
+          log: [`🔮 ${attackerName}：${spellCard.name}！ (援護/かばう+${count}回${withDieChoice ? "・ダイス任意" : ""})`, ...p.log],
         }));
         return;
       }
@@ -2112,6 +2118,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           currentEvadeDice: getDefaultEvadeDice(restoredPcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
+          usedExtraFamiliar: {},  // ホークビーコンは毎ラウンド1回（extraFamiliarPhase 自体は ...currentB で維持）
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
@@ -3434,6 +3441,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           pcCombatant: pcUid,
           npcCombatant: npcId,
           usedIntervention: {},
+          usedExtraFamiliar: {},
           pcFamiliarAction: null,
           npcFamiliarAction: null,
           usedds: {},
@@ -7746,6 +7754,41 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   };
   const interventionUsed = b.usedIntervention?.[user.uid];
 
+  // ─── ホークビーコン（extra_familiar_per_round_this_phase）: フェイズ中・毎ラウンド1回の追加介入 ───
+  // 通常の観戦者介入(usedIntervention)とは別カウント(usedExtraFamiliar)で管理する。
+  const hasHawkBeacon = (b.extraFamiliarPhase || []).includes(user.uid);
+  const usedHawk = b.usedExtraFamiliar?.[user.uid];
+  const handleHawkSupport = () => {
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        supportDice: (p.battle.supportDice || 0) + 1,
+        usedExtraFamiliar: { ...p.battle.usedExtraFamiliar, [user.uid]: "support" },
+      },
+      log: [`💥 ${entityName(user.uid)} のホークビーコン援護射撃！攻撃ダイスが増加します。`, ...p.log],
+    }));
+  };
+  const handleHawkCover = (targetUid) => {
+    animateDice(1, "ホークビーコンかばう", (res) => {
+      const die = res[0];
+      upd(p => {
+        const grid = [...(p.battle.grids[targetUid] || [0,0,0,0,0,0])];
+        const success = grid[die - 1] > 0;
+        if (success) grid[die - 1] -= 1;
+        return {
+          ...p,
+          battle: {
+            ...p.battle,
+            grids: { ...p.battle.grids, [targetUid]: grid },
+            usedExtraFamiliar: { ...p.battle.usedExtraFamiliar, [user.uid]: "cover" },
+          },
+          log: [`🛡️ ${entityName(user.uid)} のホークビーコンかばう！${die}番マス ${success ? "弾幕除去" : "弾幕なし"}`, ...p.log],
+        };
+      });
+    });
+  };
+
   // ─── 追加援護/かばう（extraInterventionPool）ハンドラ ───
   const handleExtraSupport = () => {
     const myName = gs.pcs.find(x => x.uid === user.uid)?.charName || "?";
@@ -8054,6 +8097,29 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                   );
                 })}
                 <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.5 }}>援護＝NPC攻撃ステップ／かばう＝PC攻撃後（NPC被弾時）</div>
+              </div>
+            )}
+
+            {/* ホークビーコン: フェイズ中・毎ラウンド1回の追加介入（対戦者でも観戦者として行える） */}
+            {hasHawkBeacon && pcCombatant && npcCombatant && (
+              <div style={{ padding: 10, background: "rgba(120,160,80,0.1)", border: "1px solid #7a9a50", borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: "#a8c878", letterSpacing: 1, marginBottom: 6 }}>🦅 ホークビーコン（毎ラウンド1回）</div>
+                {usedHawk ? (
+                  <div style={{ fontSize: 9, color: C.textFaint, textAlign: "center" }}>このラウンドは使用済み ({usedHawk === "support" ? "援護" : "かばう"})</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <button
+                      onClick={handleHawkSupport}
+                      disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
+                      style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
+                    >💥 援護射撃</button>
+                    <button
+                      onClick={() => handleHawkCover(b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
+                      disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
+                      style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
+                    >🛡️ かばう</button>
+                  </div>
+                )}
               </div>
             )}
 
