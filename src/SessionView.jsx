@@ -1053,9 +1053,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
     const structured = spellCard.structured;
 
-    // ── 回避力変動 effects（このラウンド中 / コスト）─────────────────────
+    // ── 回避力変動 effects（このラウンド中）──────────────────────────────
     // resources.回避力.cur を一時変更し、handleCleanup で evasionRestore から復元する。
-    // costs_own_evasion（杞人地）のみ恒久コストとして復元対象から外す。
+    // 回避力はラウンド終了時に上限まで回復する仕様のため、杞人地の costs_own_evasion も
+    // 「最大値」ではなく現在値の一時減少（先攻なら後攻の回避が2から／後攻なら移動回数が減る）。
+    // よって全ての回避力変動をラウンド終了で復元する。
     const EVASION_EFFECT_TYPES = ["reduce_enemy_evasion", "increase_enemy_evasion", "reduce_own_evasion", "costs_own_evasion"];
     const evEffects = (structured?.effects || []).filter(e => EVASION_EFFECT_TYPES.includes(e.type));
     const computeEvasion = (p) => {
@@ -1066,17 +1068,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         const isEnemy = ef.type === "reduce_enemy_evasion" || ef.type === "increase_enemy_evasion";
         const targetId = isEnemy ? defenderId : attackerId;
         const delta = ef.type === "increase_enemy_evasion" ? 1 : -1;
-        const restore = ef.type !== "costs_own_evasion";
         const pc = pcs.find(x => x.uid === targetId);
         if (pc) {
           const cur = pc.resources?.回避力?.cur ?? 3;
-          if (restore && !(targetId in evRestore)) evRestore[targetId] = cur;
+          if (!(targetId in evRestore)) evRestore[targetId] = cur;
           pcs = pcs.map(x => x.uid === targetId ? { ...x, resources: { ...x.resources, 回避力: { ...x.resources.回避力, cur: Math.max(0, cur + delta) } } } : x);
         } else {
           const npc = npcs.find(n => n.id === targetId);
           if (npc) {
             const cur = npc.resources?.回避力?.cur ?? 3;
-            if (restore && !(targetId in evRestore)) evRestore[targetId] = cur;
+            if (!(targetId in evRestore)) evRestore[targetId] = cur;
             npcs = npcs.map(n => n.id === targetId ? { ...n, resources: { ...n.resources, 回避力: { ...n.resources.回避力, cur: Math.max(0, cur + delta) } } } : n);
           }
         }
