@@ -591,6 +591,10 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "increase_enemy_evasion",
   "reduce_own_evasion",
   "costs_own_evasion",
+  // ─ 宣言時の即時リソース操作 ─
+  "reset_graze",   // バレットドミニオン/マーケット: グレイズを0に
+  "costs_rei",     // 五穀豊穣ライスシャワー: 霊力消費
+  "no_sc_cost",    // 幻想春花: SC消費なし
 ]);
 
 // スペカテキスト/スペルオブジェクトからフルオブジェクトを組み立てる
@@ -1032,14 +1036,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const defPos = b.positions?.[defenderId] || 1;
     const attackerGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
 
-    // スペカ点数を消費
-    const consumeSpell = (p) => isPcAttacker
-      ? { ...p, pcs: p.pcs.map(x => x.uid !== attackerId ? x : {
-          ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, (x.resources.スペルカード?.cur || 0) - 1) } }
-        })}
-      : { ...p, battle: { ...p.battle, participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== attackerId ? n : {
-          ...n, resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: Math.max(0, (n.resources.スペルカード?.cur || 0) - 1) } }
-        })}}};
+    // スペカ点数を消費（no_sc_cost 効果（幻想春花）があれば消費しない）
+    const consumeSpell = (p) => {
+      if ((spellCard.structured?.effects || []).some(e => e.type === "no_sc_cost")) return p;
+      return isPcAttacker
+        ? { ...p, pcs: p.pcs.map(x => x.uid !== attackerId ? x : {
+            ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, (x.resources.スペルカード?.cur || 0) - 1) } }
+          })}
+        : { ...p, battle: { ...p.battle, participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== attackerId ? n : {
+            ...n, resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: Math.max(0, (n.resources.スペルカード?.cur || 0) - 1) } }
+          })}}};
+    };
 
     // NPC の場合 consumeSpell は battle.participants を更新するため、
     // その後に battle: { ...p.battle, ... } で上書きすると SC 消費が消えてしまう。
@@ -1053,33 +1060,40 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
     const structured = spellCard.structured;
 
-    // ── 回避力変動 effects（このラウンド中）──────────────────────────────
-    // resources.回避力.cur を一時変更し、handleCleanup で evasionRestore から復元する。
-    // 回避力はラウンド終了時に上限まで回復する仕様のため、杞人地の costs_own_evasion も
-    // 「最大値」ではなく現在値の一時減少（先攻なら後攻の回避が2から／後攻なら移動回数が減る）。
-    // よって全ての回避力変動をラウンド終了で復元する。
-    const EVASION_EFFECT_TYPES = ["reduce_enemy_evasion", "increase_enemy_evasion", "reduce_own_evasion", "costs_own_evasion"];
-    const evEffects = (structured?.effects || []).filter(e => EVASION_EFFECT_TYPES.includes(e.type));
-    const computeEvasion = (p) => {
+    // ── 宣言時の即時リソース変動 effects ─────────────────────────────────
+    // ・回避力変動（reduce/increase_*evasion, costs_own_evasion）: 回避力.cur を ±1。
+    //   回避力はラウンド終了時に上限回復する仕様のため、evasionRestore に元値を記録し
+    //   handleCleanup で復元する（このラウンド限り。杞人地も最大値でなく現在値の一時減少）。
+    // ・reset_graze（バレットドミニオン/マーケット）: 攻撃側のグレイズを0に（配置のX計算後）。
+    // ・costs_rei（五穀豊穣ライスシャワー）: 攻撃側の霊力を消費（攻撃力も再計算）。
+    //   reset_graze / costs_rei は恒久（復元しない）。
+    const RESOURCE_EFFECT_TYPES = ["reduce_enemy_evasion", "increase_enemy_evasion", "reduce_own_evasion", "costs_own_evasion", "reset_graze", "costs_rei"];
+    const resourceEffects = (structured?.effects || []).filter(e => RESOURCE_EFFECT_TYPES.includes(e.type));
+    const computeResourceEffects = (p) => {
       let pcs = p.pcs;
       let npcs = p.battle.participants.npcs;
       const evRestore = { ...(p.battle.evasionRestore || {}) };
-      for (const ef of evEffects) {
-        const isEnemy = ef.type === "reduce_enemy_evasion" || ef.type === "increase_enemy_evasion";
-        const targetId = isEnemy ? defenderId : attackerId;
-        const delta = ef.type === "increase_enemy_evasion" ? 1 : -1;
-        const pc = pcs.find(x => x.uid === targetId);
-        if (pc) {
-          const cur = pc.resources?.回避力?.cur ?? 3;
+      // 対象 entity の resources を fn で更新（PC/NPC 両対応）
+      const modEntity = (id, fn) => {
+        if (pcs.some(x => x.uid === id)) { pcs = pcs.map(x => x.uid === id ? fn(x) : x); }
+        else { npcs = npcs.map(n => n.id === id ? fn(n) : n); }
+      };
+      for (const ef of resourceEffects) {
+        if (["reduce_enemy_evasion", "increase_enemy_evasion", "reduce_own_evasion", "costs_own_evasion"].includes(ef.type)) {
+          const isEnemy = ef.type === "reduce_enemy_evasion" || ef.type === "increase_enemy_evasion";
+          const targetId = isEnemy ? defenderId : attackerId;
+          const delta = ef.type === "increase_enemy_evasion" ? 1 : -1;
+          const ent = pcs.find(x => x.uid === targetId) || npcs.find(n => n.id === targetId);
+          const cur = ent?.resources?.回避力?.cur ?? 3;
           if (!(targetId in evRestore)) evRestore[targetId] = cur;
-          pcs = pcs.map(x => x.uid === targetId ? { ...x, resources: { ...x.resources, 回避力: { ...x.resources.回避力, cur: Math.max(0, cur + delta) } } } : x);
-        } else {
-          const npc = npcs.find(n => n.id === targetId);
-          if (npc) {
-            const cur = npc.resources?.回避力?.cur ?? 3;
-            if (!(targetId in evRestore)) evRestore[targetId] = cur;
-            npcs = npcs.map(n => n.id === targetId ? { ...n, resources: { ...n.resources, 回避力: { ...n.resources.回避力, cur: Math.max(0, cur + delta) } } } : n);
-          }
+          modEntity(targetId, e => ({ ...e, resources: { ...e.resources, 回避力: { ...e.resources.回避力, cur: Math.max(0, cur + delta) } } }));
+        } else if (ef.type === "reset_graze") {
+          modEntity(attackerId, e => ({ ...e, resources: { ...e.resources, グレイズ: { ...e.resources.グレイズ, cur: 0 } } }));
+        } else if (ef.type === "costs_rei") {
+          modEntity(attackerId, e => {
+            const nextRei = Math.max(0, (e.resources?.霊力?.cur || 0) - (ef.amount || 1));
+            return { ...e, resources: { ...e.resources, 霊力: { ...e.resources.霊力, cur: nextRei }, 攻撃力: { ...e.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) } } };
+          });
         }
       }
       return { pcs, npcs, evRestore };
@@ -1150,16 +1164,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       if (hasChoiceStep && ["designated", "choice_fixed", "clear_chosen_then_random"].includes(firstChoiceStep?.type)) {
         const count = firstChoiceStep.count ?? 1;
         upd(p => {
-          const { pcs, npcs, evRestore } = computeEvasion(p);
+          const { pcs, npcs, evRestore } = computeResourceEffects(p);
           const pe = { ...p, pcs, battle: { ...p.battle, participants: { ...p.battle.participants, npcs } } };
           return {
             ...mergeConsumeWithBattle(pe, {
               grids: { ...pe.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
               spellChoose: { attackerId, defenderId, remaining: count, selected: [], excludeEnemyCell: spellCard.structured?.condition_on_placement?.exclude_enemy_cell === true },
               spellUsedBy: { ...(pe.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-              ...(evEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+              ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
             }),
-            log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)${evEffects.length > 0 ? "（回避力変動）" : ""}`, ...p.log],
+            log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
           };
         });
         return;
@@ -1187,7 +1201,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const moveLog = moveSelect ? "（回避側の移動先を選択してください）"
             : Object.keys(posPatch).length > 0 ? `（回避側を ${attPos}番マスへ移動させた）` : "";
           upd(p => {
-            const { pcs, npcs, evRestore } = computeEvasion(p);
+            const { pcs, npcs, evRestore } = computeResourceEffects(p);
             const pe = { ...p, pcs, battle: { ...p.battle, participants: { ...p.battle.participants, npcs } } };
             return {
               ...mergeConsumeWithBattle(pe, {
@@ -1195,9 +1209,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 spellUsedBy: { ...(pe.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
                 ...(Object.keys(posPatch).length > 0 ? { positions: { ...pe.battle.positions, ...posPatch } } : {}),
                 ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
-                ...(evEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+                ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
               }),
-              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${evEffects.length > 0 ? "（回避力変動）" : ""}`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
             };
           });
           return;
@@ -1235,7 +1249,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
               removeLog = "（回避側マスに置かれた弾幕を除去）";
             }
             upd(p => {
-              const { pcs, npcs, evRestore } = computeEvasion(p);
+              const { pcs, npcs, evRestore } = computeResourceEffects(p);
               return {
                 ...p,
                 pcs,
@@ -1244,9 +1258,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   participants: { ...p.battle.participants, npcs },
                   grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
                   spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-                  ...(evEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+                  ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${evEffects.length > 0 ? "（回避力変動）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });

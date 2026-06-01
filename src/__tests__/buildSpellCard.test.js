@@ -127,10 +127,16 @@ describe('buildSpellCard: manual フラグ', () => {
 // （宣言UIで「GM手動」警告を出すためのフラグ）
 // ═══════════════════════════════════════════════════════════════════
 describe('buildSpellCard: manualEffects（要GM手動の effects 抽出）', () => {
-  it('未自動化の効果（グレイズリセット）は manualEffects に含まれる', () => {
-    // 「バレットドミニオン」: effects に reset_graze（未自動化）
+  it('未自動化の効果（回避ステップ中の効果）は manualEffects に含まれる', () => {
+    // 「闇市場のミシガンロール」: effects に mirror_graze_gain（後続タイミング・未自動化）
+    const sc = buildSpellCard({ name: '「闇市場のミシガンロール」', desc: 'ランダム配置', ref: '「闇市場のミシガンロール」' });
+    expect(sc.manualEffects).toContain('mirror_graze_gain');
+  });
+
+  it('自動化された即時リソース効果（グレイズリセット）は manualEffects に含まれない', () => {
+    // 「バレットドミニオン」: reset_graze は自動化済み（AUTO_HANDLED）
     const sc = buildSpellCard({ name: '「バレットドミニオン」', desc: 'ランダム配置', ref: '「バレットドミニオン」' });
-    expect(sc.manualEffects).toContain('reset_graze');
+    expect(sc.manualEffects).not.toContain('reset_graze');
   });
 
   it('自動化された効果（回避力減少）は manualEffects に含まれない', () => {
