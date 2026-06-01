@@ -1099,13 +1099,32 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       // auto: "full" のみ: 完全決定論的 / ランダムを自動処理
       if (structured.auto === "full") {
         if (!hasChoiceStep && randomHints.length === 0) {
-          // 完全決定論的
+          // 配置確定 + 移動効果（古明地こいし等）の処理
+          // enemy_forced_to_attacker_number_cell（スーパーエゴ）: 回避側を attPos へ強制移動（一意・自動）
+          // enemy_move_adjacent_if_same_number（イドの開放）: 回避側マス番号==自機マス番号 のとき隣接マスへ移動（選択）
+          const moveEffects = structured.effects || [];
+          const posPatch = {};
+          let moveSelect = null;
+          for (const ef of moveEffects) {
+            if (ef.type === "enemy_forced_to_attacker_number_cell") {
+              posPatch[defenderId] = attPos;
+            } else if (ef.type === "enemy_move_adjacent_if_same_number") {
+              if (defPos === attPos) {
+                const cand = ADJACENT_MAP[defPos] || [];
+                if (cand.length > 0) moveSelect = { defenderId, candidates: cand, spellName: spellCard.name };
+              }
+            }
+          }
+          const moveLog = moveSelect ? "（回避側の移動先を選択してください）"
+            : Object.keys(posPatch).length > 0 ? `（回避側を ${attPos}番マスへ移動させた）` : "";
           upd(p => ({
             ...mergeConsumeWithBattle(p, {
               grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
               spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+              ...(Object.keys(posPatch).length > 0 ? { positions: { ...p.battle.positions, ...posPatch } } : {}),
+              ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
             }),
-            log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+            log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}`, ...p.log],
           }));
           return;
         }
@@ -1227,6 +1246,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
       }),
       log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+    }));
+  };
+
+  // 回避側の移動先マスを確定（こいし「イドの開放」等）
+  const handleSpellMoveCell = (cell) => {
+    const ms = b.spellMoveSelect;
+    if (!ms) return;
+    upd(p => ({
+      ...p,
+      battle: {
+        ...p.battle,
+        positions: { ...p.battle.positions, [ms.defenderId]: cell },
+        spellMoveSelect: null,
+      },
+      log: [`↪ 回避側を ${cell}番マスへ移動させた`, ...p.log],
     }));
   };
 
@@ -1872,13 +1906,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const sb = b.slowBulletSelect;
     if (!sb) return;
     upd(p => {
-      const grid = [...(p.battle.grids[sb.targetId] || [0,0,0,0,0,0])];
-      grid[cellNum - 1] = (grid[cellNum - 1] || 0) + 1;
+      // grid は変更せず「保護マス」を記録。ラウンド終了時の減衰(handleCleanup)で
+      // 取り除かれる弾幕を1つ残す処理を適用する。
+      const protect = { ...(p.battle.slowBulletProtect || {}) };
+      protect[sb.targetId] = [...(protect[sb.targetId] || []), cellNum];
       const owner = p.pcs.find(x => x.uid === sb.ownerId) || p.battle.participants.npcs.find(n => n.id === sb.ownerId);
       return {
         ...p,
-        battle: { ...p.battle, grids: { ...p.battle.grids, [sb.targetId]: grid }, slowBulletSelect: null },
-        log: [`🐌 ${owner?.charName || owner?.name} の『低速弾』：${cellNum}番マスの弾幕を保護しました。`, ...p.log]
+        battle: { ...p.battle, slowBulletProtect: protect, slowBulletSelect: null },
+        log: [`🐌 ${owner?.charName || owner?.name} の『低速弾』：${cellNum}番マスの弾幕を1つ残します（ラウンド終了時に適用）。`, ...p.log]
       };
     });
     markDanmakuUsed(sb.ownerId, "低速弾");
@@ -1888,9 +1924,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     upd(p => {
       const currentB = p.battle;
       const nextGrids = {};
-      
+
+      // ラウンド終了時の減衰。低速弾で保護されたマスは「取り除かれる弾幕を1つ残す」
+      // ＝ 減衰後の値+1（ただし元の値が上限）。例: 3個→通常2個→保護で3個 / 4個→通常2個→保護で3個。
       Object.keys(currentB.grids).forEach(id => {
-        nextGrids[id] = currentB.grids[id].map(val => val >= 3 ? 2 : val === 2 ? 1 : val);
+        const protectedCells = currentB.slowBulletProtect?.[id] || [];
+        nextGrids[id] = currentB.grids[id].map((val, idx) => {
+          const decayed = val >= 3 ? 2 : val === 2 ? 1 : val;
+          return protectedCells.includes(idx + 1) ? Math.min(val, decayed + 1) : decayed;
+        });
       });
 
       const nextActedPcs = [...new Set([...(currentB.actedPcs || []), currentB.pcCombatant])];
@@ -1912,6 +1954,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           homingSelect: null,
           wideShotSelect: null,
           slowBulletSelect: null,
+          slowBulletProtect: null,
+          spellMoveSelect: null,
           usedds: {},
           currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
@@ -2095,6 +2139,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             <button onClick={resolveSpellRollCheck} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
               🎲 {src.check.dice}D を振る
             </button>
+          )}
+        </SpellCard>
+      );
+    }
+
+    // 回避側の移動先選択（古明地こいし「イドの開放」等）
+    if (b.spellMoveSelect && b.spellMoveSelect.defenderId === (isPcAttacker ? b.npcCombatant : b.pcCombatant)) {
+      const ms = b.spellMoveSelect;
+      return (
+        <SpellCard color={C.gold} title={`✦ ${ms.spellName} ─ 回避側の移動先`} style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>
+            回避側を移動させる隣接マスを選んでください。
+          </div>
+          {canDeclare ? (
+            <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+              {ms.candidates.map(cell => (
+                <button key={cell} onClick={() => handleSpellMoveCell(cell)}
+                  style={{ width: 36, height: 36, borderRadius: 4, cursor: "pointer", background: "rgba(212,168,56,0.18)", border: `1px solid ${C.goldDim}`, color: C.gold, fontSize: 14 }}>
+                  {cell}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 9, color: C.textFaint }}>相手が移動先を選択中…</div>
           )}
         </SpellCard>
       );
@@ -3222,6 +3290,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           highSpeedSelect: null,
           bigPowerSelect: null,
           slowBulletSelect: null,
+          slowBulletProtect: null,
+          spellMoveSelect: null,
           spellChoose: null,
           pcLastResort: false,
           npcLastResort: false,
@@ -4775,12 +4845,15 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     if (act.item === "random") {
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
-          <button onClick={() => animateDice(1, "アイテム獲得", res => {
-            const itemName = ITEM_NAMES[res[0] - 1];
-            proceed([`${pc.charName} は【${itemName}】を ${count} 個獲得した`], {
-              pc: { items: { ...pc.items, [itemName]: (pc.items[itemName] || 0) + count } }
+          <button onClick={() => animateDice(count, "アイテム獲得", res => {
+            // count 個のダイスをそれぞれ振り、各出目に対応するアイテムを1個ずつ獲得する
+            const names = res.map(d => ITEM_NAMES[d - 1]);
+            const nextItems = { ...pc.items };
+            names.forEach(n => { nextItems[n] = (nextItems[n] || 0) + 1; });
+            proceed([`${pc.charName} は【${names.join("】【")}】を獲得した`], {
+              pc: { items: nextItems }
             });
-          })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを獲得</button>
+          })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを{count > 1 ? `${count}つ` : ""}獲得</button>
         </div>
       );
     } else if (act.item === "any") {

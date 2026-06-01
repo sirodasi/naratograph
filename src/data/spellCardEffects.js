@@ -541,13 +541,13 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ 古明地こいし
   "本能「イドの開放」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "adjacent_enemy", count: 1 }],
     effects: [{ type: "enemy_move_adjacent_if_same_number" }],
     note: "回避側のいるマスが自機と同番号の場合、回避側を上下左右隣接マスへ移動",
   },
   "抑制「スーパーエゴ」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "adjacent_enemy", count: 1 }],
     effects: [{ type: "enemy_forced_to_attacker_number_cell" }],
     note: "配置後、回避側を自機マスと同番号の回避側フィールドマスへ強制移動",

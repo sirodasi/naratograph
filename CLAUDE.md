@@ -182,6 +182,8 @@ Key battle state fields (`gs.battle.*`):
 | `declaredSpellcard` | Spellcard declared at round start |
 | `spellChoose` | Active CHOOSE selection: `{ attackerId, defenderId, remaining, selected[], excludeEnemyCell }` — set when player must pick grid cells |
 | `spellRollCheck` | Active roll-check: `{ attackerId, defenderId, attPos, defPos, snapDef, snapAtk, check:{dice,target}, success[], fail[], spellName }` — set when a `roll_check_then_place` step is pending (宇佐見菫子スペカ等) |
+| `spellMoveSelect` | Active defender-move pick: `{ defenderId, candidates[], spellName }` — set when a spell's `enemy_move_*` effect needs the attacker to pick where the dodger moves (古明地こいし「イドの開放」). `enemy_forced_to_attacker_number_cell` (「スーパーエゴ」) moves automatically (no select). Both are `auto: "full"` so the placement runs through the structured deterministic block, then `declareSpell` applies the move effect from `structured.effects`. |
+| `slowBulletProtect` | `{ [entityId]: cellNum[] }` — cells protected by 低速弾. `confirmSlowBullet` records (does **not** mutate grid); `handleCleanup`'s decay does `min(val, decayed+1)` on protected cells so one would-be-removed bullet stays. Reset each round. |
 | `extraInterventionPool` | Extra 援護/かばう rights from spells like 忿怒のレッドUFO襲来: `{ remaining: N, usedDice: [], withDieChoice: bool }`. `withDieChoice: true` lets spectators pick any unused die face instead of rolling. Reset to `null` in `handleCleanup`. |
 
 Danmaku skill utilities (module-level exports in `SessionView.jsx`):
