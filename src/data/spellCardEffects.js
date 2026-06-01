@@ -344,7 +344,7 @@ export const SPELL_CARD_EFFECTS = {
     note: "残り人数が減少するときに使用。その処理を打ち消す（発生はしたものとして扱う）",
   },
   "滅罪「正直者の死」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "adjacent_enemy", count: 2 }],
     effects: [{ type: "enemy_may_stay_on_dodge" }],
     note: "このラウンドの回避で成功時、回避側はその場にとどまることを選べる",
@@ -399,7 +399,7 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ 河城にとり
   "光学「オプティカルカモフラージュ」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "random", count: 2 }],
     effects: [{ type: "next_dodge_no_evasion_loss" }],
     note: "回避を行う前に宣言。次の回避判定後1回だけ回避力を減少させずに回避可能",
@@ -922,7 +922,7 @@ export const SPELL_CARD_EFFECTS = {
     steps: [{ type: "random", count: 2, after: [{ type: "double_each_placed", count: 1 }] }],
   },
   "亀符「吉弔大結界」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "adjacent_enemy", count: 2 }],
     effects: [{ type: "enemy_may_stay_on_dodge" }],
   },

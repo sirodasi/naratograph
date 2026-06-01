@@ -588,6 +588,9 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "self_move_any",
   "self_move_empty",
   "shift_non_25_horizontal",
+  // ─ 回避ステップのフラグ系 ─
+  "enemy_may_stay_on_dodge",     // 正直者の死/吉弔大結界: 回避側がその場にとどまれる
+  "next_dodge_no_evasion_loss",  // オプティカルカモフラージュ: 次の回避で回避力を消費しない
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
@@ -1216,6 +1219,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             }
           }
           const movedSelf = posPatch[attackerId] !== undefined;
+          const hasMayStay = moveEffects.some(e => e.type === "enemy_may_stay_on_dodge");  // 正直者の死/吉弔大結界
           const moveLog = moveSelect ? "（移動先を選択してください）"
             : posPatch[defenderId] !== undefined ? `（回避側を ${attPos}番マスへ移動させた）`
             : movedSelf ? `（自機を ${defPos}番マスへ移動させた）` : "";
@@ -1229,8 +1233,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 ...(Object.keys(posPatch).length > 0 ? { positions: { ...pe.battle.positions, ...posPatch } } : {}),
                 ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
                 ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+                ...(hasMayStay ? { mayStayOnDodge: true } : {}),
               }),
-              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
             };
           });
           return;
@@ -1247,6 +1252,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasRemoveIfHit = effList.some(e => e.type === "remove_if_hit_enemy_cell");     // ペガサスクロス: 配置で置かれた分を除去
           const hasSelfMoveEmpty = effList.some(e => e.type === "self_move_empty");            // シンガーゴースト: 自機を空きマスへ
           const hasExtraFamiliar = effList.some(e => e.type === "extra_familiar_per_round_this_phase"); // ホークビーコン: フェイズ中・毎ラウンド追加介入
+          const hasNoEvasionLoss = effList.some(e => e.type === "next_dodge_no_evasion_loss");  // オプティカルカモフラージュ: 次の回避で回避力減らさず
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1288,8 +1294,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
                   ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
                   ...(hasExtraFamiliar ? { extraFamiliarPhase: [...new Set([...(p.battle.extraFamiliarPhase || []), attackerId])] } : {}),
+                  ...(hasNoEvasionLoss ? { noEvasionLoss: { ...p.battle.noEvasionLoss, [attackerId]: true } } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });
@@ -1921,7 +1928,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       const currentGraze = currentEntity.resources.グレイズ?.cur || 0;
       const nextGraze = currentGraze + bulletsCleared;
       const currentDice = p.battle.currentEvadeDice ?? getDefaultEvadeDice(currentEntity);
-      const nextDice = Math.max(0, currentDice - 1);
+      // next_dodge_no_evasion_loss（オプティカルカモフラージュ）: 1回だけ回避力を減らさない
+      const noLoss = p.battle.noEvasionLoss?.[combatantId];
+      const nextDice = noLoss ? currentDice : Math.max(0, currentDice - 1);
+      const nextNoEvasionLoss = noLoss
+        ? { ...p.battle.noEvasionLoss, [combatantId]: false }  // 1回使ったら消費
+        : p.battle.noEvasionLoss;
 
       const updatedEntity = {
         ...currentEntity,
@@ -1951,6 +1963,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
+          noEvasionLoss: nextNoEvasionLoss,
           phase: isPc
             ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false))
             : (nextDice > 0 ? "npc_evade_intro" : afterDefensePhase(true))
@@ -1958,8 +1971,41 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
           `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}点)`,
+          ...(noLoss ? [`👁 オプティカルカモフラージュ: 回避力を消費せず回避！`] : []),
           ...p.log
         ]
+      };
+    });
+  };
+
+  // enemy_may_stay_on_dodge（正直者の死/吉弔大結界）用: 移動せずその場で回避
+  // （現在マスの弾幕除去・グレイズ獲得・回避力消費は通常の回避移動と同じ、コマだけ動かさない）
+  const handleEvadeStay = (isPc) => {
+    const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
+    const pos = b.positions[combatantId];
+    const bulletsCleared = b.grids[combatantId][pos - 1] || 0;
+    upd(p => {
+      const newGrid = [...p.battle.grids[combatantId]];
+      newGrid[pos - 1] = 0;
+      const entity = isPc ? p.pcs.find(x => x.uid === combatantId) : p.battle.participants.npcs.find(n => n.id === combatantId);
+      const nextGraze = (entity.resources.グレイズ?.cur || 0) + bulletsCleared;
+      const currentDice = p.battle.currentEvadeDice ?? getDefaultEvadeDice(entity);
+      const noLoss = p.battle.noEvasionLoss?.[combatantId];
+      const nextDice = noLoss ? currentDice : Math.max(0, currentDice - 1);
+      const nextNoEvasionLoss = noLoss ? { ...p.battle.noEvasionLoss, [combatantId]: false } : p.battle.noEvasionLoss;
+      const updated = { ...entity, resources: { ...entity.resources, グレイズ: { ...entity.resources.グレイズ, cur: nextGraze } } };
+      return {
+        ...p,
+        pcs: isPc ? p.pcs.map(x => x.uid === combatantId ? updated : x) : p.pcs,
+        battle: {
+          ...p.battle,
+          participants: isPc ? p.battle.participants : { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id === combatantId ? updated : n) },
+          grids: { ...p.battle.grids, [combatantId]: newGrid },
+          currentEvadeDice: nextDice,
+          noEvasionLoss: nextNoEvasionLoss,
+          phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false)) : (nextDice > 0 ? "npc_evade_intro" : afterDefensePhase(true)),
+        },
+        log: [`🛡 ${entity.charName || entity.name} はその場にとどまって回避（グレイズ+${bulletsCleared}）。`, ...p.log],
       };
     });
   };
@@ -2119,6 +2165,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           supportDice: 0,
           usedIntervention: {},
           usedExtraFamiliar: {},  // ホークビーコンは毎ラウンド1回（extraFamiliarPhase 自体は ...currentB で維持）
+          mayStayOnDodge: false,
+          noEvasionLoss: {},
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
@@ -2967,6 +3015,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         contentStyle={{ textAlign: "center", padding: "12px 16px" }}
       >
         <div style={{ color: C.text, fontSize: 11, letterSpacing: 1 }}>ハイライトされた隣接マスをクリックしてください</div>
+        {/* enemy_may_stay_on_dodge（正直者の死/吉弔大結界）: 移動せずその場で回避を選べる */}
+        {b.mayStayOnDodge && (isPc ? (user.uid === b.pcCombatant || isGm) : isGm) && (
+          <button onClick={() => handleEvadeStay(isPc)} style={{ ...btnFull("rgba(255,255,255,0.06)", C.border, C.text), marginTop: 10, fontSize: 10 }}>
+            🛡 その場にとどまって回避する
+          </button>
+        )}
         {isGm && (
           <div style={{ marginTop: 8, fontSize: 9, color: C.textFaint }}>※GMはPLの代わりに操作可能です</div>
         )}
@@ -3442,6 +3496,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           npcCombatant: npcId,
           usedIntervention: {},
           usedExtraFamiliar: {},
+          mayStayOnDodge: false,
+          noEvasionLoss: {},
           pcFamiliarAction: null,
           npcFamiliarAction: null,
           usedds: {},
