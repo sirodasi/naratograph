@@ -591,6 +591,8 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   // ─ 回避ステップのフラグ系 ─
   "enemy_may_stay_on_dodge",     // 正直者の死/吉弔大結界: 回避側がその場にとどまれる
   "next_dodge_no_evasion_loss",  // オプティカルカモフラージュ: 次の回避で回避力を消費しない
+  // ─ 任意実行 ─
+  "optional_redo_random",        // ブラックペガサス流星弾: 任意で再配置
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
@@ -1247,6 +1249,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const snapAtk = atkGrid;
           upd(p => consumeSpell(p));
           const effList = structured.effects || [];
+          const optRedo = effList.find(e => e.type === "optional_redo_random");  // ブラックペガサス: 任意で再配置
           const hasShift = effList.some(e => e.type === "shift_non_25_horizontal");
           const hasRemoveFromEnemy = effList.some(e => e.type === "remove_from_enemy_cell");  // パパラッチ: 回避側マスを1除去
           const hasRemoveIfHit = effList.some(e => e.type === "remove_if_hit_enemy_cell");     // ペガサスクロス: 配置で置かれた分を除去
@@ -1295,8 +1298,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
                   ...(hasExtraFamiliar ? { extraFamiliarPhase: [...new Set([...(p.battle.extraFamiliarPhase || []), attackerId])] } : {}),
                   ...(hasNoEvasionLoss ? { noEvasionLoss: { ...p.battle.noEvasionLoss, [attackerId]: true } } : {}),
+                  ...(optRedo ? { optionalRedo: { attackerId, defenderId, count: optRedo.count ?? 3, snapDef } } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${optRedo ? "（任意で再配置できます）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });
@@ -1444,6 +1448,24 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         },
       }));
     }
+  };
+
+  // optional_redo_random（ブラックペガサス流星弾）: 任意で配置をやり直す（除去→再ランダム）
+  const handleOptionalRedo = () => {
+    const or = b.optionalRedo;
+    if (!or) return;
+    animateDice(or.count, "再ランダム配置", res => {
+      const finalDef = [...(or.snapDef || [0,0,0,0,0,0])];  // 配置前に戻して
+      res.forEach(d => { if (d >= 1 && d <= 6) finalDef[d - 1] += 1; });  // 再ランダム配置
+      upd(p => ({
+        ...p,
+        battle: { ...p.battle, grids: { ...p.battle.grids, [or.defenderId]: finalDef }, optionalRedo: null },
+        log: [`🔮 ブラックペガサス流星弾：弾幕を取り除いて再配置！`, ...p.log],
+      }));
+    });
+  };
+  const handleOptionalRedoSkip = () => {
+    upd(p => ({ ...p, battle: { ...p.battle, optionalRedo: null }, log: [`そのまま確定した。`, ...p.log] }));
   };
 
   // roll_check_then_place: ダイス結果を受けてステップを適用する
@@ -2167,6 +2189,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           usedExtraFamiliar: {},  // ホークビーコンは毎ラウンド1回（extraFamiliarPhase 自体は ...currentB で維持）
           mayStayOnDodge: false,
           noEvasionLoss: {},
+          optionalRedo: null,
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
@@ -2346,6 +2369,25 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             <button onClick={resolveSpellRollCheck} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
               🎲 {src.check.dice}D を振る
             </button>
+          )}
+        </SpellCard>
+      );
+    }
+
+    // 任意で再配置（ブラックペガサス流星弾）。攻撃側が操作する。
+    if (b.optionalRedo && b.optionalRedo.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
+      return (
+        <SpellCard color={C.gold} title="✦ ブラックペガサス流星弾 ─ 再配置" style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>
+            配置した弾幕を取り除き、もう一度ランダム×{b.optionalRedo.count}を行えます（任意）。
+          </div>
+          {canDeclare ? (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={handleOptionalRedo} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), flex: 1, fontSize: 10 }}>🎲 もう一度配置する</button>
+              <button onClick={handleOptionalRedoSkip} style={{ ...btnFull("rgba(255,255,255,0.05)", C.border, C.textDim), flex: 1, fontSize: 10 }}>このまま確定</button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 9, color: C.textFaint }}>相手が選択中…</div>
           )}
         </SpellCard>
       );
@@ -3498,6 +3540,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           usedExtraFamiliar: {},
           mayStayOnDodge: false,
           noEvasionLoss: {},
+          optionalRedo: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
           usedds: {},

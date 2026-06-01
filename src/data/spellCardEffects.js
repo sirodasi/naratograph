@@ -945,7 +945,7 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ 驪駒早鬼
   "勁疾技「ブラックペガサス流星弾」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "random", count: 3 }],
     effects: [{ type: "optional_redo_random", count: 3 }],
     note: "配置後、除去してもう一度ランダム×3を行うことができる（任意）",
