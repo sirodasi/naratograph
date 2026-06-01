@@ -574,6 +574,20 @@ export function parseSpell(text) {
   };
 }
 
+// declareSpell（および周辺）が宣言時に自動処理する structured.effects の type 一覧。
+// ここに無い effect type は「GM が手動で処理する」案内を宣言UIに出す（黙殺防止）。
+// 効果を自動化したら、ここへ type を追加すると案内が自動的に消える。
+export const AUTO_HANDLED_EFFECTS = new Set([
+  "extra_support_cover",
+  "extra_support_cover_with_die_choice",
+  "enemy_forced_to_attacker_number_cell",
+  "enemy_move_adjacent_if_same_number",
+  "shift_non_25_horizontal",
+  // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
+  "remove_from_enemy_cell",
+  "remove_if_hit_enemy_cell",
+]);
+
 // スペカテキスト/スペルオブジェクトからフルオブジェクトを組み立てる
 export function buildSpellCard(card) {
   if (!card) return null;
@@ -601,12 +615,19 @@ export function buildSpellCard(card) {
     ? (structured.note || `【${name}】の効果は自動処理されます（${structured.auto === "full" ? "完全自動" : structured.auto === "partial" ? "一部自動" : "GM手動"}）`)
     : "");
 
+  // 自動処理できない structured.effects（要GM手動）を抽出。宣言UIで警告表示に使う。
+  const manualEffects = (structured?.effects || [])
+    .filter(e => !AUTO_HANDLED_EFFECTS.has(e.type))
+    .map(e => e.type);
+
   return {
     ...card,
     name,
     text: displayText,
     ...parsed,
     structured,
+    manualEffects,
+    structuredNote: structured?.note || null,
   };
 }
 
@@ -713,6 +734,11 @@ function SpellDeclareItem({ spell, cardColor, declareSpell, isPcAttacker }) {
             )}
             {spell.manual && (
               <div style={{ fontSize: 9, color: "#5a6070", marginTop: 3 }}>★ 効果はGMが手動処理</div>
+            )}
+            {!spell.manual && spell.manualEffects?.length > 0 && (
+              <div style={{ fontSize: 9, color: "#ffb74d", marginTop: 3 }}>
+                ⚠ 配置以外の効果はGMが手動で処理してください{spell.structuredNote ? `（${spell.structuredNote}）` : ""}
+              </div>
             )}
             {spell.effectTiming === "round_end" && (
               <div style={{ fontSize: 9, color: "#ef9a9a", marginTop: 3 }}>⏰ ラウンド終了時に効果発動</div>
@@ -1134,7 +1160,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const snapDef = defGrid;
           const snapAtk = atkGrid;
           upd(p => consumeSpell(p));
-          const hasShift = (structured.effects || []).some(e => e.type === "shift_non_25_horizontal");
+          const effList = structured.effects || [];
+          const hasShift = effList.some(e => e.type === "shift_non_25_horizontal");
+          const hasRemoveFromEnemy = effList.some(e => e.type === "remove_from_enemy_cell");  // パパラッチ: 回避側マスを1除去
+          const hasRemoveIfHit = effList.some(e => e.type === "remove_if_hit_enemy_cell");     // ペガサスクロス: 配置で置かれた分を除去
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1146,6 +1175,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             }
             // 配置後の移動効果（摩多羅隠岐奈「太古に失われた背中」）
             if (hasShift) finalDef = shiftNon25Horizontal(finalDef);
+            // 配置直後の回避側マスの弾幕除去
+            const dIdx = defPos - 1;
+            let removeLog = "";
+            if (hasRemoveFromEnemy && finalDef[dIdx] > 0) {
+              finalDef[dIdx] -= 1;
+              removeLog = "（回避側マスの弾幕を1つ除去）";
+            } else if (hasRemoveIfHit && finalDef[dIdx] > snapDef[dIdx]) {
+              // 配置で置かれた分（snapDef からの増加）を取り除く
+              finalDef[dIdx] = snapDef[dIdx];
+              removeLog = "（回避側マスに置かれた弾幕を除去）";
+            }
             upd(p => ({
               ...p,
               battle: {
@@ -1153,7 +1193,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
                 spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
               },
-              log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}`, ...p.log],
             }));
           });
           return;

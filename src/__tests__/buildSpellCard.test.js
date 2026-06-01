@@ -123,6 +123,34 @@ describe('buildSpellCard: manual フラグ', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// 3.5 manualEffects: 自動処理されない structured.effects の抽出
+// （宣言UIで「GM手動」警告を出すためのフラグ）
+// ═══════════════════════════════════════════════════════════════════
+describe('buildSpellCard: manualEffects（要GM手動の effects 抽出）', () => {
+  it('自動処理されない効果（回避力減少）は manualEffects に含まれる', () => {
+    // 幻符「殺人ドール」: effects に reduce_enemy_evasion（未自動化）
+    const sc = buildSpellCard({ name: '幻符「殺人ドール」', desc: '敵機マスに配置', ref: '幻符「殺人ドール」' });
+    expect(sc.manualEffects).toContain('reduce_enemy_evasion');
+  });
+
+  it('自動処理される効果（配置直後の除去）は manualEffects に含まれない', () => {
+    // 写真「籠もりパパラッチ」: effects に remove_from_enemy_cell（AUTO_HANDLED）
+    const sc = buildSpellCard({ name: '写真「籠もりパパラッチ」', desc: 'ランダム配置', ref: '写真「籠もりパパラッチ」' });
+    expect(sc.manualEffects).not.toContain('remove_from_enemy_cell');
+  });
+
+  it('extra_support_cover 等の処理済み効果は manualEffects に含まれない', () => {
+    const sc = buildSpellCard({ name: '正体不明「忿怒のレッドUFO襲来」', desc: 'x', ref: '正体不明「忿怒のレッドUFO襲来」' });
+    expect(sc.manualEffects).not.toContain('extra_support_cover_with_die_choice');
+  });
+
+  it('effects が無いカードは manualEffects が空配列', () => {
+    const sc = buildSpellCard('霊符「夢想封印」【指定マス×2】');
+    expect(sc.manualEffects).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // 4. condition / textBody の抽出
 // ═══════════════════════════════════════════════════════════════════
 describe('buildSpellCard: condition と textBody', () => {

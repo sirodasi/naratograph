@@ -215,6 +215,8 @@ To keep Firebase writes small, the canonical spell-card representation is **raw 
 
 **Cell-placement constraint** (`condition_on_placement.exclude_enemy_cell: true` in `SPELL_CARD_EFFECTS`): propagated into `spellChoose.excludeEnemyCell`. The CHOOSE UI disables the defender's current cell.
 
+**`structured.effects` auto-handling vs manual fallback** (`AUTO_HANDLED_EFFECTS` set in `SessionView.jsx`): only effect types in this set are auto-applied by `declareSpell`; everything else is **not silently dropped** — `buildSpellCard` collects them into `spellCard.manualEffects` and `SpellDeclareItem` shows a "⚠ 配置以外の効果はGMが手動で処理してください" warning (with the spell's `note`). Currently auto-handled: the `extra_support_cover*` / `enemy_*move*` / `shift_non_25_horizontal` effects plus the post-random grid removals `remove_from_enemy_cell` (写真「籠もりパパラッチ」) and `remove_if_hit_enemy_cell` (天星馬「ペガサスクロス」), applied right after `applyRandomResult` in the full-random block. **Many effects remain manual** (回避力変動 reduce/increase_evasion, reset_graze, costs_rei, and all post-dodge / on-hit / round-end timing effects) — when you automate one, add its type to `AUTO_HANDLED_EFFECTS` and the warning disappears automatically.
+
 ### Quest Resolution Types
 
 Quests (`gs.quests[].solutionType`) support three resolution flows:
