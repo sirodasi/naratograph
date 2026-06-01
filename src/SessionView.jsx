@@ -5828,8 +5828,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 }} style={btnFull(C.purpleBg, C.purpleBorder, C.purple)}>🤝 香霖堂の新商品を見る（NPCの応援獲得）</button>
               )}
 
-              {gs.newspaper?.roll === 45 && pc.currentSpot === "45" && (
-                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "gamble_select_item" } }))} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 鬼の賭博に挑戦</button>
+              {gs.newspaper?.roll === 45 && pc.currentSpot === "45" && !sc.gambleUsed && (
+                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "gamble_select_item" } }))} style={btnFull(C.redBg, C.redBorder, C.red)}>🎲 鬼の賭博に挑戦（アクション消費なし・シーンに1回）</button>
+              )}
+              {gs.newspaper?.roll === 45 && pc.currentSpot === "45" && sc.gambleUsed && (
+                <div style={{ fontSize: 9, color: C.textFaint, textAlign: "center", padding: "4px 0" }}>🎲 鬼の賭博はこのシーンで使用済み</div>
               )}
 
               <button onClick={() => writeLog(`${pc.charName} はアクションスキルを使用した`)} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>💡 アクションスキルの使用</button>
@@ -5849,7 +5852,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     <button key={k} onClick={() => {
                       upd(p => {
                         const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, items: { ...x.items, [k]: x.items[k] - 1 } } : x);
-                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "gamble_roll", gambleItem: k, gambleDiceCount: 2 } };
+                        // アイテムを消費した時点で「シーンに1回」を消費したものとする（アクションは消費しない）
+                        return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "gamble_roll", gambleItem: k, gambleDiceCount: 2, gambleUsed: true } };
                       });
                     }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { width: "auto" })}>{k}を消費</button>
                   );
@@ -5901,10 +5905,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                         upd(p => {
                           const uid = p.currentScene.pcUid;
                           const newPcs = p.pcs.map(x => x.uid === uid ? { ...x, items: { ...x.items, [k]: (x.items[k] || 0) + 1 } } : x);
+                          // 3つ獲得しきったらアクションフェーズへ戻る（アクションは消費しない）
                           return {
                             ...p,
                             pcs: newPcs,
-                            currentScene: { ...p.currentScene, gambleRewards: count, ...(count >= 3 ? { phase: "action_done" } : {}) },
+                            currentScene: { ...p.currentScene, gambleRewards: count, ...(count >= 3 ? { phase: "action" } : {}) },
                             log: [`${p.pcs.find(x => x.uid === uid)?.charName} は【${k}】を獲得した`, ...p.log],
                           };
                         });
@@ -5913,7 +5918,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   <div style={{ width: "100%", fontSize: 9, color: C.textDim, marginTop: 4 }}>残り獲得数: {3 - (sc.gambleRewards || 0)}</div>
                 </div>
               ) : (
-                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action_done" }, log: [`${pc.charName} は賭博に敗北した`, ...p.log] }))} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>終了</button>
+                <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "action" }, log: [`${pc.charName} は賭博に敗北した`, ...p.log] }))} style={btnFull("rgba(255,255,255,0.05)", C.border, C.textFaint)}>アクションへ戻る</button>
               )}
             </div>
           )}
