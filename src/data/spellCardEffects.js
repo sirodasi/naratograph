@@ -238,7 +238,7 @@ export const SPELL_CARD_EFFECTS = {
     note: "《橙からの絆》としても扱う（応援時SC×1消費）",
   },
   "式輝「プリンセス天狐」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "enemy", count: 1 }],
     effects: [{ type: "self_move_any" }],
   },
@@ -594,7 +594,7 @@ export const SPELL_CARD_EFFECTS = {
     ],
   },
   "幽霊「シンガーゴースト」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "random", count: 4 }],
     effects: [{ type: "self_move_empty" }],
   },
@@ -675,7 +675,7 @@ export const SPELL_CARD_EFFECTS = {
     note: "《宮古芳香からの絆》としても扱う（応援時SC×1消費）",
   },
   "仙術「壁抜けワームホール」": {
-    auto: "partial",
+    auto: "full",
     effects: [{ type: "self_move_any" }],
     steps: [{ type: "mirrored_adj_self", count: 1 }],
   },

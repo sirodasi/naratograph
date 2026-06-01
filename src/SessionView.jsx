@@ -583,6 +583,8 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "enemy_forced_to_attacker_number_cell",
   "enemy_move_adjacent_if_same_number",
   "enemy_move_adjacent",
+  "self_move_any",
+  "self_move_empty",
   "shift_non_25_horizontal",
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
@@ -1189,22 +1191,32 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const moveEffects = structured.effects || [];
           const posPatch = {};
           let moveSelect = null;
+          const mkMove = (targetId, candidates) => ({ targetId, candidates, spellName: spellCard.name, isPcAttacker });
           for (const ef of moveEffects) {
             if (ef.type === "enemy_forced_to_attacker_number_cell") {
               posPatch[defenderId] = attPos;
             } else if (ef.type === "enemy_move_adjacent_if_same_number") {
               if (defPos === attPos) {
                 const cand = ADJACENT_MAP[defPos] || [];
-                if (cand.length > 0) moveSelect = { defenderId, candidates: cand, spellName: spellCard.name };
+                if (cand.length > 0) moveSelect = mkMove(defenderId, cand);
               }
             } else if (ef.type === "enemy_move_adjacent") {
               // 無条件で回避側を上下左右隣接マスへ移動（四重結界・剛欲）
               const cand = ADJACENT_MAP[defPos] || [];
-              if (cand.length > 0) moveSelect = { defenderId, candidates: cand, spellName: spellCard.name };
+              if (cand.length > 0) moveSelect = mkMove(defenderId, cand);
+            } else if (ef.type === "self_move_to_enemy_number") {
+              posPatch[attackerId] = defPos;  // 自機を敵と同番号マスへ（一意）
+            } else if (ef.type === "self_move_any") {
+              moveSelect = mkMove(attackerId, [1, 2, 3, 4, 5, 6]);  // 自機を任意マスへ
+            } else if (ef.type === "self_move_empty") {
+              const empty = [1, 2, 3, 4, 5, 6].filter(c => (atkGrid[c - 1] || 0) === 0);  // 自機フィールドの空きマス
+              if (empty.length > 0) moveSelect = mkMove(attackerId, empty);
             }
           }
-          const moveLog = moveSelect ? "（回避側の移動先を選択してください）"
-            : Object.keys(posPatch).length > 0 ? `（回避側を ${attPos}番マスへ移動させた）` : "";
+          const movedSelf = posPatch[attackerId] !== undefined;
+          const moveLog = moveSelect ? "（移動先を選択してください）"
+            : posPatch[defenderId] !== undefined ? `（回避側を ${attPos}番マスへ移動させた）`
+            : movedSelf ? `（自機を ${defPos}番マスへ移動させた）` : "";
           upd(p => {
             const { pcs, npcs, evRestore } = computeResourceEffects(p);
             const pe = { ...p, pcs, battle: { ...p.battle, participants: { ...p.battle.participants, npcs } } };
@@ -1231,6 +1243,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasShift = effList.some(e => e.type === "shift_non_25_horizontal");
           const hasRemoveFromEnemy = effList.some(e => e.type === "remove_from_enemy_cell");  // パパラッチ: 回避側マスを1除去
           const hasRemoveIfHit = effList.some(e => e.type === "remove_if_hit_enemy_cell");     // ペガサスクロス: 配置で置かれた分を除去
+          const hasSelfMoveEmpty = effList.some(e => e.type === "self_move_empty");            // シンガーゴースト: 自機を空きマスへ
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1253,6 +1266,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
               finalDef[dIdx] = snapDef[dIdx];
               removeLog = "（回避側マスに置かれた弾幕を除去）";
             }
+            // 自機を空きマスへ移動（選択）: 自機フィールド snapAtk の弾幕0マスが候補
+            let moveSelect = null;
+            if (hasSelfMoveEmpty) {
+              const empty = [1, 2, 3, 4, 5, 6].filter(c => (snapAtk[c - 1] || 0) === 0);
+              if (empty.length > 0) moveSelect = { targetId: attackerId, candidates: empty, spellName: spellCard.name, isPcAttacker };
+            }
             upd(p => {
               const { pcs, npcs, evRestore } = computeResourceEffects(p);
               return {
@@ -1263,9 +1282,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   participants: { ...p.battle.participants, npcs },
                   grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
                   spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+                  ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
                   ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });
@@ -1369,14 +1389,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const handleSpellMoveCell = (cell) => {
     const ms = b.spellMoveSelect;
     if (!ms) return;
+    const isSelf = ms.targetId === (ms.isPcAttacker ? b.pcCombatant : b.npcCombatant);
     upd(p => ({
       ...p,
       battle: {
         ...p.battle,
-        positions: { ...p.battle.positions, [ms.defenderId]: cell },
+        positions: { ...p.battle.positions, [ms.targetId]: cell },
         spellMoveSelect: null,
       },
-      log: [`↪ 回避側を ${cell}番マスへ移動させた`, ...p.log],
+      log: [`↪ ${isSelf ? "自機" : "回避側"}を ${cell}番マスへ移動させた`, ...p.log],
     }));
   };
 
@@ -2275,13 +2296,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       );
     }
 
-    // 回避側の移動先選択（古明地こいし「イドの開放」等）
-    if (b.spellMoveSelect && b.spellMoveSelect.defenderId === (isPcAttacker ? b.npcCombatant : b.pcCombatant)) {
+    // 移動先選択（こいし「イドの開放」/ 四重結界 / 自機移動スペカ等）。攻撃側が操作する。
+    if (b.spellMoveSelect && b.spellMoveSelect.isPcAttacker === isPcAttacker) {
       const ms = b.spellMoveSelect;
+      const isSelfMove = ms.targetId === (isPcAttacker ? b.pcCombatant : b.npcCombatant);
       return (
-        <SpellCard color={C.gold} title={`✦ ${ms.spellName} ─ 回避側の移動先`} style={{ marginTop: 14 }}>
+        <SpellCard color={C.gold} title={`✦ ${ms.spellName} ─ ${isSelfMove ? "自機" : "回避側"}の移動先`} style={{ marginTop: 14 }}>
           <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>
-            回避側を移動させる隣接マスを選んでください。
+            {isSelfMove ? "自機" : "回避側"}を移動させるマスを選んでください。
           </div>
           {canDeclare ? (
             <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
