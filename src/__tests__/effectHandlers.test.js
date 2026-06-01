@@ -5,6 +5,7 @@ import {
   applyAfterEffect, applyAfterEffects,
   applyStep, applyRandomResult,
   resolveCount, isRandomStep, isChoiceStep, analyzeSteps,
+  shiftNon25Horizontal,
 } from '../data/effectHandlers';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1055,5 +1056,61 @@ describe('統合テスト: 清符「オーパーツ清め」 (clear_enemy_adj_th
     expect(result[2]).toBe(2); // セル3: 変わらず
     expect(result[4]).toBe(1); // セル5: 変わらず
     expect(result[1]).toBe(2); // セル2: 0+2=2
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// shiftNon25Horizontal: 摩多羅隠岐奈「太古に失われた背中」の移動効果
+// グリッド 1 2 3 / 4 5 6。2番/5番以外(1,3,4,6)の弾幕を1つずつ左右隣接へ(1→2,3→2,4→5,6→5)
+// ═══════════════════════════════════════════════════════════════════
+describe('shiftNon25Horizontal: 2/5番以外の弾幕を左右へ移動', () => {
+  it('1番マスの弾幕は2番へ移る', () => {
+    expect(shiftNon25Horizontal([1, 0, 0, 0, 0, 0])).toEqual([0, 1, 0, 0, 0, 0]);
+  });
+
+  it('3番マスの弾幕は2番へ移る', () => {
+    expect(shiftNon25Horizontal([0, 0, 1, 0, 0, 0])).toEqual([0, 1, 0, 0, 0, 0]);
+  });
+
+  it('4番マスの弾幕は5番へ移る', () => {
+    expect(shiftNon25Horizontal([0, 0, 0, 1, 0, 0])).toEqual([0, 0, 0, 0, 1, 0]);
+  });
+
+  it('6番マスの弾幕は5番へ移る', () => {
+    expect(shiftNon25Horizontal([0, 0, 0, 0, 0, 1])).toEqual([0, 0, 0, 0, 1, 0]);
+  });
+
+  it('1番と3番の弾幕は両方2番へ集まる', () => {
+    expect(shiftNon25Horizontal([1, 0, 1, 0, 0, 0])).toEqual([0, 2, 0, 0, 0, 0]);
+  });
+
+  it('4番と6番の弾幕は両方5番へ集まる', () => {
+    expect(shiftNon25Horizontal([0, 0, 0, 1, 0, 1])).toEqual([0, 0, 0, 0, 2, 0]);
+  });
+
+  it('2番・5番マスの弾幕は移動しない（対象外）', () => {
+    expect(shiftNon25Horizontal([0, 3, 0, 0, 2, 0])).toEqual([0, 3, 0, 0, 2, 0]);
+  });
+
+  it('各対象マスから1つだけ移す（複数あっても1つ）', () => {
+    // 1番に3個 → 1個だけ2番へ、1番には2個残る
+    expect(shiftNon25Horizontal([3, 0, 0, 0, 0, 0])).toEqual([2, 1, 0, 0, 0, 0]);
+  });
+
+  it('全マスに弾幕がある複合ケース', () => {
+    // 1→2, 3→2, 4→5, 6→5 を各1つ。元: [1,1,1,1,1,1]
+    // 1番:1→0, 3番:1→0, 2番:1+2=3 / 4番:1→0, 6番:1→0, 5番:1+2=3
+    expect(shiftNon25Horizontal([1, 1, 1, 1, 1, 1])).toEqual([0, 3, 0, 0, 3, 0]);
+  });
+
+  it('空グリッドは変化なし', () => {
+    expect(shiftNon25Horizontal([0, 0, 0, 0, 0, 0])).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  it('元の配列を変更しない（イミュータブル）', () => {
+    const grid = [1, 0, 1, 0, 0, 0];
+    const orig = [...grid];
+    shiftNon25Horizontal(grid);
+    expect(grid).toEqual(orig);
   });
 });

@@ -7,7 +7,7 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
-import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount } from "./data/effectHandlers";
+import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
@@ -1134,6 +1134,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const snapDef = defGrid;
           const snapAtk = atkGrid;
           upd(p => consumeSpell(p));
+          const hasShift = (structured.effects || []).some(e => e.type === "shift_non_25_horizontal");
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1143,6 +1144,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
               const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
               finalDef = nextDef;
             }
+            // 配置後の移動効果（摩多羅隠岐奈「太古に失われた背中」）
+            if (hasShift) finalDef = shiftNon25Horizontal(finalDef);
             upd(p => ({
               ...p,
               battle: {
@@ -1150,7 +1153,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
                 spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
               },
-              log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}`, ...p.log],
             }));
           });
           return;
@@ -7547,6 +7550,15 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   const isSpectator = spectators.some(p => p.uid === user.uid);
   const isCombatant = b.pcCombatant === user.uid;
 
+  // PC/NPC 双方の名前を解決（援護/かばうの主体が NPC のこともあるため）
+  const npcsList = b.participants?.npcs || [];
+  const entityName = (id) => gs.pcs.find(x => x.uid === id)?.charName || npcsList.find(n => n.id === id)?.name || "?";
+
+  // 集団戦で出撃していない生存 NPC（NPC観戦者）。GM が援護/かばうを実行できる。
+  const npcSpectators = b.type === "mass"
+    ? npcsList.filter(n => n.id !== b.npcCombatant && (n.resources?.残り人数?.cur || 0) > 0)
+    : [];
+
   const handleSupportFire = (userUid) => {
     upd(p => ({
       ...p,
@@ -7555,7 +7567,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
         supportDice: (p.battle.supportDice || 0) + 1,
         usedIntervention: { ...p.battle.usedIntervention, [userUid]: "support" }
       },
-      log: [`💥 ${gs.pcs.find(x => x.uid === userUid)?.charName} の援護射撃！攻撃ダイスが増加します。`, ...p.log]
+      log: [`💥 ${entityName(userUid)} の援護射撃！攻撃ダイスが増加します。`, ...p.log]
     }));
   };
 
@@ -7576,7 +7588,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
             grids: { ...p.battle.grids, [targetUid]: currentGrid },
             usedIntervention: { ...p.battle.usedIntervention, [userUid]: "cover" }
           },
-          log: [`🛡️ ${gs.pcs.find(x => x.uid === userUid)?.charName} が ${die}番マスをかばった！ ${success ? "弾幕を除去しました。" : "しかしそこには弾幕がなかった！"}`, ...p.log]
+          log: [`🛡️ ${entityName(userUid)} が ${die}番マスをかばった！ ${success ? "弾幕を除去しました。" : "しかしそこには弾幕がなかった！"}`, ...p.log]
         };
       });
     });
@@ -7852,13 +7864,45 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                       style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
                     >💥 援護射撃</button>
 
-                    <button 
+                    <button
                       onClick={() => handleCover(user.uid, b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
                       disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
                       style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
                     >🛡️ かばう</button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* NPC観戦者の介入（集団戦・GM操作）: 出撃NPCを援護射撃 or かばう */}
+            {isGm && npcSpectators.length > 0 && pcCombatant && npcCombatant && (
+              <div style={{ padding: 10, background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: C.red, letterSpacing: 1, marginBottom: 6 }}>NPC観戦者の介入（GM）</div>
+                {npcSpectators.map(n => {
+                  const used = b.usedIntervention?.[n.id];
+                  return (
+                    <div key={n.id} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: `1px solid ${C.border}33` }}>
+                      <div style={{ fontSize: 9, color: C.textDim, marginBottom: 3 }}>{n.name}</div>
+                      {used ? (
+                        <div style={{ fontSize: 8, color: C.textFaint }}>使用済み ({used === "support" ? "援護" : "かばう"})</div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button
+                            onClick={() => handleSupportFire(n.id)}
+                            disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
+                            style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 8, padding: "3px", flex: 1}}
+                          >💥 援護</button>
+                          <button
+                            onClick={() => handleCover(n.id, b.npcCombatant)}
+                            disabled={b.phase !== "pc_shot_after"}
+                            style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 8, padding: "3px", flex: 1}}
+                          >🛡️ かばう</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.5 }}>援護＝NPC攻撃ステップ／かばう＝PC攻撃後（NPC被弾時）</div>
               </div>
             )}
 

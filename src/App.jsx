@@ -682,6 +682,8 @@ function SessionApp({ roomCode, user }) {
       as:  p.as  ?? charData?.as  ?? null,
       ds:  p.ds  ?? charData?.ds  ?? null,
       ps: personality,
+      // currentSpot が空文字/未設定の既存データを救済（探索フェーズで "" だと移動・表示が壊れる）
+      currentSpot: p.currentSpot || "11",
     };
   }
 
@@ -697,7 +699,8 @@ function SessionApp({ roomCode, user }) {
         // baseSpotId 自体を付け替えることで、開始時だけでなく夜の拠点帰還にも反映される。
         const baseSpotId = resolveBaseSpot(r?.scenarioData, baseSpot?.id ?? "11");
 
-        let startSpotId = r?.scenarioData?.startSpotId ?? null;
+        // startSpotId は空文字も無効として扱う（?? は "" を通してしまうため || を使う）
+        let startSpotId = r?.scenarioData?.startSpotId || null;
         if (r?.scenarioData?.startSpotType === "base") startSpotId = baseSpotId;
 
         return {
@@ -726,7 +729,7 @@ function SessionApp({ roomCode, user }) {
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
           baseSpotId,
-          currentSpot: startSpotId ?? "11",
+          currentSpot: startSpotId || "11",
           log: [],
         };
       });

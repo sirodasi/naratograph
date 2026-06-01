@@ -387,6 +387,24 @@ export function resolveCount(countDef, entity = {}) {
   return 1;
 }
 
+/**
+ * 摩多羅隠岐奈「太古に失われた背中」: 2番/5番以外（1,3,4,6番）のマスの弾幕を
+ * 1つずつ左右隣接マスへ移す。グリッドは `1 2 3 / 4 5 6` で左右隣接先は一意（1→2, 3→2, 4→5, 6→5）。
+ * 元の値を基準に各対象マスを判定する（対象マス同士・移動先は重複しないため逐次でも安全）。
+ */
+const SHIFT_NON25_DEST = { 1: 2, 3: 2, 4: 5, 6: 5 };
+export function shiftNon25Horizontal(grid) {
+  const g = [...grid];
+  for (const [cell, dest] of Object.entries(SHIFT_NON25_DEST)) {
+    const idx = Number(cell) - 1;
+    if (g[idx] > 0) {
+      g[idx] -= 1;
+      g[dest - 1] = (g[dest - 1] || 0) + 1;
+    }
+  }
+  return g;
+}
+
 /** ステップがダイス必要か */
 export function isRandomStep(step) {
   return [
