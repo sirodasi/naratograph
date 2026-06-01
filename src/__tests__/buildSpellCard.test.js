@@ -127,10 +127,16 @@ describe('buildSpellCard: manual フラグ', () => {
 // （宣言UIで「GM手動」警告を出すためのフラグ）
 // ═══════════════════════════════════════════════════════════════════
 describe('buildSpellCard: manualEffects（要GM手動の effects 抽出）', () => {
-  it('自動処理されない効果（回避力減少）は manualEffects に含まれる', () => {
-    // 幻符「殺人ドール」: effects に reduce_enemy_evasion（未自動化）
+  it('未自動化の効果（グレイズリセット）は manualEffects に含まれる', () => {
+    // 「バレットドミニオン」: effects に reset_graze（未自動化）
+    const sc = buildSpellCard({ name: '「バレットドミニオン」', desc: 'ランダム配置', ref: '「バレットドミニオン」' });
+    expect(sc.manualEffects).toContain('reset_graze');
+  });
+
+  it('自動化された効果（回避力減少）は manualEffects に含まれない', () => {
+    // 幻符「殺人ドール」: reduce_enemy_evasion は自動化済み（AUTO_HANDLED）
     const sc = buildSpellCard({ name: '幻符「殺人ドール」', desc: '敵機マスに配置', ref: '幻符「殺人ドール」' });
-    expect(sc.manualEffects).toContain('reduce_enemy_evasion');
+    expect(sc.manualEffects).not.toContain('reduce_enemy_evasion');
   });
 
   it('自動処理される効果（配置直後の除去）は manualEffects に含まれない', () => {

@@ -586,6 +586,11 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
+  // ─ 回避力変動（resources.回避力.cur を一時変更、ラウンド終了で復元） ─
+  "reduce_enemy_evasion",
+  "increase_enemy_evasion",
+  "reduce_own_evasion",
+  "costs_own_evasion",
 ]);
 
 // スペカテキスト/スペルオブジェクトからフルオブジェクトを組み立てる
@@ -1046,8 +1051,40 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
     const attackerName = isPcAttacker ? combatantPc?.charName : combatantNpc?.name;
 
-    // ── roll_check_then_place: auto レベルに関わらず優先処理 ─────────────
     const structured = spellCard.structured;
+
+    // ── 回避力変動 effects（このラウンド中 / コスト）─────────────────────
+    // resources.回避力.cur を一時変更し、handleCleanup で evasionRestore から復元する。
+    // costs_own_evasion（杞人地）のみ恒久コストとして復元対象から外す。
+    const EVASION_EFFECT_TYPES = ["reduce_enemy_evasion", "increase_enemy_evasion", "reduce_own_evasion", "costs_own_evasion"];
+    const evEffects = (structured?.effects || []).filter(e => EVASION_EFFECT_TYPES.includes(e.type));
+    const computeEvasion = (p) => {
+      let pcs = p.pcs;
+      let npcs = p.battle.participants.npcs;
+      const evRestore = { ...(p.battle.evasionRestore || {}) };
+      for (const ef of evEffects) {
+        const isEnemy = ef.type === "reduce_enemy_evasion" || ef.type === "increase_enemy_evasion";
+        const targetId = isEnemy ? defenderId : attackerId;
+        const delta = ef.type === "increase_enemy_evasion" ? 1 : -1;
+        const restore = ef.type !== "costs_own_evasion";
+        const pc = pcs.find(x => x.uid === targetId);
+        if (pc) {
+          const cur = pc.resources?.回避力?.cur ?? 3;
+          if (restore && !(targetId in evRestore)) evRestore[targetId] = cur;
+          pcs = pcs.map(x => x.uid === targetId ? { ...x, resources: { ...x.resources, 回避力: { ...x.resources.回避力, cur: Math.max(0, cur + delta) } } } : x);
+        } else {
+          const npc = npcs.find(n => n.id === targetId);
+          if (npc) {
+            const cur = npc.resources?.回避力?.cur ?? 3;
+            if (restore && !(targetId in evRestore)) evRestore[targetId] = cur;
+            npcs = npcs.map(n => n.id === targetId ? { ...n, resources: { ...n.resources, 回避力: { ...n.resources.回避力, cur: Math.max(0, cur + delta) } } } : n);
+          }
+        }
+      }
+      return { pcs, npcs, evRestore };
+    };
+
+    // ── roll_check_then_place: auto レベルに関わらず優先処理 ─────────────
     const rollCheckStep = structured?.steps?.find(s => s.type === "roll_check_then_place");
     if (rollCheckStep) {
       let defGrid = [...(b.grids?.[defenderId] || [0,0,0,0,0,0])];
@@ -1111,14 +1148,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       // designated / choice_fixed / clear_chosen_then_random → CHOOSE UIへ直接ディスパッチ
       if (hasChoiceStep && ["designated", "choice_fixed", "clear_chosen_then_random"].includes(firstChoiceStep?.type)) {
         const count = firstChoiceStep.count ?? 1;
-        upd(p => ({
-          ...mergeConsumeWithBattle(p, {
-            grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
-            spellChoose: { attackerId, defenderId, remaining: count, selected: [], excludeEnemyCell: spellCard.structured?.condition_on_placement?.exclude_enemy_cell === true },
-            spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-          }),
-          log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)`, ...p.log],
-        }));
+        upd(p => {
+          const { pcs, npcs, evRestore } = computeEvasion(p);
+          const pe = { ...p, pcs, battle: { ...p.battle, participants: { ...p.battle.participants, npcs } } };
+          return {
+            ...mergeConsumeWithBattle(pe, {
+              grids: { ...pe.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
+              spellChoose: { attackerId, defenderId, remaining: count, selected: [], excludeEnemyCell: spellCard.structured?.condition_on_placement?.exclude_enemy_cell === true },
+              spellUsedBy: { ...(pe.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+              ...(evEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+            }),
+            log: [`🔮 ${attackerName}：${spellCard.name}！ (マスを選択してください)${evEffects.length > 0 ? "（回避力変動）" : ""}`, ...p.log],
+          };
+        });
         return;
       }
 
@@ -1143,15 +1185,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           }
           const moveLog = moveSelect ? "（回避側の移動先を選択してください）"
             : Object.keys(posPatch).length > 0 ? `（回避側を ${attPos}番マスへ移動させた）` : "";
-          upd(p => ({
-            ...mergeConsumeWithBattle(p, {
-              grids: { ...p.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
-              spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-              ...(Object.keys(posPatch).length > 0 ? { positions: { ...p.battle.positions, ...posPatch } } : {}),
-              ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
-            }),
-            log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}`, ...p.log],
-          }));
+          upd(p => {
+            const { pcs, npcs, evRestore } = computeEvasion(p);
+            const pe = { ...p, pcs, battle: { ...p.battle, participants: { ...p.battle.participants, npcs } } };
+            return {
+              ...mergeConsumeWithBattle(pe, {
+                grids: { ...pe.battle.grids, [defenderId]: defGrid, [attackerId]: atkGrid },
+                spellUsedBy: { ...(pe.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+                ...(Object.keys(posPatch).length > 0 ? { positions: { ...pe.battle.positions, ...posPatch } } : {}),
+                ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
+                ...(evEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+              }),
+              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${evEffects.length > 0 ? "（回避力変動）" : ""}`, ...p.log],
+            };
+          });
           return;
         }
 
@@ -1186,15 +1233,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
               finalDef[dIdx] = snapDef[dIdx];
               removeLog = "（回避側マスに置かれた弾幕を除去）";
             }
-            upd(p => ({
-              ...p,
-              battle: {
-                ...p.battle,
-                grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
-                spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-              },
-              log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}`, ...p.log],
-            }));
+            upd(p => {
+              const { pcs, npcs, evRestore } = computeEvasion(p);
+              return {
+                ...p,
+                pcs,
+                battle: {
+                  ...p.battle,
+                  participants: { ...p.battle.participants, npcs },
+                  grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
+                  spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+                  ...(evEffects.length > 0 ? { evasionRestore: evRestore } : {}),
+                },
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${evEffects.length > 0 ? "（回避力変動）" : ""}`, ...p.log],
+              };
+            });
           });
           return;
         }
@@ -1980,11 +2033,25 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
       const nextActedPcs = [...new Set([...(currentB.actedPcs || []), currentB.pcCombatant])];
       const nextActedNpcs = [...new Set([...(currentB.actedNpcs || []), currentB.npcCombatant])];
-      
+
+      // 回避力変動（このラウンド限定）を元に戻す。costs_own_evasion は記録されないので復元されない。
+      const evRestore = currentB.evasionRestore || {};
+      let restoredPcs = p.pcs;
+      let restoredNpcs = currentB.participants.npcs;
+      for (const [id, origCur] of Object.entries(evRestore)) {
+        if (restoredPcs.some(x => x.uid === id)) {
+          restoredPcs = restoredPcs.map(x => x.uid === id ? { ...x, resources: { ...x.resources, 回避力: { ...x.resources.回避力, cur: origCur } } } : x);
+        } else {
+          restoredNpcs = restoredNpcs.map(n => n.id === id ? { ...n, resources: { ...n.resources, 回避力: { ...n.resources.回避力, cur: origCur } } } : n);
+        }
+      }
+
       return {
         ...p,
+        pcs: restoredPcs,
         battle: {
           ...currentB,
+          participants: { ...currentB.participants, npcs: restoredNpcs },
           phase: "round_start",
           round: currentB.round + 1,
           grids: nextGrids,
@@ -1999,8 +2066,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           slowBulletSelect: null,
           slowBulletProtect: null,
           spellMoveSelect: null,
+          evasionRestore: null,
           usedds: {},
-          currentEvadeDice: getDefaultEvadeDice(pcs.find(pc => pc.uid === currentB.pcCombatant)),
+          currentEvadeDice: getDefaultEvadeDice(restoredPcs.find(pc => pc.uid === currentB.pcCombatant)),
           supportDice: 0,
           usedIntervention: {},
           extraInterventionPool: null,
@@ -3335,6 +3403,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           slowBulletSelect: null,
           slowBulletProtect: null,
           spellMoveSelect: null,
+          evasionRestore: null,
           spellChoose: null,
           pcLastResort: false,
           npcLastResort: false,
