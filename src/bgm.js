@@ -5,9 +5,13 @@
 // ブラウザの自動再生制限のため、初回ユーザー操作後に unlock() を呼ぶまで鳴らない。
 // 音量・ミュートは個人設定として localStorage に保存（既定はミュート起動）。
 
+// スライダー値(0〜1)に対する実出力スケール。BGM 音源は SE より相対的に大きいため、
+// スライダー50%(0.5) が実出力 0.05 程度（=従来の5%相当の快適音量）になるよう圧縮する。
+const BGM_GAIN = 0.1;
+
 let _volume = (() => {
-  try { const v = parseFloat(localStorage.getItem("bgmVolume")); return isNaN(v) ? 0.35 : Math.min(1, Math.max(0, v)); }
-  catch { return 0.35; }
+  try { const v = parseFloat(localStorage.getItem("bgmVolume")); return isNaN(v) ? 0.5 : Math.min(1, Math.max(0, v)); }
+  catch { return 0.5; }
 })();
 let _muted = (() => {
   try { const v = localStorage.getItem("bgmMuted"); return v === null ? true : v === "1"; }  // 既定ミュート
@@ -27,7 +31,7 @@ function ensurePlayers() {
   _players.forEach(a => { a.loop = true; a.preload = "auto"; a.volume = 0; });
 }
 
-function effVol() { return _muted ? 0 : _volume; }
+function effVol() { return _muted ? 0 : _volume * BGM_GAIN; }
 
 function clearFade() {
   if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
