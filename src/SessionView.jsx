@@ -593,6 +593,8 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "next_dodge_no_evasion_loss",  // オプティカルカモフラージュ: 次の回避で回避力を消費しない
   // ─ 任意実行 ─
   "optional_redo_random",        // ブラックペガサス流星弾: 任意で再配置
+  // ─ ラウンド終了時の自己ペナルティ ─
+  "self_hp_loss_if_no_damage",   // 太陽を盗んだ鴉: 被弾なしならラウンド終了時に残り人数-1
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
@@ -1256,6 +1258,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasSelfMoveEmpty = effList.some(e => e.type === "self_move_empty");            // シンガーゴースト: 自機を空きマスへ
           const hasExtraFamiliar = effList.some(e => e.type === "extra_familiar_per_round_this_phase"); // ホークビーコン: フェイズ中・毎ラウンド追加介入
           const hasNoEvasionLoss = effList.some(e => e.type === "next_dodge_no_evasion_loss");  // オプティカルカモフラージュ: 次の回避で回避力減らさず
+          const hasSuntan = effList.some(e => e.type === "self_hp_loss_if_no_damage");          // 太陽を盗んだ鴉: 被弾なしならラウンド終了時に自分-1
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1299,8 +1302,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   ...(hasExtraFamiliar ? { extraFamiliarPhase: [...new Set([...(p.battle.extraFamiliarPhase || []), attackerId])] } : {}),
                   ...(hasNoEvasionLoss ? { noEvasionLoss: { ...p.battle.noEvasionLoss, [attackerId]: true } } : {}),
                   ...(optRedo ? { optionalRedo: { attackerId, defenderId, count: optRedo.count ?? 3, snapDef } } : {}),
+                  ...(hasSuntan ? { suntanPenalty: { ...p.battle.suntanPenalty, [attackerId]: true } } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${optRedo ? "（任意で再配置できます）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${optRedo ? "（任意で再配置できます）" : ""}${hasSuntan ? "（被弾しなければラウンド終了時に残り人数-1）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });
@@ -2088,6 +2092,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         ...p.battle,
         grids: { ...p.battle.grids, [targetId]: clearedGrid },
         phase: isPc ? (newLives > 0 ? "pc_hit_recovery" : "pc_dropout") : (newLives > 0 ? "npc_hit_recovery" : "npc_dropout"),
+        // 太陽を盗んだ鴉の判定用: このラウンドで残り人数が減ったエンティティを記録
+        hpReducedThisRound: { ...p.battle.hpReducedThisRound, [targetId]: true },
         ...(isPc ? {} : { participants: { ...p.battle.participants, npcs: nextEntities } }),
       };
 
@@ -2161,6 +2167,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         }
       }
 
+      // 太陽を盗んだ鴉: このラウンドで残り人数が減らなかった保有者は残り人数-1
+      const suntan = currentB.suntanPenalty || {};
+      const reduced = currentB.hpReducedThisRound || {};
+      const suntanLogs = [];
+      for (const id of Object.keys(suntan)) {
+        if (reduced[id]) continue;  // 被弾していれば発動しない
+        const dec1 = (e) => {
+          const cur = Math.max(0, (e.resources?.残り人数?.cur || 0) - 1);
+          return { ...e, resources: { ...e.resources, 残り人数: { ...e.resources.残り人数, cur } } };
+        };
+        const pcHit = restoredPcs.find(x => x.uid === id);
+        if (pcHit) { restoredPcs = restoredPcs.map(x => x.uid === id ? dec1(x) : x); suntanLogs.push(`☀ ${pcHit.charName}：太陽を盗んだ鴉のデメリットで残り人数-1`); }
+        else { const np = restoredNpcs.find(n => n.id === id); if (np) { restoredNpcs = restoredNpcs.map(n => n.id === id ? dec1(n) : n); suntanLogs.push(`☀ ${np.name}：太陽を盗んだ鴉のデメリットで残り人数-1`); } }
+      }
+
       return {
         ...p,
         pcs: restoredPcs,
@@ -2190,6 +2211,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           mayStayOnDodge: false,
           noEvasionLoss: {},
           optionalRedo: null,
+          suntanPenalty: {},
+          hpReducedThisRound: {},
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
@@ -2200,7 +2223,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           tempSelectedPc: null,
           tempSelectedNpc: null
         },
-        log: [`📋 ラウンド ${currentB.round} 終了。弾幕が減衰しました。`, ...p.log]
+        log: [`📋 ラウンド ${currentB.round} 終了。弾幕が減衰しました。`, ...suntanLogs, ...p.log]
       };
     });
   };
@@ -3541,6 +3564,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           mayStayOnDodge: false,
           noEvasionLoss: {},
           optionalRedo: null,
+          suntanPenalty: {},
+          hpReducedThisRound: {},
           pcFamiliarAction: null,
           npcFamiliarAction: null,
           usedds: {},
