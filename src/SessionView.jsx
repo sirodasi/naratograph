@@ -6642,7 +6642,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 }
 
 // ─── RightPanel ───────────────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS, presence = {}, uploadBgm, clearBgm }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS, presence = {} }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
@@ -6656,25 +6656,6 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [showBgm, setShowBgm] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(bgm.muted);
   const [bgmVol, setBgmVol] = useState(bgm.volume);
-  const [bgmUploading, setBgmUploading] = useState(null);   // アップロード中のフェーズ
-  const [bgmDragOver, setBgmDragOver] = useState(null);     // D&Dホバー中のフェーズ
-  const [bgmError, setBgmError] = useState("");
-
-  const handleBgmFile = async (phase, file) => {
-    if (!file) return;
-    if (!file.type.startsWith("audio/")) { setBgmError("音声ファイルを指定してください"); return; }
-    if (file.size > 15 * 1024 * 1024) { setBgmError("ファイルが大きすぎます（15MBまで）"); return; }
-    setBgmError("");
-    setBgmUploading(phase);
-    try {
-      await uploadBgm(phase, file);
-    } catch (e) {
-      setBgmError("アップロードに失敗しました（Storage設定を確認）");
-      console.error(e);
-    } finally {
-      setBgmUploading(null);
-    }
-  };
 
   // 探索フェーズのダイス効果音（バトル中は BattleDiceTray が担当するため除外）
   const prevExploreDiceRef = useRef(false);
@@ -6927,47 +6908,20 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 </div>
                 {isGm && (
                   <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
-                    <div style={{ fontSize: 9, color: C.red, letterSpacing: 1, marginBottom: 6 }}>▶ GM: フェーズ別BGMファイル</div>
-                    {[["explore", "探索/導入"], ["battle", "弾幕ごっこ"], ["end", "セッション終了"]].map(([key, label]) => {
-                      const isSet = !!(gs.bgm || {})[key];
-                      const isUp  = bgmUploading === key;
-                      const isDrag = bgmDragOver === key;
-                      const inputId = `bgm-file-${key}`;
-                      return (
-                        <div key={key} style={{ marginBottom: 6 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                            <span style={{ fontSize: 9, color: C.textDim, minWidth: 56 }}>{label}</span>
-                            {isSet && !isUp && <span style={{ fontSize: 8, color: C.green }}>✅ 設定済み</span>}
-                            {isUp && <span style={{ fontSize: 8, color: C.gold }}>⏳ アップロード中…</span>}
-                            {isSet && !isUp && (
-                              <button onClick={() => clearBgm(key)} style={{ marginLeft: "auto", fontSize: 8, padding: "1px 6px", cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.textFaint }}>削除</button>
-                            )}
-                          </div>
-                          <label
-                            htmlFor={inputId}
-                            onDragOver={e => { e.preventDefault(); setBgmDragOver(key); }}
-                            onDragLeave={() => setBgmDragOver(null)}
-                            onDrop={e => { e.preventDefault(); setBgmDragOver(null); const f = e.dataTransfer.files?.[0]; if (f) handleBgmFile(key, f); }}
-                            style={{
-                              display: "block", padding: "8px 10px", borderRadius: 4, cursor: isUp ? "wait" : "pointer",
-                              border: `1px dashed ${isDrag ? C.gold : isSet ? C.greenBorder : C.border}`,
-                              background: isDrag ? "rgba(200,160,64,0.12)" : "rgba(255,255,255,0.02)",
-                              fontSize: 9, color: isDrag ? C.gold : C.textFaint, textAlign: "center",
-                            }}
-                          >
-                            {isDrag ? "ここにドロップ" : "クリックで選択 / ファイルをドラッグ&ドロップ"}
-                          </label>
-                          <input
-                            id={inputId} type="file" accept="audio/*" disabled={isUp}
-                            onChange={e => { const f = e.target.files?.[0]; if (f) handleBgmFile(key, f); e.target.value = ""; }}
-                            style={{ display: "none" }}
-                          />
-                        </div>
-                      );
-                    })}
-                    {bgmError && <div style={{ fontSize: 8, color: C.red, marginTop: 4 }}>{bgmError}</div>}
+                    <div style={{ fontSize: 9, color: C.red, letterSpacing: 1, marginBottom: 6 }}>▶ GM: フェーズ別BGMのURL設定</div>
+                    {[["explore", "探索/導入"], ["battle", "弾幕ごっこ"], ["end", "セッション終了"]].map(([key, label]) => (
+                      <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                        <span style={{ fontSize: 9, color: C.textDim, minWidth: 56 }}>{label}</span>
+                        <input
+                          value={(gs.bgm || {})[key] || ""}
+                          onChange={e => { const v = e.target.value; upd(p => ({ ...p, bgm: { ...(p.bgm || {}), [key]: v } })); }}
+                          placeholder="https://…（mp3/ogg）"
+                          style={{ ...iStyle, flex: 1, fontSize: 9, padding: "4px 6px" }}
+                        />
+                      </div>
+                    ))}
                     <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.6, marginTop: 4 }}>
-                      ※ mp3/ogg などの音声ファイル（15MBまで）。著作権・利用規約はGMの責任で確認を。
+                      ※ 直接再生可能な音声ファイルのURLを指定してください。著作権・利用規約はGMの責任で確認を。
                     </div>
                   </div>
                 )}
