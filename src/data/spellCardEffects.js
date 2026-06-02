@@ -806,7 +806,7 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ ドレミー・スイート
   "夢符「ドリームキャッチャー」": {
-    auto: "partial",
+    auto: "full",
     steps: [{ type: "adjacent_enemy", count: 1 }],
     effects: [{ type: "optional_clear_then_random" }],
     note: "配置後、任意数を除去→除去数分のランダムを行うことができる",

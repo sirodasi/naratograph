@@ -593,6 +593,7 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "next_dodge_no_evasion_loss",  // オプティカルカモフラージュ: 次の回避で回避力を消費しない
   // ─ 任意実行 ─
   "optional_redo_random",        // ブラックペガサス流星弾: 任意で再配置
+  "optional_clear_then_random",  // ドリームキャッチャー: 任意数除去→ランダム
   // ─ ラウンド終了時の自己ペナルティ ─
   "self_hp_loss_if_no_damage",   // 太陽を盗んだ鴉: 被弾なしならラウンド終了時に残り人数-1
   // ─ 回避中のグレイズ同調 ─
@@ -1229,6 +1230,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const movedSelf = posPatch[attackerId] !== undefined;
           const hasMayStay = moveEffects.some(e => e.type === "enemy_may_stay_on_dodge");  // 正直者の死/吉弔大結界
           const hasZanmei = moveEffects.some(e => e.type === "extra_hp_loss_if_same_cell_fail");  // 余命幾許
+          const hasOptClear = moveEffects.some(e => e.type === "optional_clear_then_random");  // ドリームキャッチャー
+          // ドリームキャッチャー: 配置したマス（敵機隣接）を除去候補とする
+          const optClearCandidates = hasOptClear ? (ADJACENT_MAP[defPos] || []).filter(c => (defGrid[c - 1] || 0) > 0) : [];
           const moveLog = moveSelect ? "（移動先を選択してください）"
             : posPatch[defenderId] !== undefined ? `（回避側を ${attPos}番マスへ移動させた）`
             : movedSelf ? `（自機を ${defPos}番マスへ移動させた）` : "";
@@ -1244,8 +1248,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
                 ...(hasMayStay ? { mayStayOnDodge: true } : {}),
                 ...(hasZanmei ? { zanmeiPenalty: { ...pe.battle.zanmeiPenalty, [attackerId]: true } } : {}),
+                ...(hasOptClear && optClearCandidates.length > 0 ? { optionalClear: { attackerId, defenderId, candidates: optClearCandidates, selected: [] } } : {}),
               }),
-              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${hasZanmei ? "（自機と同番号のマスで回避失敗→追加ダメージ）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${hasZanmei ? "（自機と同番号のマスで回避失敗→追加ダメージ）" : ""}${hasOptClear && optClearCandidates.length > 0 ? "（任意で除去→ランダム）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
             };
           });
           return;
@@ -1478,6 +1483,40 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   };
   const handleOptionalRedoSkip = () => {
     upd(p => ({ ...p, battle: { ...p.battle, optionalRedo: null }, log: [`そのまま確定した。`, ...p.log] }));
+  };
+
+  // optional_clear_then_random（ドリームキャッチャー）: 配置マスから除去するマスをトグル選択
+  const handleOptionalClearToggle = (cell) => {
+    upd(p => {
+      const oc = p.battle.optionalClear;
+      if (!oc) return p;
+      const selected = oc.selected.includes(cell) ? oc.selected.filter(c => c !== cell) : [...oc.selected, cell];
+      return { ...p, battle: { ...p.battle, optionalClear: { ...oc, selected } } };
+    });
+  };
+  // 選択を確定 → 選択マスの弾幕を1つずつ除去 → 除去数 X として【ランダム×X】
+  const handleOptionalClearConfirm = () => {
+    const oc = b.optionalClear;
+    if (!oc) return;
+    const x = oc.selected.length;
+    if (x === 0) {
+      upd(p => ({ ...p, battle: { ...p.battle, optionalClear: null }, log: [`ドリームキャッチャー：何も取り除かなかった。`, ...p.log] }));
+      return;
+    }
+    // まず選択マスを除去
+    upd(p => {
+      const grid = [...(p.battle.grids[oc.defenderId] || [0,0,0,0,0,0])];
+      oc.selected.forEach(c => { if (grid[c - 1] > 0) grid[c - 1] -= 1; });
+      return { ...p, battle: { ...p.battle, grids: { ...p.battle.grids, [oc.defenderId]: grid } } };
+    });
+    // 除去数分のランダム配置
+    animateDice(x, "ドリームキャッチャー（ランダム）", res => {
+      upd(p => {
+        const grid = [...(p.battle.grids[oc.defenderId] || [0,0,0,0,0,0])];
+        res.forEach(d => { if (d >= 1 && d <= 6) grid[d - 1] += 1; });
+        return { ...p, battle: { ...p.battle, grids: { ...p.battle.grids, [oc.defenderId]: grid }, optionalClear: null }, log: [`🔮 ドリームキャッチャー：${x}個取り除き、ランダム×${x}を配置！`, ...p.log] };
+      });
+    });
   };
 
   // roll_check_then_place: ダイス結果を受けてステップを適用する
@@ -2248,6 +2287,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           mayStayOnDodge: false,
           noEvasionLoss: {},
           optionalRedo: null,
+          optionalClear: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
@@ -2448,6 +2488,38 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
               <button onClick={handleOptionalRedo} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), flex: 1, fontSize: 10 }}>🎲 もう一度配置する</button>
               <button onClick={handleOptionalRedoSkip} style={{ ...btnFull("rgba(255,255,255,0.05)", C.border, C.textDim), flex: 1, fontSize: 10 }}>このまま確定</button>
             </div>
+          ) : (
+            <div style={{ fontSize: 9, color: C.textFaint }}>相手が選択中…</div>
+          )}
+        </SpellCard>
+      );
+    }
+
+    // 任意で除去→ランダム（ドリームキャッチャー）。攻撃側が操作する。
+    if (b.optionalClear && b.optionalClear.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
+      const oc = b.optionalClear;
+      return (
+        <SpellCard color={C.gold} title="✦ ドリームキャッチャー ─ 任意で除去" style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>
+            配置した弾幕から取り除くマスを選び、確定すると取り除いた数だけランダム配置します（除去しない場合はそのまま確定）。
+          </div>
+          {canDeclare ? (
+            <>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 8 }}>
+                {oc.candidates.map(cell => {
+                  const sel = oc.selected.includes(cell);
+                  return (
+                    <button key={cell} onClick={() => handleOptionalClearToggle(cell)}
+                      style={{ width: 36, height: 36, borderRadius: 4, cursor: "pointer", background: sel ? "rgba(212,168,56,0.3)" : "rgba(255,255,255,0.05)", border: `1px solid ${sel ? C.gold : C.border}`, color: sel ? C.gold : C.text, fontSize: 14 }}>
+                      {cell}
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={handleOptionalClearConfirm} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), fontSize: 10 }}>
+                {oc.selected.length > 0 ? `🎲 ${oc.selected.length}個除去してランダム×${oc.selected.length}` : "除去せず確定"}
+              </button>
+            </>
           ) : (
             <div style={{ fontSize: 9, color: C.textFaint }}>相手が選択中…</div>
           )}
@@ -3603,6 +3675,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           mayStayOnDodge: false,
           noEvasionLoss: {},
           optionalRedo: null,
+          optionalClear: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
