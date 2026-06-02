@@ -597,6 +597,8 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "self_hp_loss_if_no_damage",   // 太陽を盗んだ鴉: 被弾なしならラウンド終了時に残り人数-1
   // ─ 回避中のグレイズ同調 ─
   "mirror_graze_gain",           // ミシガンロール: 相手のグレイズ獲得時に同量獲得
+  // ─ 被弾時の追加ダメージ ─
+  "extra_hp_loss_if_same_cell_fail",  // 余命幾許: 同番号マスで回避失敗→追加で残り人数-1
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
@@ -1226,6 +1228,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           }
           const movedSelf = posPatch[attackerId] !== undefined;
           const hasMayStay = moveEffects.some(e => e.type === "enemy_may_stay_on_dodge");  // 正直者の死/吉弔大結界
+          const hasZanmei = moveEffects.some(e => e.type === "extra_hp_loss_if_same_cell_fail");  // 余命幾許
           const moveLog = moveSelect ? "（移動先を選択してください）"
             : posPatch[defenderId] !== undefined ? `（回避側を ${attPos}番マスへ移動させた）`
             : movedSelf ? `（自機を ${defPos}番マスへ移動させた）` : "";
@@ -1240,8 +1243,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
                 ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
                 ...(hasMayStay ? { mayStayOnDodge: true } : {}),
+                ...(hasZanmei ? { zanmeiPenalty: { ...pe.battle.zanmeiPenalty, [attackerId]: true } } : {}),
               }),
-              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${hasZanmei ? "（自機と同番号のマスで回避失敗→追加ダメージ）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
             };
           });
           return;
@@ -2083,8 +2087,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const applyHit = (isPc, targetId) => {
     upd(p => {
       const target = isPc ? p.pcs.find(x => x.uid === targetId) : p.battle.participants.npcs.find(n => n.id === targetId);
-      const newLives = Math.max(0, (target.resources.残り人数?.cur || 0) - 1);
-      
+      // extra_hp_loss_if_same_cell_fail（余命幾許）: 余命保有者と被弾側が同じマス番号なら追加で残り人数-1
+      const zanmei = p.battle.zanmeiPenalty || {};
+      const targetPos = p.battle.positions?.[targetId];
+      const extraLoss = Object.keys(zanmei).some(zid => zid !== targetId && p.battle.positions?.[zid] === targetPos) ? 1 : 0;
+      const newLives = Math.max(0, (target.resources.残り人数?.cur || 0) - 1 - extraLoss);
+
       let nextRei = target.resources.霊力?.cur || 0;
       let nextSpe = target.resources.スペルカード?.cur || 0;
       let nextAtk = target.resources.攻撃力?.cur || 1;
@@ -2131,6 +2139,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         battle: nextBattle,
         log: [
           `💥 ${target.charName || target.name} は被弾した！ 残り人数: ${newLives}`,
+          extraLoss > 0 ? `☠ 薄命「余命幾許も無し」: 同番号マスのため追加で残り人数-1` : null,
           isPc && newLives === 1 ? `🔥 霊力が最大まで回復した！` : null,
           newLives === 1 ? `🔮 ${target.charName || target.name} はスペルカードを1点獲得した！` : null,
           ...p.log
@@ -2242,6 +2251,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
+          zanmeiPenalty: {},
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
@@ -3596,6 +3606,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
+          zanmeiPenalty: {},
           pcFamiliarAction: null,
           npcFamiliarAction: null,
           usedds: {},
