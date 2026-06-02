@@ -587,6 +587,7 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "enemy_move_adjacent",
   "self_move_any",
   "self_move_empty",
+  "pre_self_move_adjacent",       // 死歌/怒面/貧符: 配置前に自機を隣接マスへ移動
   "shift_non_25_horizontal",
   // ─ 回避ステップのフラグ系 ─
   "enemy_may_stay_on_dodge",     // 正直者の死/吉弔大結界: 回避側がその場にとどまれる
@@ -1138,6 +1139,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       return;
     }
 
+    // ── pre_self_move_adjacent（死歌/怒面/貧符）: 配置前に自機を隣接マスへ移動 ──
+    // 「移動先選択 → 移動後の自機マスに配置」の順。配置はここでは行わず preSpellMove を立てる。
+    if (structured?.effects?.some(e => e.type === "pre_self_move_adjacent")) {
+      const selfStep = structured.steps?.find(s => s.type === "self");
+      const candidates = ADJACENT_MAP[attPos] || [];
+      upd(p => ({
+        ...mergeConsumeWithBattle(p, {
+          spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+          preSpellMove: { attackerId, defenderId, candidates, selfCount: selfStep?.count ?? 2, spellName: spellCard.name, isPcAttacker },
+        }),
+        log: [`🔮 ${attackerName}：${spellCard.name}！ (まず自機の移動先を選択してください)`, ...p.log],
+      }));
+      return;
+    }
+
     // ── 構造化データによる自動処理（auto: "full" / "partial"） ──────────
     if (structured?.steps?.length > 0 && (structured.auto === "full" || structured.auto === "partial")) {
       // round_end: pcPendingSpell/npcPendingSpell として保存し、ラウンド終了時に applyPendingSpells で処理
@@ -1433,6 +1449,26 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       },
       log: [`↪ ${isSelf ? "自機" : "回避側"}を ${cell}番マスへ移動させた`, ...p.log],
     }));
+  };
+
+  // pre_self_move_adjacent（死歌/怒面/貧符）: 移動先を確定 → 自機をそのマスへ移動し、自機マスに配置
+  const handlePreSpellMove = (cell) => {
+    const pm = b.preSpellMove;
+    if (!pm) return;
+    upd(p => {
+      const grid = [...(p.battle.grids[pm.defenderId] || [0,0,0,0,0,0])];
+      grid[cell - 1] = (grid[cell - 1] || 0) + pm.selfCount;  // 移動後の自機マス（=cell）に self×count を配置
+      return {
+        ...p,
+        battle: {
+          ...p.battle,
+          positions: { ...p.battle.positions, [pm.attackerId]: cell },
+          grids: { ...p.battle.grids, [pm.defenderId]: grid },
+          preSpellMove: null,
+        },
+        log: [`↪ 自機を ${cell}番マスへ移動し、弾幕×${pm.selfCount}を配置！`, ...p.log],
+      };
+    });
   };
 
   // CHOOSE: グリッドのマスをクリックして弾幕を配置
@@ -2288,6 +2324,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           noEvasionLoss: {},
           optionalRedo: null,
           optionalClear: null,
+          preSpellMove: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
@@ -2487,6 +2524,30 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={handleOptionalRedo} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), flex: 1, fontSize: 10 }}>🎲 もう一度配置する</button>
               <button onClick={handleOptionalRedoSkip} style={{ ...btnFull("rgba(255,255,255,0.05)", C.border, C.textDim), flex: 1, fontSize: 10 }}>このまま確定</button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 9, color: C.textFaint }}>相手が選択中…</div>
+          )}
+        </SpellCard>
+      );
+    }
+
+    // 配置前の自機移動（死歌/怒面/貧符）。攻撃側が操作する。
+    if (b.preSpellMove && b.preSpellMove.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
+      const pm = b.preSpellMove;
+      return (
+        <SpellCard color={C.gold} title={`✦ ${pm.spellName} ─ 配置前に自機を移動`} style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>
+            自機を移動させる隣接マスを選んでください（移動後、そのマスに弾幕×{pm.selfCount}を配置します）。
+          </div>
+          {canDeclare ? (
+            <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+              {pm.candidates.map(cell => (
+                <button key={cell} onClick={() => handlePreSpellMove(cell)}
+                  style={{ width: 36, height: 36, borderRadius: 4, cursor: "pointer", background: "rgba(212,168,56,0.18)", border: `1px solid ${C.goldDim}`, color: C.gold, fontSize: 14 }}>
+                  {cell}
+                </button>
+              ))}
             </div>
           ) : (
             <div style={{ fontSize: 9, color: C.textFaint }}>相手が選択中…</div>
@@ -3676,6 +3737,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           noEvasionLoss: {},
           optionalRedo: null,
           optionalClear: null,
+          preSpellMove: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},

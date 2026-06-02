@@ -386,7 +386,7 @@ export const SPELL_CARD_EFFECTS = {
     steps: [{ type: "designated", count: 2 }],
   },
   "死歌「八重霧の渡し」": {
-    auto: "partial",
+    auto: "full",
     effects: [{ type: "pre_self_move_adjacent" }],
     steps: [{ type: "self", count: 2 }],
   },
@@ -727,7 +727,7 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ 秦こころ
   "怒面「怒れる忌狼の面」": {
-    auto: "partial",
+    auto: "full",
     effects: [{ type: "pre_self_move_adjacent" }],
     steps: [{ type: "self", count: 2 }],
   },
@@ -887,7 +887,7 @@ export const SPELL_CARD_EFFECTS = {
 
   // ═══════════════════════════════════════════════════════ 依神紫苑
   "貧符「ミスチャンススキャッター」": {
-    auto: "partial",
+    auto: "full",
     effects: [{ type: "pre_self_move_adjacent" }],
     steps: [{ type: "self", count: 2 }],
   },

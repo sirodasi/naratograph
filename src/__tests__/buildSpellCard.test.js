@@ -127,10 +127,10 @@ describe('buildSpellCard: manual フラグ', () => {
 // （宣言UIで「GM手動」警告を出すためのフラグ）
 // ═══════════════════════════════════════════════════════════════════
 describe('buildSpellCard: manualEffects（要GM手動の effects 抽出）', () => {
-  it('未自動化の効果（配置前移動）は manualEffects に含まれる', () => {
-    // 「死歌「八重霧の渡し」」: effects に pre_self_move_adjacent（2段階フロー・未自動化）
-    const sc = buildSpellCard({ name: '死歌「八重霧の渡し」', desc: '配置前移動', ref: '死歌「八重霧の渡し」' });
-    expect(sc.manualEffects).toContain('pre_self_move_adjacent');
+  it('未自動化の効果（回避成功後の追加配置）は manualEffects に含まれる', () => {
+    // 「勁疾技「マッスルエクスプロージョン」」: effects に random_3d_after_first_dodge（未自動化）
+    const sc = buildSpellCard({ name: '勁疾技「マッスルエクスプロージョン」', desc: 'x', ref: '勁疾技「マッスルエクスプロージョン」' });
+    expect(sc.manualEffects).toContain('random_3d_after_first_dodge');
   });
 
   it('自動化された即時リソース効果（グレイズリセット）は manualEffects に含まれない', () => {
