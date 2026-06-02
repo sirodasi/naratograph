@@ -127,10 +127,10 @@ describe('buildSpellCard: manual フラグ', () => {
 // （宣言UIで「GM手動」警告を出すためのフラグ）
 // ═══════════════════════════════════════════════════════════════════
 describe('buildSpellCard: manualEffects（要GM手動の effects 抽出）', () => {
-  it('未自動化の効果（回避成功後の追加配置）は manualEffects に含まれる', () => {
-    // 「勁疾技「マッスルエクスプロージョン」」: effects に random_3d_after_first_dodge（未自動化）
-    const sc = buildSpellCard({ name: '勁疾技「マッスルエクスプロージョン」', desc: 'x', ref: '勁疾技「マッスルエクスプロージョン」' });
-    expect(sc.manualEffects).toContain('random_3d_after_first_dodge');
+  it('被弾処理系（warning+手動運用）は manualEffects に含まれる', () => {
+    // 「リザレクション」: cancel_hp_reduction（複雑なルール解釈のため警告+GM手動のまま）
+    const sc = buildSpellCard({ name: '「リザレクション」', desc: 'x', ref: '「リザレクション」' });
+    expect(sc.manualEffects).toContain('cancel_hp_reduction');
   });
 
   it('自動化された即時リソース効果（グレイズリセット）は manualEffects に含まれない', () => {

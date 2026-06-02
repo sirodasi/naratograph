@@ -601,6 +601,9 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "mirror_graze_gain",           // ミシガンロール: 相手のグレイズ獲得時に同量獲得
   // ─ 被弾時の追加ダメージ ─
   "extra_hp_loss_if_same_cell_fail",  // 余命幾許: 同番号マスで回避失敗→追加で残り人数-1
+  // ─ 回避成功直後の追加配置 ─
+  "place_at_enemy_after_first_dodge", // 全霊鬼渡り: 回避側の移動先マスに配置
+  "random_3d_after_first_dodge",      // マッスル/狐符: 回避成功直後に3D振り追加配置
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
@@ -1249,6 +1252,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasOptClear = moveEffects.some(e => e.type === "optional_clear_then_random");  // ドリームキャッチャー
           // ドリームキャッチャー: 配置したマス（敵機隣接）を除去候補とする
           const optClearCandidates = hasOptClear ? (ADJACENT_MAP[defPos] || []).filter(c => (defGrid[c - 1] || 0) > 0) : [];
+          const placeAfterDodge = moveEffects.find(e => e.type === "place_at_enemy_after_first_dodge");  // 全霊鬼渡り
           const moveLog = moveSelect ? "（移動先を選択してください）"
             : posPatch[defenderId] !== undefined ? `（回避側を ${attPos}番マスへ移動させた）`
             : movedSelf ? `（自機を ${defPos}番マスへ移動させた）` : "";
@@ -1265,8 +1269,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 ...(hasMayStay ? { mayStayOnDodge: true } : {}),
                 ...(hasZanmei ? { zanmeiPenalty: { ...pe.battle.zanmeiPenalty, [attackerId]: true } } : {}),
                 ...(hasOptClear && optClearCandidates.length > 0 ? { optionalClear: { attackerId, defenderId, candidates: optClearCandidates, selected: [] } } : {}),
+                ...(placeAfterDodge ? { afterDodgeShot: { ...pe.battle.afterDodgeShot, [attackerId]: { type: "place_at_enemy_after_first_dodge", count: placeAfterDodge.count ?? 1 } } } : {}),
               }),
-              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${hasZanmei ? "（自機と同番号のマスで回避失敗→追加ダメージ）" : ""}${hasOptClear && optClearCandidates.length > 0 ? "（任意で除去→ランダム）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+              log: [`🔮 ${attackerName}：${spellCard.name}！${moveLog}${hasMayStay ? "（相手は回避時その場にとどまれる）" : ""}${hasZanmei ? "（自機と同番号のマスで回避失敗→追加ダメージ）" : ""}${hasOptClear && optClearCandidates.length > 0 ? "（任意で除去→ランダム）" : ""}${placeAfterDodge ? "（最初の回避成功時に移動先へ配置）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
             };
           });
           return;
@@ -1359,6 +1364,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             extraInterventionPool: { remaining: count, usedDice: [], withDieChoice },
           }),
           log: [`🔮 ${attackerName}：${spellCard.name}！ (援護/かばう+${count}回${withDieChoice ? "・ダイス任意" : ""})`, ...p.log],
+        }));
+        return;
+      }
+
+      // random_3d_after_first_dodge（マッスル・狐符。steps なしの effects のみ）: 回避成功直後の追加配置を予約
+      const r3 = structured.effects.find(e => e.type === "random_3d_after_first_dodge");
+      if (r3) {
+        upd(p => ({
+          ...mergeConsumeWithBattle(p, {
+            spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
+            afterDodgeShot: { ...p.battle.afterDodgeShot, [attackerId]: { type: "random_3d_after_first_dodge", count: r3.count ?? 3 } },
+          }),
+          log: [`🔮 ${attackerName}：${spellCard.name}！ (最初の回避成功直後に${r3.count ?? 3}D追加配置)`, ...p.log],
         }));
         return;
       }
@@ -2040,6 +2058,44 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     return [pa, na, logs];
   };
 
+  // 回避成功直後の追加配置（全霊鬼渡り / マッスル・狐符）。
+  // afterDodgeShot[宣言者] の各保有者（回避側自身は除く・未使用のみ）を処理し、
+  // place は dodgerGrid を直接書き換え、random_3d は pendingDodgeRandom を返す。
+  // 返り値: [次の afterDodgeShot, pendingDodgeRandom|null, logs]。dodgerGrid はミューテートする。
+  const applyAfterDodgeShot = (p, dodgerId, movedCell, dodgerGrid) => {
+    const ads = p.battle.afterDodgeShot || {};
+    let adsNext = ads;
+    let pending = null;
+    const logs = [];
+    for (const aid of Object.keys(ads)) {
+      const a = ads[aid];
+      if (aid === dodgerId || a.used) continue;
+      if (a.type === "place_at_enemy_after_first_dodge") {
+        dodgerGrid[movedCell - 1] = (dodgerGrid[movedCell - 1] || 0) + (a.count || 1);
+        adsNext = { ...adsNext, [aid]: { ...a, used: true } };
+        logs.push(`🗡 全霊鬼渡り: 回避側の移動先 ${movedCell}番マスに弾幕×${a.count || 1}`);
+      } else if (a.type === "random_3d_after_first_dodge") {
+        pending = { attackerId: aid, defenderId: dodgerId, count: a.count || 3 };
+        adsNext = { ...adsNext, [aid]: { ...a, used: true } };
+        logs.push(`💪 回避直後の追加弾幕（${a.count || 3}D）を振ってください`);
+      }
+    }
+    return [adsNext, pending, logs];
+  };
+
+  // random_3d_after_first_dodge: 攻撃側が pendingDodgeRandom の N D を振り、回避側フィールドへランダム配置
+  const handleDodgeRandomRoll = () => {
+    const pd = b.pendingDodgeRandom;
+    if (!pd) return;
+    animateDice(pd.count, "回避直後の追加弾幕", res => {
+      upd(p => {
+        const grid = [...(p.battle.grids[pd.defenderId] || [0,0,0,0,0,0])];
+        res.forEach(d => { if (d >= 1 && d <= 6) grid[d - 1] += 1; });
+        return { ...p, battle: { ...p.battle, grids: { ...p.battle.grids, [pd.defenderId]: grid }, pendingDodgeRandom: null }, log: [`💪 回避直後の追加弾幕×${pd.count}を配置！`, ...p.log] };
+      });
+    });
+  };
+
   const handleEvadeMove = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
     const oldPos = b.positions[combatantId];
@@ -2080,6 +2136,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       // mirror_graze_gain（ミシガンロール）: 宣言者は相手のグレイズ獲得時に同量を得る
       const [finalPcs, finalNpcs, mirrorLogs] = applyMirrorGraze(p, updatedPcs, updatedNpcs, combatantId, bulletsCleared);
 
+      // 回避成功直後の追加配置（全霊鬼渡り=place / マッスル・狐符=random_3d）。「最初の回避成功」のみ。
+      const [adsNext, pendingDodge, adsLogs] = applyAfterDodgeShot(p, combatantId, targetCellNum, newGrid);
+
       return {
         ...p,
         pcs: finalPcs,
@@ -2093,6 +2152,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
           noEvasionLoss: nextNoEvasionLoss,
+          afterDodgeShot: adsNext,
+          ...(pendingDodge ? { pendingDodgeRandom: pendingDodge } : {}),
           phase: isPc
             ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false))
             : (nextDice > 0 ? "npc_evade_intro" : afterDefensePhase(true))
@@ -2101,6 +2162,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
           `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}点)`,
           ...mirrorLogs,
+          ...adsLogs,
           ...(noLoss ? [`👁 オプティカルカモフラージュ: 回避力を消費せず回避！`] : []),
           ...p.log
         ]
@@ -2325,6 +2387,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           optionalRedo: null,
           optionalClear: null,
           preSpellMove: null,
+          afterDodgeShot: {},
+          pendingDodgeRandom: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
@@ -3738,6 +3802,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           optionalRedo: null,
           optionalClear: null,
           preSpellMove: null,
+          afterDodgeShot: {},
+          pendingDodgeRandom: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
           mirrorGraze: {},
@@ -4006,6 +4072,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       {/* 中央フェーズパネル */}
       <div style={{ display: "flex", justifyContent: "center" }}>
         <div style={{ width: "100%", maxWidth: 520, display: "flex", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+        {/* 回避成功直後の追加弾幕（マッスル・狐符）。攻撃側が振る。 */}
+        {b.pendingDodgeRandom && (
+          <SpellCard color={C.gold} title="✦ 回避直後の追加弾幕" contentStyle={{ textAlign: "center", padding: 14 }}>
+            {(isGm || user.uid === b.pendingDodgeRandom.attackerId) ? (
+              <button onClick={handleDodgeRandomRoll} style={btnFull(C.goldBg, C.goldDim, C.gold)}>
+                🎲 {b.pendingDodgeRandom.count}D を振って弾幕を配置
+              </button>
+            ) : (
+              <div style={{ fontSize: 10, color: C.textFaint }}>相手が追加配置中…</div>
+            )}
+          </SpellCard>
+        )}
+
         {(b.phase === "pc_shot_intro" || b.phase === "npc_shot_intro") && renderShotIntro(b.phase === "pc_shot_intro")}
 
         {(b.phase === "pc_shot_roll" || b.phase === "npc_shot_roll") && renderShotRoll(b.phase === "pc_shot_roll")}

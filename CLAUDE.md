@@ -218,6 +218,12 @@ To keep Firebase writes small, the canonical spell-card representation is **raw 
 **Dodge-step flags** set at declaration, read during the evade step, reset each round in `handleCleanup`/`startRound`:
 - **`enemy_may_stay_on_dodge`** (正直者の死/吉弔大結界): sets `gs.battle.mayStayOnDodge`. `renderEvadeMove` then shows a "🛡 その場にとどまって回避する" button → `handleEvadeStay` clears the dodger's current cell + gains グレイズ + spends evade dice **without moving the piece**.
 - **`next_dodge_no_evasion_loss`** (オプティカルカモフラージュ): sets `gs.battle.noEvasionLoss[attackerId] = true`. In `handleEvadeMove`/`handleEvadeStay`, when the mover has this flag, `nextDice` is **not** decremented and the flag is consumed (set false). One free dodge.
+- **`mirror_graze_gain`** (ミシガンロール): `gs.battle.mirrorGraze[attackerId]`. `applyMirrorGraze` (called in `handleEvadeMove`/`handleEvadeStay`) adds the dodger's just-gained グレイズ to each holder (except the dodger).
+- **`place_at_enemy_after_first_dodge`** (全霊鬼渡り) / **`random_3d_after_first_dodge`** (マッスル/狐符): `gs.battle.afterDodgeShot[attackerId] = { type, count, used? }`. On the **first** successful dodge, `applyAfterDodgeShot` either places `count` on the dodger's moved-to cell (place; synchronous) or sets `gs.battle.pendingDodgeRandom` (random_3d) — the central panel then shows a "🎲 ND を振って配置" button (`handleDodgeRandomRoll`) for the attacker. `used` marks the one-shot consumed.
+
+**Misc declaration-time penalties/flags** (reset each round): `self_hp_loss_if_no_damage` (太陽を盗んだ鴉) → `suntanPenalty[id]`; checked against `hpReducedThisRound[id]` (set in `applyHit`) at `handleCleanup` to deduct 残り人数 if the holder wasn't hit. `extra_hp_loss_if_same_cell_fail` (余命幾許) → `zanmeiPenalty[id]`; `applyHit` adds an extra −1 when the holder shares the被弾側's cell number.
+
+**Move / optional-action picks** (attacker-operated UI, keyed by `isPcAttacker` or `attackerId`, reset each round): `spellMoveSelect` (enemy/self move), `optionalRedo` (ブラックペガサス re-place), `optionalClear` (ドリームキャッチャー: toggle cells → remove → random×N), `preSpellMove` (死歌/怒面/貧符: move-then-place 2-stage). Each has its own branch at the top of `renderSpellStep`.
 
 **Cell-placement constraint** (`condition_on_placement.exclude_enemy_cell: true` in `SPELL_CARD_EFFECTS`): propagated into `spellChoose.excludeEnemyCell`. The CHOOSE UI disables the defender's current cell.
 
