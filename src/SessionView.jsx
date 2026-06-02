@@ -595,6 +595,8 @@ export const AUTO_HANDLED_EFFECTS = new Set([
   "optional_redo_random",        // ブラックペガサス流星弾: 任意で再配置
   // ─ ラウンド終了時の自己ペナルティ ─
   "self_hp_loss_if_no_damage",   // 太陽を盗んだ鴉: 被弾なしならラウンド終了時に残り人数-1
+  // ─ 回避中のグレイズ同調 ─
+  "mirror_graze_gain",           // ミシガンロール: 相手のグレイズ獲得時に同量獲得
   // ─ 配置直後の grid 操作（declareSpell のランダム配置後に自動処理） ─
   "remove_from_enemy_cell",
   "remove_if_hit_enemy_cell",
@@ -1259,6 +1261,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasExtraFamiliar = effList.some(e => e.type === "extra_familiar_per_round_this_phase"); // ホークビーコン: フェイズ中・毎ラウンド追加介入
           const hasNoEvasionLoss = effList.some(e => e.type === "next_dodge_no_evasion_loss");  // オプティカルカモフラージュ: 次の回避で回避力減らさず
           const hasSuntan = effList.some(e => e.type === "self_hp_loss_if_no_damage");          // 太陽を盗んだ鴉: 被弾なしならラウンド終了時に自分-1
+          const hasMirrorGraze = effList.some(e => e.type === "mirror_graze_gain");             // ミシガンロール: 相手のグレイズ獲得に同調
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
             let offset = 0;
@@ -1303,8 +1306,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                   ...(hasNoEvasionLoss ? { noEvasionLoss: { ...p.battle.noEvasionLoss, [attackerId]: true } } : {}),
                   ...(optRedo ? { optionalRedo: { attackerId, defenderId, count: optRedo.count ?? 3, snapDef } } : {}),
                   ...(hasSuntan ? { suntanPenalty: { ...p.battle.suntanPenalty, [attackerId]: true } } : {}),
+                  ...(hasMirrorGraze ? { mirrorGraze: { ...p.battle.mirrorGraze, [attackerId]: true } } : {}),
                 },
-                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${optRedo ? "（任意で再配置できます）" : ""}${hasSuntan ? "（被弾しなければラウンド終了時に残り人数-1）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
+                log: [`🔮 ${attackerName}：${spellCard.name}！${hasShift ? "（2/5番以外の弾幕を左右へ移動）" : ""}${removeLog}${moveSelect ? "（自機の移動先を選択）" : ""}${hasExtraFamiliar ? "（フェイズ中・毎ラウンド追加介入）" : ""}${hasNoEvasionLoss ? "（次の回避で回避力を消費しない）" : ""}${optRedo ? "（任意で再配置できます）" : ""}${hasSuntan ? "（被弾しなければラウンド終了時に残り人数-1）" : ""}${hasMirrorGraze ? "（相手のグレイズ獲得に同調）" : ""}${resourceEffects.length > 0 ? "（効果適用）" : ""}`, ...p.log],
               };
             });
           });
@@ -1940,6 +1944,23 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     });
   };
 
+  // mirror_graze_gain（ミシガンロール）: gs.battle.mirrorGraze の各保有者（回避側自身を除く）に
+  // 回避側が得たグレイズ量(gain)を同量加算する。{pcs, npcs, logs} を返す。
+  const applyMirrorGraze = (p, pcsArr, npcsArr, dodgerId, gain) => {
+    const mirror = p.battle.mirrorGraze || {};
+    const ids = Object.keys(mirror).filter(id => id !== dodgerId);
+    if (gain <= 0 || ids.length === 0) return [pcsArr, npcsArr, []];
+    let pa = pcsArr, na = npcsArr;
+    const logs = [];
+    const addG = (e) => ({ ...e, resources: { ...e.resources, グレイズ: { ...e.resources.グレイズ, cur: (e.resources.グレイズ?.cur || 0) + gain } } });
+    for (const mid of ids) {
+      const pc = pa.find(x => x.uid === mid);
+      if (pc) { pa = pa.map(x => x.uid === mid ? addG(x) : x); logs.push(`🪞 ${pc.charName}：ミシガンロールでグレイズ+${gain}`); }
+      else { const np = na.find(n => n.id === mid); if (np) { na = na.map(n => n.id === mid ? addG(n) : n); logs.push(`🪞 ${np.name}：ミシガンロールでグレイズ+${gain}`); } }
+    }
+    return [pa, na, logs];
+  };
+
   const handleEvadeMove = (isPc, targetCellNum) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
     const oldPos = b.positions[combatantId];
@@ -1977,14 +1998,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         ? p.battle.participants.npcs
         : p.battle.participants.npcs.map(npc => npc.id === combatantId ? updatedEntity : npc);
 
+      // mirror_graze_gain（ミシガンロール）: 宣言者は相手のグレイズ獲得時に同量を得る
+      const [finalPcs, finalNpcs, mirrorLogs] = applyMirrorGraze(p, updatedPcs, updatedNpcs, combatantId, bulletsCleared);
+
       return {
         ...p,
-        pcs: updatedPcs,
+        pcs: finalPcs,
         battle: {
           ...p.battle,
           participants: {
             ...p.battle.participants,
-            npcs: updatedNpcs
+            npcs: finalNpcs
           },
           positions: { ...p.battle.positions, [combatantId]: targetCellNum },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
@@ -1997,6 +2021,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         log: [
           `🏃 ${currentEntity.charName || currentEntity.name} は ${targetCellNum}番マスへ移動。`,
           `✨ ${bulletsCleared}点のグレイズを獲得！(現在:${nextGraze}点)`,
+          ...mirrorLogs,
           ...(noLoss ? [`👁 オプティカルカモフラージュ: 回避力を消費せず回避！`] : []),
           ...p.log
         ]
@@ -2020,18 +2045,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       const nextDice = noLoss ? currentDice : Math.max(0, currentDice - 1);
       const nextNoEvasionLoss = noLoss ? { ...p.battle.noEvasionLoss, [combatantId]: false } : p.battle.noEvasionLoss;
       const updated = { ...entity, resources: { ...entity.resources, グレイズ: { ...entity.resources.グレイズ, cur: nextGraze } } };
+      const basePcs = isPc ? p.pcs.map(x => x.uid === combatantId ? updated : x) : p.pcs;
+      const baseNpcs = isPc ? p.battle.participants.npcs : p.battle.participants.npcs.map(n => n.id === combatantId ? updated : n);
+      const [finalPcs, finalNpcs, mirrorLogs] = applyMirrorGraze(p, basePcs, baseNpcs, combatantId, bulletsCleared);
       return {
         ...p,
-        pcs: isPc ? p.pcs.map(x => x.uid === combatantId ? updated : x) : p.pcs,
+        pcs: finalPcs,
         battle: {
           ...p.battle,
-          participants: isPc ? p.battle.participants : { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id === combatantId ? updated : n) },
+          participants: { ...p.battle.participants, npcs: finalNpcs },
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
           noEvasionLoss: nextNoEvasionLoss,
           phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false)) : (nextDice > 0 ? "npc_evade_intro" : afterDefensePhase(true)),
         },
-        log: [`🛡 ${entity.charName || entity.name} はその場にとどまって回避（グレイズ+${bulletsCleared}）。`, ...p.log],
+        log: [`🛡 ${entity.charName || entity.name} はその場にとどまって回避（グレイズ+${bulletsCleared}）。`, ...mirrorLogs, ...p.log],
       };
     });
   };
@@ -2213,6 +2241,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           optionalRedo: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
+          mirrorGraze: {},
           extraInterventionPool: null,
           pcFamiliarAction: null,
           npcFamiliarAction: null,
@@ -3566,6 +3595,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           optionalRedo: null,
           suntanPenalty: {},
           hpReducedThisRound: {},
+          mirrorGraze: {},
           pcFamiliarAction: null,
           npcFamiliarAction: null,
           usedds: {},
