@@ -4865,6 +4865,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityCure, setAbilityCure] = useState(null); // 変調除去ピッカー { name, freq, params, targetUid }
   const [abilityRefresh, setAbilityRefresh] = useState(null); // 応援欄リフレッシュ { name, freq, targetUid }
   const [abilityMove, setAbilityMove] = useState(null); // パーティ移動 { name, freq, params, selected[], moveSelf }
+  const [abilitySurprise, setAbilitySurprise] = useState(null); // 絆獲得判定 { name, freq, params, targetUid, x }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5068,6 +5069,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityMove({ name, freq, params: meta.params || {}, selected: [], moveSelf: true });
       return;
     }
+    if (meta?.auto && meta.kind === "surprise_bond") {
+      // 同スポット1人に行為判定→成功で絆＋やる気／失敗で相手が自分への絆
+      setAbilitySurprise({ name, freq, params: meta.params || {}, targetUid: null, x: 4 });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5156,6 +5162,47 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         }),
         log: [`🔵 ${pc.charName} が能力《${mv.name}》を発動：${[...moveSet].map(u => p.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・")} を【${destName}】へ移動`, ...p.log],
       };
+    });
+  };
+
+  // surprise_bond：同スポット1人に 2D:X 判定。成功→自分が相手への絆＋やる気1／失敗→相手が自分への絆
+  const runSurprise = () => {
+    const sp = abilitySurprise;
+    if (!sp || !sp.targetUid) return;
+    setAbilitySurprise(null);
+    const target = gs.pcs.find(x => x.uid === sp.targetUid);
+    const targetName = target?.charName || "対象";
+    const x = sp.params?.declareX ? sp.x : 4;
+    animateDice(2, `${sp.name}（2D:${x}）`, res => {
+      const success = Math.max(...res) >= x;
+      const selfUse = withAbilityUse({ ...pc }, sp.name, sp.freq).abilityUse;
+      upd(p => {
+        if (success) {
+          const bond = `${targetName}への絆`;
+          return {
+            ...p,
+            pcs: p.pcs.map(z => z.uid !== pc.uid ? z : {
+              ...z, abilityUse: selfUse,
+              bonds: (z.bonds || []).includes(bond) ? z.bonds : [...(z.bonds || []), bond],
+              bondUsed: { ...(z.bondUsed || {}), [bond]: false },
+              resources: { ...z.resources, やる気: { ...(z.resources.やる気 || { cur: 0, max: 99 }), cur: Math.min((z.resources.やる気?.max || 99), (z.resources.やる気?.cur || 0) + 1) } },
+            }),
+            log: [`🔵 ${pc.charName} が能力《${sp.name}》発動：成功(出目${res.join(",")})→《${bond}》とやる気+1を獲得`, ...p.log],
+          };
+        }
+        const bond = `${pc.charName}への絆`;
+        return {
+          ...p,
+          pcs: p.pcs.map(z => {
+            if (z.uid === pc.uid) return { ...z, abilityUse: selfUse };
+            if (z.uid === sp.targetUid) return { ...z,
+              bonds: (z.bonds || []).includes(bond) ? z.bonds : [...(z.bonds || []), bond],
+              bondUsed: { ...(z.bondUsed || {}), [bond]: false } };
+            return z;
+          }),
+          log: [`🔵 ${pc.charName} が能力《${sp.name}》発動：失敗(出目${res.join(",")})→${targetName} が《${bond}》を獲得`, ...p.log],
+        };
+      });
     });
   };
 
@@ -5631,6 +5678,42 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 ))}
               </div>
               <button onClick={() => setAbilityMove(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilitySurprise && (() => {
+        const sameSpot = (gs.pcs || []).filter(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot);
+        const target = abilitySurprise.targetUid ? gs.pcs.find(x => x.uid === abilitySurprise.targetUid) : null;
+        const declareX = abilitySurprise.params?.declareX;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilitySurprise(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilitySurprise.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>対象（同スポットの他キャラ）を選択</div>
+              {sameSpot.length === 0 ? (
+                <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>同スポットに他のキャラがいません</div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+                  {sameSpot.map(x => {
+                    const on = abilitySurprise.targetUid === x.uid;
+                    return <button key={x.uid} onClick={() => setAbilitySurprise(s => ({ ...s, targetUid: x.uid }))} style={btnFull(on ? "rgba(144,202,249,0.25)" : "rgba(255,255,255,0.04)", on ? "#1565c0" : C.border, on ? "#90caf9" : C.textDim, { fontSize: 10, padding: "4px 8px" })}>{on ? "✓ " : ""}{x.charName}</button>;
+                  })}
+                </div>
+              )}
+              {declareX && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 4 }}>目標値 X（3〜6）を宣言</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[3, 4, 5, 6].map(n => (
+                      <button key={n} onClick={() => setAbilitySurprise(s => ({ ...s, x: n }))} style={btnFull(abilitySurprise.x === n ? "rgba(255,213,79,0.2)" : "rgba(255,255,255,0.04)", abilitySurprise.x === n ? C.goldDim : C.border, abilitySurprise.x === n ? C.gold : C.textDim, { fontSize: 11, padding: "5px 0" })}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button disabled={!target} onClick={runSurprise} style={{ width: "100%", padding: "8px", marginBottom: 6, cursor: target ? "pointer" : "default", borderRadius: 2, background: target ? C.blueBg : "rgba(255,255,255,0.03)", border: `1px solid ${target ? C.blueBorder : C.border}`, color: target ? C.blue : C.textFaint, fontSize: 12 }}>
+                🎲 2D:{declareX ? abilitySurprise.x : 4} で判定する
+              </button>
+              <button onClick={() => setAbilitySurprise(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );
