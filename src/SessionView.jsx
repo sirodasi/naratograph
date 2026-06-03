@@ -4862,6 +4862,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [skillModal, setSkillModal] = useState(null);
   const [abilityModal, setAbilityModal] = useState(null);
   const [abilityItemPick, setAbilityItemPick] = useState(null);
+  const [abilityCure, setAbilityCure] = useState(null); // 変調除去ピッカー { name, freq, params, targetUid }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5050,6 +5051,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityItemPick({ name, freq });
       return;
     }
+    if (meta?.auto && meta.kind === "cure_bad_status") {
+      // 同スポットのキャラの変調1つを除去（対象→変調の2段ピッカー）
+      setAbilityCure({ name, freq, params: meta.params || {}, targetUid: null });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5069,6 +5075,33 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       pcs: p.pcs.map(x => x.uid === pc.uid ? base : x),
       log: [`🔵 ${pc.charName} が能力《${pick.name}》を発動：【${itemName}】を獲得`, ...p.log],
     }));
+  };
+
+  // cure_bad_status：対象キャラの変調 bsName を除去（＋params.grantTag があればタグ付与）
+  const confirmCure = (targetUid, bsName) => {
+    const cure = abilityCure;
+    setAbilityCure(null);
+    if (!cure) return;
+    const grantTag = cure.params?.grantTag;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, cure.name, cure.freq);
+      const target = p.pcs.find(x => x.uid === targetUid);
+      const targetName = target?.charName || "対象";
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          // 発動者の使用回数フラグ
+          let nx = x.uid === pc.uid ? { ...x, abilityUse: selfBase.abilityUse } : x;
+          if (x.uid === targetUid) {
+            const nextBs = (x.badStatus || []).filter(b => b !== bsName);
+            const nextTags = grantTag && !(x.tags || []).includes(grantTag) ? [...(x.tags || []), grantTag] : x.tags;
+            nx = { ...nx, badStatus: nextBs, tags: nextTags };
+          }
+          return nx;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${cure.name}》を発動：${targetName} の変調《${bsName}》を除去${grantTag ? `し《${grantTag}》タグを付与` : ""}`, ...p.log],
+      };
+    });
   };
 
   const adjustResource = (key, delta) => {
@@ -5439,6 +5472,43 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           </SpellCard>
         </div>
       )}
+      {abilityCure && (() => {
+        // 同スポットのキャラ（変調を持つ者）を対象に取り、変調を1つ除去
+        const sameSpot = (gs.pcs || []).filter(x => x.currentSpot === pc.currentSpot && (x.badStatus || []).length > 0);
+        const target = abilityCure.targetUid ? gs.pcs.find(x => x.uid === abilityCure.targetUid) : null;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityCure(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityCure.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              {!target ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>変調を除去する対象（同スポット）を選択</div>
+                  {sameSpot.length === 0 ? (
+                    <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>同スポットに変調を持つキャラがいません</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                      {sameSpot.map(x => (
+                        <button key={x.uid} onClick={() => setAbilityCure({ ...abilityCure, targetUid: x.uid })} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 11 })}>
+                          {x.charName}（{(x.badStatus || []).join("・")}）
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{target.charName} の除去する変調を選択</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    {(target.badStatus || []).map(bs => (
+                      <button key={bs} onClick={() => confirmCure(target.uid, bs)} style={btnFull("rgba(224,112,96,0.12)", C.redBorder, C.red, { fontSize: 11 })}>《{bs}》を除去</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => setAbilityCure(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
       {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );
