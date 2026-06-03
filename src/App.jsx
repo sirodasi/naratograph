@@ -727,6 +727,7 @@ function SessionApp({ roomCode, user }) {
           growthSpellCard: charData?.growthSpellCard ?? p.growthSpellCard ?? null,
           growthAbility: p.growthAbility ?? charData?.growthAbility ?? null,
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,
+          growthAbilityUnlocked: p.growthAbilityUnlocked ?? false,
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
           baseSpotId,
