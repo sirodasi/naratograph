@@ -4861,6 +4861,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
   const [abilityModal, setAbilityModal] = useState(null);
+  const [abilityItemPick, setAbilityItemPick] = useState(null);
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5030,11 +5031,44 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       });
       return;
     }
+    if (meta?.auto && meta.kind === "gain_yaruki_selfbond") {
+      const amt = meta.params?.amount || 1;
+      const r = pc.resources.やる気 || { cur: 0, max: 99 };
+      const selfBond = `${pc.charName}自身への絆`;
+      const bonds = (pc.bonds || []).includes(selfBond) ? pc.bonds : [...(pc.bonds || []), selfBond];
+      sfx.skillActivate();
+      commit(withAbilityUse({ ...pc,
+        resources: { ...pc.resources, やる気: { ...r, cur: Math.min(r.max, r.cur + amt) } },
+        bonds,
+        bondUsed: { ...(pc.bondUsed || {}), [selfBond]: false },
+      }, name, freq),
+        `🔵 ${pc.charName} が能力《${name}》を発動：やる気+${amt}・《${selfBond}》を獲得`);
+      return;
+    }
+    if (meta?.auto && meta.kind === "gain_choice_item") {
+      // 好きなアイテムを1つ選んで獲得（ピッカーを開く）
+      setAbilityItemPick({ name, freq });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
     commit(withAbilityUse({ ...pc }, name, freq),
       `🔵 ${pc.charName} が能力《${name}》を発動（効果はGMが処理）`);
+  };
+
+  // gain_choice_item：ピッカーで選んだアイテムを獲得して確定する
+  const confirmAbilityItem = (itemName) => {
+    const pick = abilityItemPick;
+    setAbilityItemPick(null);
+    if (!pick) return;
+    const nextItems = { ...pc.items, [itemName]: (pc.items?.[itemName] || 0) + 1 };
+    const base = withAbilityUse({ ...pc, items: nextItems }, pick.name, pick.freq);
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid === pc.uid ? base : x),
+      log: [`🔵 ${pc.charName} が能力《${pick.name}》を発動：【${itemName}】を獲得`, ...p.log],
+    }));
   };
 
   const adjustResource = (key, delta) => {
@@ -5382,6 +5416,18 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => useItem(itemModal)} onCancel={() => setItemModal(null)} />}
       {skillModal && skill && <SkillActivateModal skillName={skill.name} skillType={skill.type} desc={skill.desc} onConfirm={activateSkill} onCancel={() => setSkillModal(null)} />}
       {abilityModal && <SkillActivateModal skillName={abilityModal.name} skillType={abilityModal.type} desc={abilityModal.desc} onConfirm={() => activateAbility(abilityModal)} onCancel={() => setAbilityModal(null)} />}
+      {abilityItemPick && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityItemPick(null)}>
+          <SpellCard color="#90caf9" title="✦ 好きなアイテムを1つ獲得" style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
+              {ITEM_NAMES.map(n => (
+                <button key={n} onClick={() => confirmAbilityItem(n)} style={btnFull("rgba(144,202,249,0.12)", "#1565c080", "#90caf9", { fontSize: 11 })}>{n}</button>
+              ))}
+            </div>
+            <button onClick={() => setAbilityItemPick(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          </SpellCard>
+        </div>
+      )}
       {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );
