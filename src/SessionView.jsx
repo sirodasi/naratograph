@@ -3211,6 +3211,41 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     );
   };
 
+  // 弾幕回避への応援: 戦闘者(PC)への絆を持つ参加PCが回避ダイスを+1できる（絆は消費される）
+  const getEvadeCheerBonds = (cheererPc) => {
+    if (!cheererPc || !combatantPc) return [];
+    // 戦闘参加者に限定（同スポット相当）
+    if (b.participantPcUids && !b.participantPcUids.includes(cheererPc.uid)) return [];
+    const usedOf = (bd) => cheererPc.bondUsed?.[bd];
+    if (cheererPc.uid === combatantPc.uid) {
+      if (cheererPc.ps?.name === "我儘") return (cheererPc.bonds || []).filter(bd => !usedOf(bd));
+      const selfBonds = [`${combatantPc.charName}自身への絆`, `${combatantPc.charName}への絆`];
+      return selfBonds.filter(sb => (cheererPc.bonds || []).includes(sb) && !usedOf(sb));
+    }
+    const bondName = `${combatantPc.charName}への絆`;
+    return (cheererPc.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
+  };
+  const renderEvadeCheer = () => {
+    const cheererPc = pcs.find(p => p.uid === user.uid);
+    const usable = getEvadeCheerBonds(cheererPc);
+    if (usable.length === 0) return null;
+    return (
+      <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ fontSize: 9, color: C.gold, marginBottom: 6, letterSpacing: 1 }}>💪 応援（回避ダイス+1）</div>
+        {usable.map(bondName => (
+          <button key={bondName} onClick={() => upd(p => ({
+            ...p,
+            pcs: p.pcs.map(x => x.uid === cheererPc.uid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
+            battle: { ...p.battle, currentEvadeDice: (p.battle.currentEvadeDice ?? getDefaultEvadeDice(combatantPc)) + 1 },
+            log: [`💪 ${cheererPc.charName} が《${bondName}》で応援！回避ダイス+1`, ...p.log],
+          }))} style={{ ...btnFull("rgba(200,160,64,0.16)", C.goldDim, C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
+            《{bondName}》で応援
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const renderEvadeIntro = (isPc) => {
     const combatant = isPc ? combatantPc : combatantNpc;
     const targetValue = isPc ? evadeTarget : npcDanmakuAtPos + 3;
@@ -3276,6 +3311,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 )}
               </div>
             )}
+            {/* 応援: 戦闘者への絆を持つ参加PCが回避ダイスを+1できる（観戦者にも表示） */}
+            {isPc && renderEvadeCheer()}
           </div>
         )}
         {renderSpellStep(!isPc, "evade")}
@@ -4352,17 +4389,14 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
     });
   };
 
-  const handleBond = (targetName, isClearCheck = false) => {
-    if (isClearCheck) {
-      // 応援欄リフレッシュ: 対象の絆を未使用に戻す（再び応援に使える）
-      const logMsg = `✨ ${myPc.charName} は《${targetName}への絆》の応援欄をリフレッシュした`;
-      finishAction(logMsg, { bondUsed: { ...(myPc.bondUsed || {}), [`${targetName}への絆`]: false } });
-      return;
-    }
+  const handleBond = (targetName) => {
+    // 獲得と回復を一本化: 絆を所持に加え、応援欄（bondUsed）を未使用に戻す
+    const bondName = `${targetName}への絆`;
     const nextBonds = [...(myPc.bonds || [])];
-    if (!nextBonds.includes(targetName)) nextBonds.push(targetName);
-    const logMsg = `✨ ${myPc.charName} はボーナスで《${targetName}への絆》を獲得した`;
-    finishAction(logMsg, { bonds: nextBonds });
+    const isNew = !nextBonds.includes(bondName);
+    if (isNew) nextBonds.push(bondName);
+    const logMsg = `✨ ${myPc.charName} はボーナスで《${bondName}》を${isNew ? "獲得" : "回復"}した`;
+    finishAction(logMsg, { bonds: nextBonds, bondUsed: { ...(myPc.bondUsed || {}), [bondName]: false } });
   };
 
   const startFinalBattle = () => {
@@ -4879,7 +4913,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       const selfBond = `${pc.charName}自身への絆`;
       const bonds = [...(pc.bonds || [])];
       if (!bonds.includes(selfBond)) bonds.push(selfBond);
-      onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, bonds });
+      onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1, bonds, bondUsed: { ...(pc.bondUsed || {}), [selfBond]: false } });
       return;
     }
 
@@ -5216,9 +5250,10 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               <button onClick={() => {
                 const target = window.prompt("絆を獲得するキャラクター名を入力してください");
                 if (!target || !target.trim()) return;
+                const bondName = `${target.trim()}への絆`;
                 const bonds = [...(pc.bonds || [])];
-                if (!bonds.includes(target.trim())) bonds.push(target.trim());
-                onUpdatePc({ ...pc, bonds, [PS_ONCE_FLAG]: true });
+                if (!bonds.includes(bondName)) bonds.push(bondName);
+                onUpdatePc({ ...pc, bonds, bondUsed: { ...(pc.bondUsed || {}), [bondName]: false }, [PS_ONCE_FLAG]: true });
               }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10 })}>
                 💛《ご執心》絆を獲得する
               </button>
@@ -5660,8 +5695,9 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
           <button onClick={() => {
-            const bonds = Array.from(new Set([...(pc.bonds || []), `${pc.charName}への絆`]));
-            proceed([`${pc.charName} は自身への絆を獲得した`], { pc: { bonds } });
+            const selfB = `${pc.charName}への絆`;
+            const bonds = Array.from(new Set([...(pc.bonds || []), selfB]));
+            proceed([`${pc.charName} は自身への絆を獲得した`], { pc: { bonds, bondUsed: { [selfB]: false } } });
           }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>自身への絆を獲得する</button>
         </div>
       );
@@ -5682,8 +5718,9 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           <div style={{ color: C.gold, marginBottom: 8, fontSize: 11 }}>絆を獲得するキャラクターを選んでください</div>
           {others.map(o => (
             <button key={o.uid} onClick={() => {
-              const bonds = Array.from(new Set([...(pc.bonds || []), `${o.charName || o.name}への絆`]));
-              proceed([`${pc.charName} は《${o.charName || o.name}への絆》を獲得した`], { pc: { bonds } });
+              const newB = `${o.charName || o.name}への絆`;
+              const bonds = Array.from(new Set([...(pc.bonds || []), newB]));
+              proceed([`${pc.charName} は《${o.charName || o.name}への絆》を獲得した`], { pc: { bonds, bondUsed: { [newB]: false } } });
             }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
               {o.name}
             </button>
@@ -5710,8 +5747,9 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
             {others.map(o => <option key={o.uid} value={o.charName || o.name}>{o.name}</option>)}
           </select>
           <button disabled={!selectedLose} onClick={() => {
-            const bonds = Array.from(new Set([...(pc.bonds || []), `${selectedLose}への絆`]));
-            proceed([`${pc.charName} は《${selectedLose}への絆》を獲得した`], { pc: { bonds } });
+            const newB = `${selectedLose}への絆`;
+            const bonds = Array.from(new Set([...(pc.bonds || []), newB]));
+            proceed([`${pc.charName} は《${selectedLose}への絆》を獲得した`], { pc: { bonds, bondUsed: { [newB]: false } } });
           }} style={btnFull(selectedLose ? C.goldBg : "rgba(255,255,255,0.05)", C.border, selectedLose ? C.gold : C.textFaint)}>獲得する</button>
         </div>
       );
@@ -5720,8 +5758,9 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
     return (
       <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
         <button onClick={() => {
-          const bonds = Array.from(new Set([...(pc.bonds || []), `${act.target}への絆`]));
-          proceed([`${pc.charName} は《${act.target}への絆》を獲得した`], { pc: { bonds } });
+          const newB = `${act.target}への絆`;
+          const bonds = Array.from(new Set([...(pc.bonds || []), newB]));
+          proceed([`${pc.charName} は《${act.target}への絆》を獲得した`], { pc: { bonds, bondUsed: { [newB]: false } } });
         }} style={btnFull(C.goldBg, C.goldDim, C.gold)}>《{act.target}への絆》を獲得する</button>
       </div>
     );
@@ -5828,7 +5867,9 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
             <button key={o.uid} onClick={() => {
               const extraPc = { currentSpot: o.currentSpot };
               if (act.gainBond && !(pc.badStatus || []).includes("不機嫌") && !(o.badStatus || []).includes("不機嫌")) {
-                extraPc.bonds = Array.from(new Set([...(pc.bonds || []), `${o.charName || o.name}への絆`]));
+                const newB = `${o.charName || o.name}への絆`;
+                extraPc.bonds = Array.from(new Set([...(pc.bonds || []), newB]));
+                extraPc.bondUsed = { [newB]: false };
               }
               proceed([`${pc.charName} は ${o.name} のいるスポットへ移動した`], { pc: extraPc });
             }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>
@@ -6093,8 +6134,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       if (cheerer.ps?.name === "我儘") {
         return (cheerer.bonds || []).filter(b => !usedOf(b));  // 我儘: 全絆を自身絆扱い
       }
-      const selfBond = `${judgePc.charName}自身への絆`;
-      return (cheerer.bonds || []).includes(selfBond) && !usedOf(selfBond) ? [selfBond] : [];
+      // 自身絆は2形式ある（怠け者=「〇〇自身への絆」/ボーナスアクション=「〇〇への絆」）
+      const selfBonds = [`${judgePc.charName}自身への絆`, `${judgePc.charName}への絆`];
+      return selfBonds.filter(sb => (cheerer.bonds || []).includes(sb) && !usedOf(sb));
     }
     const bondName = `${judgePc.charName}への絆`;
     return (cheerer.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
