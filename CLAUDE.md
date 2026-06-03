@@ -253,6 +253,21 @@ When starting a 弾幕ごっこ quest battle, set `battle.scenePcUid` to `curren
 
 `getDistances(startSpotId)` in `App.jsx` runs BFS over the spot graph (defined in `gameData.js`) to compute shortest paths. Results gate which spots a PC can move to in one turn.
 
+### 能力スキル (Ability Skills) — 自動化進行中
+
+Each character has a base ability `pc.as = { name, type, desc }` and a grown version `pc.growthAbility` (same shape). `type` is `アクション` / `サポート` / `オート`. Built onto the PC object in `App.jsx` (both `as` and `growthAbility` are carried). There are **120** abilities (60 chars × {as, growthAbility}); 2 share a name (「魔法を使う程度の能力」＝霧雨魔理沙[アクション] / 聖白蓮[オート]) — disambiguated by `type`.
+
+**Architecture mirrors spell cards**: declarative data in [src/data/abilityEffects.js](src/data/abilityEffects.js) (`ABILITY_EFFECTS` map + `getAbilityEffect(ability)` which resolves `byType` collisions via `ability.type`), handlers in `activateAbility` (PCCard). Each entry: `{ freq, auto, kind, params, passive?, note? }`.
+- `freq`: usage limit `"day"` / `"session"` / `"scene"` / `null`. Tracked on `pc.abilityUse = { [name]: { day, session, sceneId } }`; `abilityUsedUp(ability)` gates the button, `withAbilityUse(base,name,freq)` records.
+- `auto:true` + implemented `kind` → auto-applied. **Un-registered / un-implemented `kind` → manual fallback** (`activateAbility` logs `🔵 …を発動（効果はGMが処理）` so nothing silently breaks). Implemented kinds: `gain_yaruki`, `gain_rei`, `gain_random_item`, `gain_yaruki_selfbond`, `gain_choice_item` (opens an item picker via `abilityItemPick`).
+- `passive:true` (オート) abilities have **no activate button**; their effect must be woven into the relevant subsystem at its site (not yet done — these are the bulk of remaining work).
+
+**Activation UI**: `PCCard` shows the **active** ability (`activeAbility = grown ? growthAbility : as`) with a 「成長」 badge; non-`オート` types get a 発動 button → `SkillActivateModal` (reused, fully generic) → `activateAbility`. The old button was **broken** (reused the personality-skill `skillModal`); fixed to a dedicated `abilityModal`. **Always commit pc-update + log in one `upd`** (PCCard receives `upd` as a prop) — calling `onUpdatePc` then a separate `upd` for the log double-writes.
+
+**成長 (growth)**: gated by `pc.growthSpellUnlocked` (was dormant — never set to true anywhere). A GM toggle in PCCard's GM-edit panel flips it; unlocking grants **both** the growth spell card (additive to `spellCards`) and the growth ability (`growthAbility` **replaces** `as`).
+
+**Remaining work** (大半が未自動化): most アクション need pickers/cross-character targeting (変調除去・手下・なりすまし), most サポート are dice-reroll/応援/ファンブル割り込み (need hooks into `animateDice`/cheer/judgment), most オート are passives needing site integration (拠点拡張・攻撃力固定・判定ダイス+1・霊力最大値・やる気消費軽減 etc.). Subsystems (手下/minions, 黒い応援欄■, 異世界エリアワープ, シーン再処理) are to be built incrementally.
+
 ### 個性スキル (Personality Skills)
 
 Each PC has one personality skill stored as `pc.ps = { id, name, type, desc }`. Skills are defined in `PERSONALITY_SKILLS` (exported from `characters.js`, keyed by D66 roll 11–66).
