@@ -725,6 +725,7 @@ function SessionApp({ roomCode, user }) {
           // 永続化しないよう、生のテキストのまま保持する（表示時に buildSpellCard で再構築）。
           spellCards: charData?.spellCards ?? p.spellCards ?? [],
           growthSpellCard: charData?.growthSpellCard ?? p.growthSpellCard ?? null,
+          growthAbility: p.growthAbility ?? charData?.growthAbility ?? null,
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),

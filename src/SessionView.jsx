@@ -4748,7 +4748,8 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
 // ─── CharDetailModal（キャラクター詳細・読み取り専用） ────────────────
 function CharDetailModal({ pc, onClose }) {
   const skill   = pc.ps || null;
-  const ability = pc.as || null;
+  const isGrownAbility = !!(pc.growthSpellUnlocked && pc.growthAbility?.name);
+  const ability = isGrownAbility ? pc.growthAbility : (pc.as || null);
   const danmaku = pc.ds || null;
   const spellTexts = [
     ...(pc.spellCards || []),
@@ -4806,7 +4807,7 @@ function CharDetailModal({ pc, onClose }) {
           </div>
 
           {skill && <Section label="個性スキル">{renderSkill(skill, skill.type !== "オート" ? C.gold : "#81c784")}</Section>}
-          {ability && <Section label="能力スキル">{renderSkill(ability, "#90caf9")}</Section>}
+          {ability && <Section label={isGrownAbility ? "能力スキル＋（成長）" : "能力スキル"}>{renderSkill(ability, "#90caf9")}</Section>}
           {danmaku && <Section label="弾幕スキル">{renderSkill({ ...danmaku, type: danmaku.type || null }, C.red)}</Section>}
 
           {spells.length > 0 && (
@@ -4871,6 +4872,9 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const items         = pc.items     || INIT_ITEMS();
   const badStatus     = pc.badStatus || [];
   const skill         = pc.ps || null;
+  const isGrown       = !!pc.growthSpellUnlocked;
+  // 成長後は能力スキル＋（growthAbility）が基本能力（as）を置き換える
+  const activeAbility = (isGrown && pc.growthAbility?.name) ? pc.growthAbility : pc.as;
   const isCustomChar  = pc.charId?.startsWith("custom_");
   const hasActed      = (gs.actedPcs ||[]).includes(pc.uid);
   const isActing      = gs.currentScene?.pcUid === pc.uid;
@@ -5148,6 +5152,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                     </div>
                   ))}
                 </div>
+                {/* 成長（能力スキル＋／成長スペルカード解禁）の切り替え */}
+                {(pc.growthAbility?.name || pc.growthSpellCard) && (
+                  <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 8, color: C.textFaint }}>成長:</span>
+                    <button onClick={() => upd(p => ({
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid === pc.uid ? { ...x, growthSpellUnlocked: !x.growthSpellUnlocked } : x),
+                      log: [`🌟 ${pc.charName} は${pc.growthSpellUnlocked ? "成長を解除した" : "成長した（能力スキル＋／成長スペルカード解禁）"}`, ...p.log],
+                    }))} style={{ padding: "2px 8px", fontSize: 9, cursor: "pointer", borderRadius: 10, background: isGrown ? "rgba(255,213,79,0.18)" : "rgba(255,255,255,0.03)", border: `1px solid ${isGrown ? C.goldDim : C.border}`, color: isGrown ? C.gold : C.textFaint }}>
+                      {isGrown ? "成長中（解除）" : "成長させる"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -5232,17 +5249,18 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               )}
             </div>
           )}
-          {pc.as && (
+          {activeAbility?.name && (
             <div style={{ marginTop: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[pc.as.type] || "#90caf9"}18`, border: `1px solid ${SKILL_TYPE_COLOR[pc.as.type] || "#90caf9"}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[pc.as.type] || "#90caf9" }}>{pc.as.type}</span>
-                <span style={{ fontSize: 11, color: "#90caf9" }}>《{pc.as.name}》</span>
+                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[activeAbility.type] || "#90caf9"}18`, border: `1px solid ${SKILL_TYPE_COLOR[activeAbility.type] || "#90caf9"}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[activeAbility.type] || "#90caf9" }}>{activeAbility.type}</span>
+                <span style={{ fontSize: 11, color: "#90caf9" }}>《{activeAbility.name}》</span>
+                {isGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
               </div>
-              <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{pc.as.desc}</div>
-              {pc.as.type !== "オート" && !isCustomChar && (
-                abilityUsedUp(pc.as)
+              <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
+              {activeAbility.type !== "オート" && !isCustomChar && (
+                abilityUsedUp(activeAbility)
                   ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
-                  : <button onClick={() => setAbilityModal(pc.as)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
+                  : <button onClick={() => setAbilityModal(activeAbility)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
               )}
             </div>
           )}
