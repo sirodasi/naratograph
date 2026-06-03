@@ -6961,6 +6961,14 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       </button>
                     )}
 
+                    {/* 応援: 判定者（=myPc）への絆を持つ同スポットPCが応援できる（判定ダイス+1） */}
+                    {renderCheerSection(myPc, (cheererUid, bondName) => upd(p => ({
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid === cheererUid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
+                      currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts || {}), [myPc.uid]: (p.currentScene.diceCounts?.[myPc.uid] || baseDice) + 1 } },
+                      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が《${bondName}》で応援！クエスト判定ダイス+1`, ...p.log],
+                    })))}
+
                     {/* 瀟洒: 3ダイス以上かつ霊力1消費で自動成功 */}
                     {myPc.ps?.name === "瀟洒" && myDiceCount >= 3 && (myPc.resources.霊力?.cur || 0) >= 1 && (
                       <button onClick={() => {
