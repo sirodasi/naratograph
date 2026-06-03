@@ -4866,6 +4866,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityRefresh, setAbilityRefresh] = useState(null); // 応援欄リフレッシュ { name, freq, targetUid }
   const [abilityMove, setAbilityMove] = useState(null); // パーティ移動 { name, freq, params, selected[], moveSelf }
   const [abilitySurprise, setAbilitySurprise] = useState(null); // 絆獲得判定 { name, freq, params, targetUid, x }
+  const [abilitySpend, setAbilitySpend] = useState(null); // アイテム消費獲得 { name, freq, params, spendItem, mode }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5074,6 +5075,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilitySurprise({ name, freq, params: meta.params || {}, targetUid: null, x: 4 });
       return;
     }
+    if (meta?.auto && meta.kind === "spend_item_gain_random") {
+      // 所持アイテム1つを失ってランダム（or 好きな）アイテムを獲得
+      setAbilitySpend({ name, freq, params: meta.params || {}, spendItem: null, mode: null });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5203,6 +5209,46 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           log: [`🔵 ${pc.charName} が能力《${sp.name}》発動：失敗(出目${res.join(",")})→${targetName} が《${bond}》を獲得`, ...p.log],
         };
       });
+    });
+  };
+
+  // spend_item_gain_random：spendItem を1つ失い、ランダム n 個 or 好きな1つを獲得
+  const runSpendRandom = () => {
+    const sd = abilitySpend;
+    if (!sd?.spendItem) return;
+    setAbilitySpend(null);
+    const n = sd.params?.randomCount || 2;
+    const spent = sd.spendItem;
+    animateDice(n, `${sd.name}（アイテム獲得）`, res => {
+      const got = res.map(d => ITEM_NAMES[d - 1]);
+      upd(p => {
+        const base = withAbilityUse({ ...pc }, sd.name, sd.freq);
+        const items = { ...pc.items };
+        items[spent] = Math.max(0, (items[spent] || 0) - 1);
+        got.forEach(nm => { items[nm] = (items[nm] || 0) + 1; });
+        return {
+          ...p,
+          pcs: p.pcs.map(z => z.uid === pc.uid ? { ...base, items } : z),
+          log: [`🔵 ${pc.charName} が能力《${sd.name}》を発動：【${spent}】を失い【${got.join("】【")}】を獲得`, ...p.log],
+        };
+      });
+    });
+  };
+  const runSpendChoice = (gainItem) => {
+    const sd = abilitySpend;
+    if (!sd?.spendItem) return;
+    setAbilitySpend(null);
+    const spent = sd.spendItem;
+    upd(p => {
+      const base = withAbilityUse({ ...pc }, sd.name, sd.freq);
+      const items = { ...pc.items };
+      items[spent] = Math.max(0, (items[spent] || 0) - 1);
+      items[gainItem] = (items[gainItem] || 0) + 1;
+      return {
+        ...p,
+        pcs: p.pcs.map(z => z.uid === pc.uid ? { ...base, items } : z),
+        log: [`🔵 ${pc.charName} が能力《${sd.name}》を発動：【${spent}】を失い【${gainItem}】を獲得`, ...p.log],
+      };
     });
   };
 
@@ -5714,6 +5760,49 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 🎲 2D:{declareX ? abilitySurprise.x : 4} で判定する
               </button>
               <button onClick={() => setAbilitySurprise(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilitySpend && (() => {
+        const owned = ITEM_NAMES.filter(n => (pc.items?.[n] || 0) > 0);
+        const allowChoice = abilitySpend.params?.allowChoice;
+        const n = abilitySpend.params?.randomCount || 2;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilitySpend(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilitySpend.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              {!abilitySpend.spendItem ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>失うアイテムを1つ選択</div>
+                  {owned.length === 0 ? (
+                    <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>失えるアイテムがありません</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
+                      {owned.map(it => (
+                        <button key={it} onClick={() => setAbilitySpend(s => ({ ...s, spendItem: it }))} style={btnFull("rgba(224,112,96,0.1)", C.redBorder, C.red, { fontSize: 11 })}>{it}（{pc.items[it]}）</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : abilitySpend.mode === "choice" ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>【{abilitySpend.spendItem}】を失い、好きなアイテムを1つ獲得</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
+                    {ITEM_NAMES.map(it => (
+                      <button key={it} onClick={() => runSpendChoice(it)} style={btnFull("rgba(144,202,249,0.12)", "#1565c080", "#90caf9", { fontSize: 11 })}>{it}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 10 }}>【{abilitySpend.spendItem}】を失って獲得方法を選択</div>
+                  <button onClick={runSpendRandom} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 11 }), marginBottom: 6 }}>🎲 ランダムに{n}つ獲得</button>
+                  {allowChoice && (
+                    <button onClick={() => setAbilitySpend(s => ({ ...s, mode: "choice" }))} style={{ ...btnFull("rgba(144,202,249,0.12)", "#1565c080", "#90caf9", { fontSize: 11 }), marginBottom: 6 }}>好きなアイテムを1つ獲得</button>
+                  )}
+                </div>
+              )}
+              <button onClick={() => setAbilitySpend(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );
