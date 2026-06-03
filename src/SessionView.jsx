@@ -4353,14 +4353,15 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
   };
 
   const handleBond = (targetName, isClearCheck = false) => {
-    let nextBonds = [...(myPc.bonds || [])];
-    let logMsg = "";
     if (isClearCheck) {
-      logMsg = `✨ ${myPc.charName} は《${targetName}への絆》の応援欄をリフレッシュした`;
-    } else {
-      if (!nextBonds.includes(targetName)) nextBonds.push(targetName);
-      logMsg = `✨ ${myPc.charName} はボーナスで《${targetName}への絆》を獲得した`;
+      // 応援欄リフレッシュ: 対象の絆を未使用に戻す（再び応援に使える）
+      const logMsg = `✨ ${myPc.charName} は《${targetName}への絆》の応援欄をリフレッシュした`;
+      finishAction(logMsg, { bondUsed: { ...(myPc.bondUsed || {}), [`${targetName}への絆`]: false } });
+      return;
     }
+    const nextBonds = [...(myPc.bonds || [])];
+    if (!nextBonds.includes(targetName)) nextBonds.push(targetName);
+    const logMsg = `✨ ${myPc.charName} はボーナスで《${targetName}への絆》を獲得した`;
     finishAction(logMsg, { bonds: nextBonds });
   };
 
@@ -5277,7 +5278,16 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           if (extraUpdates.pc.resources) base.resources = { ...base.resources, ...extraUpdates.pc.resources };
           if (extraUpdates.pc.items) base.items = { ...base.items, ...extraUpdates.pc.items };
           if (extraUpdates.pc.badStatus) base.badStatus = extraUpdates.pc.badStatus;
-          if (extraUpdates.pc.bonds) base.bonds = extraUpdates.pc.bonds;
+          if (extraUpdates.pc.bonds) {
+            // 新規に獲得した絆は応援欄を未使用にする（再獲得=リフレッシュは handleBond 側で処理）
+            const newBonds = extraUpdates.pc.bonds.filter(b => !(x.bonds || []).includes(b));
+            base.bonds = extraUpdates.pc.bonds;
+            if (newBonds.length > 0) {
+              base.bondUsed = { ...(base.bondUsed || {}) };
+              newBonds.forEach(b => { base.bondUsed[b] = false; });
+            }
+          }
+          if (extraUpdates.pc.bondUsed) base.bondUsed = { ...(base.bondUsed || {}), ...extraUpdates.pc.bondUsed };
           if (extraUpdates.pc.tags) base.tags = extraUpdates.pc.tags;
           if (extraUpdates.pc.flags) base.flags = { ...base.flags, ...extraUpdates.pc.flags };
           if (extraUpdates.pc.currentSpot) base.currentSpot = extraUpdates.pc.currentSpot;
@@ -6073,6 +6083,56 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const selectEvent  = ev  => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_roll", selectedEvent: ev } }));
   const rollExplore  = ()  => animateDice(sc.actionDiceCount || 2, "行為判定", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_result", actionDice: res } })));
 
+  // ─── 応援システム ───────────────────────────────────────────────
+  // 《〇〇への絆》を持つPCは、〇〇が同スポットにいるとき〇〇の行為判定にダイス+1できる。
+  // 絆は1度使うと bondUsed[絆名] で消費され、同じ絆を再獲得する処理で回復する。
+  // 我儘: 自分の判定なら全ての絆を自身絆として使える。怠け者: 自身絆で自分の判定に応援。
+  const getCheerBonds = (cheerer, judgePc) => {
+    const usedOf = (b) => cheerer.bondUsed?.[b];
+    if (cheerer.uid === judgePc.uid) {
+      if (cheerer.ps?.name === "我儘") {
+        return (cheerer.bonds || []).filter(b => !usedOf(b));  // 我儘: 全絆を自身絆扱い
+      }
+      const selfBond = `${judgePc.charName}自身への絆`;
+      return (cheerer.bonds || []).includes(selfBond) && !usedOf(selfBond) ? [selfBond] : [];
+    }
+    const bondName = `${judgePc.charName}への絆`;
+    return (cheerer.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
+  };
+
+  // judgePc の行為判定に対する応援UI。onCheer(applies +1 dice) を渡す。
+  const renderCheerSection = (judgePc, onCheer) => {
+    const cheers = [];
+    (gs.pcs || []).forEach(cheerer => {
+      if (cheerer.currentSpot !== judgePc.currentSpot) return;  // 同スポット
+      getCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName }));
+    });
+    if (cheers.length === 0) return null;
+    return (
+      <div style={{ marginBottom: 8, padding: 8, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 4 }}>
+        <div style={{ fontSize: 9, color: C.blue, marginBottom: 4 }}>💪 応援（絆1つ＝判定ダイス+1）</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {cheers.map(({ cheerer, bondName }, i) => (
+            <button key={i} onClick={() => onCheer(cheerer.uid, bondName)}
+              style={btnFull("rgba(100,181,246,0.15)", C.blueBorder, C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>
+              {cheerer.uid === judgePc.uid ? `《${bondName}》` : `${cheerer.charName}：《${bondName}》`}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // 応援を1回適用（応援者の絆を消費し、指定の dice フィールドを+1）
+  const applyCheer = (cheererUid, bondName, diceField) => {
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid === cheererUid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
+      currentScene: { ...p.currentScene, [diceField]: (p.currentScene[diceField] || (diceField === "actionDiceCount" ? 2 : 2)) + 1 },
+      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が《${bondName}》で応援！ダイス+1`, ...p.log],
+    }));
+  };
+
   const acquireClue = questId => {
     upd(p => {
       const spotId   = pc.currentSpot;
@@ -6537,12 +6597,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 </button>
               )}
 
-              {/* 我儘: 全ての絆を自身への絆として扱う */}
-              {pc.ps?.name === "我儘" && (
-                <div style={{ fontSize: 9, color: "#ffb74d", marginBottom: 8, padding: "4px 8px", background: "rgba(255,183,77,0.08)", borderRadius: 4, border: "1px solid #ffb74d30" }}>
-                  ♟《我儘》あなたの絆はすべて自身への絆として扱われます
-                </div>
-              )}
+              {/* 応援: 判定者（=pc）と同スポットの、判定者への絆を持つPCが応援できる（判定ダイス+1） */}
+              {renderCheerSection(pc, (cheererUid, bondName) => applyCheer(cheererUid, bondName, "actionDiceCount"))}
+
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
           )}
