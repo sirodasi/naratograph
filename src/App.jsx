@@ -16,6 +16,7 @@ import {
   OFFICIAL_DANMAKU_SKILLS,
 } from "./data/gameData";
 import { SPOT_DETAILS } from "./data/spots";
+import { applyAbilityPassiveStats } from "./data/abilityEffects";
 import { getBlockedSpots, resolveBaseSpot } from "./scenarios";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
@@ -703,7 +704,7 @@ function SessionApp({ roomCode, user }) {
         let startSpotId = r?.scenarioData?.startSpotId || null;
         if (r?.scenarioData?.startSpotType === "base") startSpotId = baseSpotId;
 
-        return {
+        return applyAbilityPassiveStats({
           uid:    p.uid,
           name:   p.name,
           charId: p.charId,
@@ -733,7 +734,7 @@ function SessionApp({ roomCode, user }) {
           baseSpotId,
           currentSpot: startSpotId || "11",
           log: [],
-        };
+        });
       });
   }
 

@@ -47,7 +47,34 @@ export const ABILITY_EFFECTS = {
 
   // ── サポート（タイミングを見て使用） ──
   "花を操る程度の能力": { freq: null, auto: true, kind: "gain_rei", params: { amount: 10 } }, // 風見幽香（導入フェイズ開始時）
+
+  // ── オート（常時パッシブ・発動ボタンなし。効果は各サイトに組込み） ──
+  "虚無を操る程度の能力":   { passive: true, note: "霊力の最大値が25・攻撃力の最大値が6（常時）" }, // applyAbilityPassiveStats で反映
+  "虚無を操る程度の能力＋": { passive: true, note: "霊力の最大値が29・攻撃力の最大値が6（常時）" },
 };
+
+// オート・パッシブのうち、ステータス上限を変えるもの（虚無を操る程度の能力）を pc に反映する。
+// 能力スキル＋解禁状態（growthAbilityUnlocked）を考慮して現在有効な能力で判定する。
+// PC構築時（App.jsx）と成長トグル時に呼び、霊力/攻撃力の最大値を補正する。
+export function applyAbilityPassiveStats(pc) {
+  if (!pc) return pc;
+  const active = (pc.growthAbilityUnlocked && pc.growthAbility?.name) ? pc.growthAbility : pc.as;
+  const name = active?.name;
+  let reiMax = null;
+  if (name === "虚無を操る程度の能力")   reiMax = 25;
+  if (name === "虚無を操る程度の能力＋") reiMax = 29;
+  if (reiMax == null) return pc;
+  const rei = pc.resources?.霊力   || { cur: 0, max: 20 };
+  const atk = pc.resources?.攻撃力 || { cur: 1, max: 5 };
+  return {
+    ...pc,
+    resources: {
+      ...pc.resources,
+      霊力:   { ...rei, max: reiMax, cur: Math.min(rei.cur, reiMax) },
+      攻撃力: { ...atk, max: 6 },
+    },
+  };
+}
 
 // ability = { name, type, desc } を受け取り、対応する効果メタを返す（無ければ null）。
 export function getAbilityEffect(ability) {

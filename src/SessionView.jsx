@@ -7,7 +7,7 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
-import { getAbilityEffect } from "./data/abilityEffects";
+import { getAbilityEffect, applyAbilityPassiveStats } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 
@@ -5281,7 +5281,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                     {pc.growthAbility?.name && (
                       <button onClick={() => upd(p => ({
                         ...p,
-                        pcs: p.pcs.map(x => x.uid === pc.uid ? { ...x, growthAbilityUnlocked: !x.growthAbilityUnlocked } : x),
+                        pcs: p.pcs.map(x => x.uid === pc.uid ? applyAbilityPassiveStats({ ...x, growthAbilityUnlocked: !x.growthAbilityUnlocked }) : x),
                         log: [`🌟 ${pc.charName} は${pc.growthAbilityUnlocked ? "能力スキル＋を解除した" : "能力スキルを強化した（能力スキル＋）"}`, ...p.log],
                       }))} style={{ padding: "2px 8px", fontSize: 9, cursor: "pointer", borderRadius: 10, background: isAbilityGrown ? "rgba(255,213,79,0.18)" : "rgba(255,255,255,0.03)", border: `1px solid ${isAbilityGrown ? C.goldDim : C.border}`, color: isAbilityGrown ? C.gold : C.textFaint }}>
                         {isAbilityGrown ? "能力＋（解除）" : "能力＋に強化"}
