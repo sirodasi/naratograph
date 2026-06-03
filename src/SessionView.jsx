@@ -7,6 +7,7 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
+import { getAbilityEffect } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 
@@ -4858,6 +4859,7 @@ function CharDetailModal({ pc, onClose }) {
 export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SPOTS, isOnline = false }) {
   const [itemModal, setItemModal]   = useState(null);
   const [skillModal, setSkillModal] = useState(null);
+  const [abilityModal, setAbilityModal] = useState(null);
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -4955,6 +4957,80 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
 
     // その他：カウント+ログのみ
     onUpdatePc({ ...pc, skillActivatedThisSession: (pc.skillActivatedThisSession || 0) + 1 });
+  };
+
+  // ─── 能力スキル（as / growthAbility）の発動 ───────────────────────────
+  // 使用回数フラグ。pc.abilityUse = { [能力名]: { day, session, sceneId } }
+  const abilitySceneId = () => gs.currentScene?.pcUid ?? null;
+  const abilityUsedUp = (ability) => {
+    const meta = getAbilityEffect(ability);
+    const freq = meta?.freq;
+    if (!freq) return false;
+    const u = pc.abilityUse?.[ability.name];
+    if (!u) return false;
+    if (freq === "day")     return u.day === gs.day;
+    if (freq === "session") return !!u.session;
+    if (freq === "scene")   return u.sceneId === abilitySceneId();
+    return false;
+  };
+  // base(pc派生) に使用回数フラグを記録して返す
+  const withAbilityUse = (base, name, freq) => {
+    if (!freq) return base;
+    const use = { ...(pc.abilityUse || {}) };
+    const cur = { ...(use[name] || {}) };
+    if (freq === "day")     cur.day = gs.day;
+    if (freq === "session") cur.session = true;
+    if (freq === "scene")   cur.sceneId = abilitySceneId();
+    use[name] = cur;
+    return { ...base, abilityUse: use };
+  };
+
+  const activateAbility = (ability) => {
+    setAbilityModal(null);
+    if (!ability?.name) return;
+    const meta = getAbilityEffect(ability);
+    const name = ability.name;
+    const freq = meta?.freq || null;
+    // pc派生 base にログを添えて単一 upd で書き込む（二重書き込み回避）
+    const commit = (base, logMsg) => upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid === pc.uid ? base : x),
+      log: [logMsg, ...p.log],
+    }));
+
+    if (meta?.auto && meta.kind === "gain_yaruki") {
+      const amt = meta.params?.amount || 1;
+      const r = pc.resources.やる気 || { cur: 0, max: 99 };
+      sfx.skillActivate();
+      commit(withAbilityUse({ ...pc, resources: { ...pc.resources, やる気: { ...r, cur: Math.min(r.max, r.cur + amt) } } }, name, freq),
+        `🔵 ${pc.charName} が能力《${name}》を発動：やる気+${amt}`);
+      return;
+    }
+    if (meta?.auto && meta.kind === "gain_rei") {
+      const amt = meta.params?.amount || 1;
+      const r = pc.resources.霊力 || { cur: 0, max: 20 };
+      const nextCur = Math.min(r.max, r.cur + amt);
+      sfx.skillActivate();
+      commit(withAbilityUse({ ...pc, resources: { ...pc.resources, 霊力: { ...r, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } }, name, freq),
+        `🔵 ${pc.charName} が能力《${name}》を発動：霊力+${amt}`);
+      return;
+    }
+    if (meta?.auto && meta.kind === "gain_random_item") {
+      const count = meta.params?.count || 1;
+      animateDice(count, `${name}（アイテム獲得）`, res => {
+        const names = res.map(d => ITEM_NAMES[d - 1]);
+        const nextItems = { ...pc.items };
+        names.forEach(n => { nextItems[n] = (nextItems[n] || 0) + 1; });
+        commit(withAbilityUse({ ...pc, items: nextItems }, name, freq),
+          `🔵 ${pc.charName} が能力《${name}》を発動：【${names.join("】【")}】を獲得`);
+      });
+      return;
+    }
+
+    // 手動フォールバック：発動ログのみ（効果はGMが処理）
+    sfx.skillActivate();
+    commit(withAbilityUse({ ...pc }, name, freq),
+      `🔵 ${pc.charName} が能力《${name}》を発動（効果はGMが処理）`);
   };
 
   const adjustResource = (key, delta) => {
@@ -5163,7 +5239,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 <span style={{ fontSize: 11, color: "#90caf9" }}>《{pc.as.name}》</span>
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{pc.as.desc}</div>
-              {pc.as.type !== "オート" && !isCustomChar && <button onClick={() => setSkillModal({ name: pc.as.name, type: pc.as.type, desc: pc.as.desc, key: "ability" })} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>}
+              {pc.as.type !== "オート" && !isCustomChar && (
+                abilityUsedUp(pc.as)
+                  ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
+                  : <button onClick={() => setAbilityModal(pc.as)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
+              )}
             </div>
           )}
 
@@ -5283,6 +5363,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
 
       {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => useItem(itemModal)} onCancel={() => setItemModal(null)} />}
       {skillModal && skill && <SkillActivateModal skillName={skill.name} skillType={skill.type} desc={skill.desc} onConfirm={activateSkill} onCancel={() => setSkillModal(null)} />}
+      {abilityModal && <SkillActivateModal skillName={abilityModal.name} skillType={abilityModal.type} desc={abilityModal.desc} onConfirm={() => activateAbility(abilityModal)} onCancel={() => setAbilityModal(null)} />}
       {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );
