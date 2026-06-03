@@ -4863,6 +4863,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityModal, setAbilityModal] = useState(null);
   const [abilityItemPick, setAbilityItemPick] = useState(null);
   const [abilityCure, setAbilityCure] = useState(null); // 変調除去ピッカー { name, freq, params, targetUid }
+  const [abilityRefresh, setAbilityRefresh] = useState(null); // 応援欄リフレッシュ { name, freq, targetUid }
+  const [abilityMove, setAbilityMove] = useState(null); // パーティ移動 { name, freq, params, selected[], moveSelf }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5056,6 +5058,16 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityCure({ name, freq, params: meta.params || {}, targetUid: null });
       return;
     }
+    if (meta?.auto && meta.kind === "refresh_other_cheer_slot") {
+      // 他キャラの使用済み応援欄（bondUsed===true）を1つ解除（対象→絆の2段ピッカー）
+      setAbilityRefresh({ name, freq, targetUid: null });
+      return;
+    }
+    if (meta?.auto && meta.kind === "party_move") {
+      // 同スポットのキャラを連れて好きなスポットへ移動（連れる対象→移動先）
+      setAbilityMove({ name, freq, params: meta.params || {}, selected: [], moveSelf: true });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5100,6 +5112,49 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           return nx;
         }),
         log: [`🔵 ${pc.charName} が能力《${cure.name}》を発動：${targetName} の変調《${bsName}》を除去${grantTag ? `し《${grantTag}》タグを付与` : ""}`, ...p.log],
+      };
+    });
+  };
+
+  // refresh_other_cheer_slot：対象キャラの使用済み応援欄（bondUsed[bond]）を1つ解除
+  const confirmRefresh = (targetUid, bond) => {
+    const rf = abilityRefresh;
+    setAbilityRefresh(null);
+    if (!rf) return;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, rf.name, rf.freq);
+      const targetName = p.pcs.find(x => x.uid === targetUid)?.charName || "対象";
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          let nx = x.uid === pc.uid ? { ...x, abilityUse: selfBase.abilityUse } : x;
+          if (x.uid === targetUid) nx = { ...nx, bondUsed: { ...(x.bondUsed || {}), [bond]: false } };
+          return nx;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${rf.name}》を発動：${targetName} の《${bond}》の応援欄を1つ解除`, ...p.log],
+      };
+    });
+  };
+
+  // party_move：自分（任意）＋選んだ同スポットキャラを destSpot へ移動
+  const confirmPartyMove = (destSpot) => {
+    const mv = abilityMove;
+    setAbilityMove(null);
+    if (!mv) return;
+    const moveSet = new Set(mv.selected);
+    if (mv.moveSelf) moveSet.add(pc.uid);
+    const destName = getSpot(destSpot)?.name || destSpot;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, mv.name, mv.freq);
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          let nx = x;
+          if (x.uid === pc.uid) nx = { ...nx, abilityUse: selfBase.abilityUse };
+          if (moveSet.has(x.uid)) nx = { ...nx, currentSpot: destSpot };
+          return nx;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${mv.name}》を発動：${[...moveSet].map(u => p.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・")} を【${destName}】へ移動`, ...p.log],
       };
     });
   };
@@ -5505,6 +5560,77 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 </div>
               )}
               <button onClick={() => setAbilityCure(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilityRefresh && (() => {
+        // 使用済み応援欄（bondUsed===true）を持つキャラ → その絆を選んで解除
+        const usedOf = (x) => (x.bonds || []).filter(b => x.bondUsed?.[b]);
+        const candidates = (gs.pcs || []).filter(x => usedOf(x).length > 0);
+        const target = abilityRefresh.targetUid ? gs.pcs.find(x => x.uid === abilityRefresh.targetUid) : null;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityRefresh(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityRefresh.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              {!target ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>応援欄を解除する対象（使用済み絆を持つキャラ）を選択</div>
+                  {candidates.length === 0 ? (
+                    <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>使用済み応援欄を持つキャラがいません</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                      {candidates.map(x => (
+                        <button key={x.uid} onClick={() => setAbilityRefresh({ ...abilityRefresh, targetUid: x.uid })} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 11 })}>{x.charName}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{target.charName} の解除する応援欄を選択</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    {usedOf(target).map(b => (
+                      <button key={b} onClick={() => confirmRefresh(target.uid, b)} style={btnFull("rgba(200,160,64,0.12)", C.goldDim, C.gold, { fontSize: 11 })}>《{b}》（■→□）</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => setAbilityRefresh(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilityMove && (() => {
+        // 同スポットの他キャラを連れる対象として選び、移動先を決める
+        const sameSpot = (gs.pcs || []).filter(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot);
+        const toggle = (uid) => setAbilityMove(m => ({ ...m, selected: m.selected.includes(uid) ? m.selected.filter(u => u !== uid) : [...m.selected, uid] }));
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityMove(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityMove.name}`} style={{ maxWidth: 360, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>連れて移動するキャラ（同スポット）を選択</div>
+              {sameSpot.length === 0
+                ? <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 8 }}>同スポットに他のキャラがいません</div>
+                : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                    {sameSpot.map(x => {
+                      const on = abilityMove.selected.includes(x.uid);
+                      return <button key={x.uid} onClick={() => toggle(x.uid)} style={btnFull(on ? "rgba(144,202,249,0.25)" : "rgba(255,255,255,0.04)", on ? "#1565c0" : C.border, on ? "#90caf9" : C.textDim, { fontSize: 10, padding: "4px 8px" })}>{on ? "✓ " : ""}{x.charName}</button>;
+                    })}
+                  </div>
+                )}
+              {abilityMove.params?.selfOptional && (
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textDim, marginBottom: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={abilityMove.moveSelf} onChange={e => setAbilityMove(m => ({ ...m, moveSelf: e.target.checked }))} />
+                  自分も移動する
+                </label>
+              )}
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>移動先のスポットを選択</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 10, maxHeight: 200, overflowY: "auto" }}>
+                {(SPOTS || []).map(s => (
+                  <button key={s.id} onClick={() => confirmPartyMove(s.id)} style={btnFull(s.id === pc.currentSpot ? "rgba(255,255,255,0.02)" : "rgba(144,202,249,0.1)", s.id === pc.currentSpot ? C.border : "#1565c080", s.id === pc.currentSpot ? C.textFaint : "#90caf9", { fontSize: 10, padding: "5px 6px" })}>{s.name}</button>
+                ))}
+              </div>
+              <button onClick={() => setAbilityMove(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );
