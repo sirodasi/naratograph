@@ -273,7 +273,18 @@ Key exported helpers in `SessionView.jsx`:
 
 **赤貧**: Triggered in `ActionRenderer` when `act.item === "小銭"` and `pc.ps?.name === "赤貧"` — shows an item conversion picker instead of granting 小銭 directly.
 
-**我儘**: Informational note displayed in explore_roll and quest_roll UI; no automatic dice adjustment (player interprets all bonds as self-bonds manually).
+**我儘**: Integrated into the 応援 (cheer) system — when the cheerer is the judge, **all** their unused bonds count as self-bonds (`getCheerBonds`/`getEvadeCheerBonds` 我儘 branch). No separate manual note needed.
+
+### 応援 (Cheer) System
+
+A 《〇〇への絆》 holder can cheer 〇〇's 行為判定 (+1 judgment die) when at the same spot. Applies to all three judgment types: **explore**, **quest**, and **danmaku evasion (回避判定)**.
+
+- **Bond storage**: bonds are plain string arrays in the canonical form `"〇〇への絆"` / `"〇〇自身への絆"` / `"〇〇からの絆"`. All acquisition paths (探索 act bond, ボーナス `handleBond`, ご執心, 怠け者, 移動同時獲得) must store this form — never a bare charName. (`gainBond` at ~line 6219 is **dead code** that stores bare names; do not wire it up.)
+- **Cheer slot**: consuming a cheer sets `pc.bondUsed[bondName] = true`. The slot **recovers when that bond is (re)acquired** — every acquisition path clears `bondUsed[bondName]` (the `proceed` handler clears it for genuinely-new bonds; each site also passes an explicit `bondUsed: { [bond]: false }` so re-acquiring an already-held bond also refreshes it).
+- **Eligibility helpers**: `getCheerBonds(cheerer, judgePc)` (explore/quest, in `ScenePanel`) and `getEvadeCheerBonds(cheererPc)` (danmaku, in `BattleView`). Self-cheer accepts **both** self-bond forms (`〇〇自身への絆` from 怠け者 / `〇〇への絆` from the ボーナス self action). 我儘 → all unused bonds usable when self-judging.
+- **Apply**: explore increments scalar `currentScene.actionDiceCount`; quest increments per-uid `currentScene.diceCounts[judgePc.uid]`; danmaku increments `gs.battle.currentEvadeDice` (`?? getDefaultEvadeDice`). Each apply also sets the cheerer's `bondUsed` and logs `💪 …で応援！`.
+- **UI**: explore/quest render `renderCheerSection(judgePc, onCheer)` in the roll panel; danmaku renders `renderEvadeCheer()` inside `renderEvadeIntro` (PC evade only, visible to spectators so bond-holders can cheer before the combatant rolls). Danmaku eligibility is gated on `b.participantPcUids` (same-spot equivalent).
+- **怠け者**: gets a self-bond (`〇〇自身への絆`) and cheers its own judgments — treated as an ordinary **consumable** self-bond (per user decision), not an unlimited passive.
 
 ### Extra Rules (追加ルール)
 
