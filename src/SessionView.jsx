@@ -6731,6 +6731,13 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     if (pc.ps?.name === "快適な拠点" && pc.currentSpot === pc.baseSpotId) diceCount++;
     // 寂しがり屋: 同スポットに他PCがいる場合+1（弾幕ごっこ以外）
     if (pc.ps?.name === "寂しがり屋" && gs.pcs.some(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot)) diceCount++;
+    // 火＋水＋…を操る程度の能力（オート）: 移動しなかったシーンでは判定ダイス+1（＋は拠点でも）
+    {
+      const ab = (pc.growthAbilityUnlocked && pc.growthAbility?.name) ? pc.growthAbility : pc.as;
+      const didntMove = sc.startSpot != null && pc.currentSpot === sc.startSpot;
+      if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力" && didntMove) diceCount++;
+      if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力＋" && (didntMove || pc.currentSpot === pc.baseSpotId)) diceCount++;
+    }
     if ((pc.badStatus || []).includes("怪我")) diceCount = Math.min(2, diceCount);
     
     upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "explore_select", actionDiceCount: diceCount, hasTagBonus: hasTag } }));
@@ -8034,7 +8041,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     setSceneSelect(""); // upd()より先にクリアして二重起動を防ぐ
     upd(p => ({
       ...p,
-      currentScene: { pcUid: selectedUid, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2 },
+      currentScene: { pcUid: selectedUid, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2, startSpot: targetPc.currentSpot },
       log:[`🎬 ${targetPc.charName} のシーンが開始された`, ...p.log],
     }));
   };
