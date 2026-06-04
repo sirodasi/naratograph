@@ -6830,22 +6830,34 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     return (cheerer.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
   };
 
-  // judgePc の行為判定に対する応援UI。onCheer(applies +1 dice) を渡す。
+  // 魂の弱い所に入り込む程度の能力（オート）: 使用済み（黒い応援欄）の絆でも応援できる。
+  // ただしこの応援を行った行為判定が失敗するとファンブルになる（=fragile）。
+  const getFragileCheerBonds = (cheerer, judgePc) => {
+    if (cheerer.uid === judgePc.uid) return [];
+    const name = getActiveAbility(cheerer)?.name;
+    if (name !== "魂の弱い所に入り込む程度の能力" && name !== "魂の弱い所に入り込む程度の能力＋") return [];
+    const bondName = `${judgePc.charName}への絆`;
+    // すでに使用済み（bondUsed）の絆を持つ場合のみ（未使用なら通常応援で出る）
+    return ((cheerer.bonds || []).includes(bondName) && cheerer.bondUsed?.[bondName]) ? [bondName] : [];
+  };
+
+  // judgePc の行為判定に対する応援UI。onCheer(cheererUid, bondName, fragile) を渡す。
   const renderCheerSection = (judgePc, onCheer) => {
     const cheers = [];
     (gs.pcs || []).forEach(cheerer => {
       if (cheerer.currentSpot !== judgePc.currentSpot) return;  // 同スポット
-      getCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName }));
+      getCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: false }));
+      getFragileCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: true }));
     });
     if (cheers.length === 0) return null;
     return (
       <div style={{ marginBottom: 8, padding: 8, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 4 }}>
         <div style={{ fontSize: 9, color: C.blue, marginBottom: 4 }}>💪 応援（絆1つ＝判定ダイス+1）</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {cheers.map(({ cheerer, bondName }, i) => (
-            <button key={i} onClick={() => onCheer(cheerer.uid, bondName)}
-              style={btnFull("rgba(100,181,246,0.15)", C.blueBorder, C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>
-              {cheerer.uid === judgePc.uid ? `《${bondName}》` : `${cheerer.charName}：《${bondName}》`}
+          {cheers.map(({ cheerer, bondName, fragile }, i) => (
+            <button key={i} onClick={() => onCheer(cheerer.uid, bondName, fragile)}
+              style={btnFull(fragile ? "rgba(156,39,176,0.15)" : "rgba(100,181,246,0.15)", fragile ? C.purpleBorder : C.blueBorder, fragile ? C.purple : C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>
+              {fragile ? "🩸" : ""}{cheerer.uid === judgePc.uid ? `《${bondName}》` : `${cheerer.charName}：《${bondName}》`}{fragile ? "(失敗=ファンブル)" : ""}
             </button>
           ))}
         </div>
@@ -6853,13 +6865,13 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     );
   };
 
-  // 応援を1回適用（応援者の絆を消費し、指定の dice フィールドを+1）
-  const applyCheer = (cheererUid, bondName, diceField) => {
+  // 応援を1回適用（応援者の絆を消費し、指定の dice フィールドを+1）。fragile=魂の弱い所による応援（失敗時ファンブル）
+  const applyCheer = (cheererUid, bondName, diceField, fragile = false) => {
     upd(p => ({
       ...p,
       pcs: p.pcs.map(x => x.uid === cheererUid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
-      currentScene: { ...p.currentScene, [diceField]: (p.currentScene[diceField] || (diceField === "actionDiceCount" ? 2 : 2)) + 1 },
-      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が《${bondName}》で応援！ダイス+1`, ...p.log],
+      currentScene: { ...p.currentScene, [diceField]: (p.currentScene[diceField] || (diceField === "actionDiceCount" ? 2 : 2)) + 1, ...(fragile ? { fragileCheer: true } : {}) },
+      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が《${bondName}》で応援！ダイス+1${fragile ? "（魂の弱い所：失敗でファンブル）" : ""}`, ...p.log],
     }));
   };
 
@@ -7352,7 +7364,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
               )}
 
               {/* 応援: 判定者（=pc）と同スポットの、判定者への絆を持つPCが応援できる（判定ダイス+1） */}
-              {renderCheerSection(pc, (cheererUid, bondName) => applyCheer(cheererUid, bondName, "actionDiceCount"))}
+              {renderCheerSection(pc, (cheererUid, bondName, fragile) => applyCheer(cheererUid, bondName, "actionDiceCount", fragile))}
 
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
@@ -7385,7 +7397,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
               uchideName === "打ち出の小槌を扱う程度の能力" ? dice.every(d => d <= 2)
               : uchideName === "打ち出の小槌を扱う程度の能力＋" ? (dice.every(d => d <= 2) && dice.filter(d => d === 1).length * 2 >= dice.length)
               : false);
-            const isFumble     = (sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1))) || uchideFumble;
+            const baseFumble   = (sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1))) || uchideFumble;
+            // 魂の弱い所/人を狂わす による応援（fragile）: 失敗するとファンブルになる
+            const wouldSucceed = sc.isAutoSuccess || (maxDie >= (sc.selectedEvent?.target || 0));
+            const fragileFumble = !!sc.fragileCheer && !wouldSucceed && (sc.actionDice?.length > 0);
+            const isFumble     = baseFumble || fragileFumble;
             const isSpecial    = flipCond ? sc.actionDice?.includes(1) : sc.actionDice?.includes(6);
             const isSuccess    = sc.isAutoSuccess || (maxDie >= (sc.selectedEvent?.target || 0) && !isFumble);
             const pendingFumble  = isFumble  && !sc.fumbleResolved;
