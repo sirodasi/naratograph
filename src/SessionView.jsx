@@ -7374,8 +7374,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 
           {sc.phase === "explore_result" && (() => {
             const maxDie       = Math.max(...(sc.actionDice ||[0]));
-            const isFumble     = sc.actionDice?.length > 0 && sc.actionDice.every(d => d === 1);
-            const isSpecial    = sc.actionDice?.includes(6);
+            // 何でもひっくり返す程度の能力（オート）: 同スポットに保持者がいると ファンブル/スペシャル 条件が反転（全6=ファンブル / 1あり=スペシャル）
+            const flipCond = gs.pcs.some(x => x.currentSpot === pc.currentSpot && (getActiveAbility(x)?.name === "何でもひっくり返す程度の能力" || getActiveAbility(x)?.name === "何でもひっくり返す程度の能力＋"));
+            const isFumble     = sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1));
+            const isSpecial    = flipCond ? sc.actionDice?.includes(1) : sc.actionDice?.includes(6);
             const isSuccess    = sc.isAutoSuccess || (maxDie >= (sc.selectedEvent?.target || 0) && !isFumble);
             const pendingFumble  = isFumble  && !sc.fumbleResolved;
             const pendingSpecial = isSpecial && !isFumble && !sc.specialResolved;
