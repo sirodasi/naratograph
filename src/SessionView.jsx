@@ -909,6 +909,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
   // ── フェーズチェンジバナー ────────────────────────────────────────
   const [phaseBanner, setPhaseBanner] = useState(null);
+  // 動物を導く（弾幕回避）の振り直し対象ダイス添字（null=非選択モード）
+  const [evadeDoubutsuSel, setEvadeDoubutsuSel] = useState(null);
+  useEffect(() => { if (b.phase !== "pc_evade_result") setEvadeDoubutsuSel(null); }, [b.phase]);
   const prevBannerPhase = useRef(null);
   const BANNER_PHASES = { pc_shot_intro: "PC ショット", npc_shot_intro: "NPC ショット", pc_evade_intro: "PC 回避", npc_evade_intro: "NPC 回避", pc_dropout: "PC 脱落", npc_dropout: "NPC 脱落" };
   useEffect(() => {
@@ -3276,13 +3279,77 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           <button key={bondName} onClick={() => animateDice(1, "応援（回避振り足し）", res => upd(p => ({
             ...p,
             pcs: p.pcs.map(x => x.uid === cheererPc.uid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
-            battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), res[0]] } },
+            battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), res[0]], wasCheered: true } },
             log: [`💪 ${cheererPc.charName} が《${bondName}》で応援！回避にダイスを振り足した（出目${res[0]}）`, ...p.log],
           })))} style={{ ...btnFull("rgba(200,160,64,0.16)", C.goldDim, C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
             《{bondName}》で応援
           </button>
         ))}
       </div>
+    );
+  };
+
+  // 弾幕回避の結果に対する応援強化（奇跡=出目+1 / 動物=振り直し / 気質=被応援で出目+1）。evadeRoll.dice を操作。
+  const renderEvadeCheerEffects = () => {
+    const er = b.evadeRoll;
+    if (!er) return null;
+    const dice = er.dice || [];
+    const obs = pcs.find(p => p.uid === user.uid);
+    const oName = getActiveAbility(obs)?.name;
+    const obsBonds = obs && obs.uid !== b.pcCombatant ? getEvadeCheerBonds(obs) : [];   // 観戦保持者の未使用絆
+    const obsBond = obsBonds[0];
+    const writeDice = (newDice, consumeUid, consumeBond, extra, logMsg) => upd(p => ({
+      ...p,
+      pcs: consumeUid ? p.pcs.map(x => x.uid === consumeUid ? { ...x, ...(consumeBond ? { bondUsed: { ...x.bondUsed, [consumeBond]: true } } : {}), ...(extra ? extra(x) : {}) } : x) : p.pcs,
+      battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: newDice } },
+      log: [logMsg, ...p.log],
+    }));
+    const plus1Targets = dice.map((d, i) => ({ d, i })).filter(({ d }) => d < 6);
+
+    return (
+      <>
+        {/* 奇跡を起こす（観戦保持者）: 応援で出目を1つ+1 */}
+        {obsBond && (oName === "奇跡を起こす程度の能力" || oName === "奇跡を起こす程度の能力＋") && plus1Targets.length > 0 && (
+          <div style={{ marginTop: 8, padding: 6, background: "rgba(255,213,79,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+            <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>✨ 奇跡: 応援で出目を1つ+1（{obs.charName}）</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+              {plus1Targets.map(({ d, i }) => (
+                <button key={i} onClick={() => { const nd = [...dice]; nd[i] = Math.min(6, d + 1); writeDice(nd, obs.uid, obsBond, null, `✨ ${obs.charName} の《奇跡を起こす程度の能力》: 回避の出目を ${d}→${d + 1} に変更`); }}
+                  style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* 動物を導く（観戦保持者）: 応援で選んだ出目を振り直す（base=1日1回） */}
+        {obsBond && (oName === "動物を導く程度の能力" || oName === "動物を導く程度の能力＋") && dice.length > 0 && (() => {
+          const isPlus = oName === "動物を導く程度の能力＋";
+          if (!isPlus && obs.abilityUse?.["動物を導く程度の能力"]?.day === gs.day) return null;
+          return evadeDoubutsuSel === null ? (
+            <button onClick={() => setEvadeDoubutsuSel([])} style={{ ...btnFull("rgba(129,199,132,0.14)", C.greenBorder, C.green, { fontSize: 10 }), marginTop: 8, width: "100%" }}>🐾 動物: 応援でダイスを振り直す（{obs.charName}）</button>
+          ) : (
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 8 }}>
+              <button disabled={evadeDoubutsuSel.length === 0} onClick={() => {
+                const sel = evadeDoubutsuSel; setEvadeDoubutsuSel(null);
+                animateDice(sel.length, "動物（回避振り直し）", res => { const nd = [...dice]; sel.forEach((idx, k) => { nd[idx] = res[k]; }); writeDice(nd, obs.uid, obsBond, isPlus ? null : (x => ({ abilityUse: { ...(x.abilityUse || {}), "動物を導く程度の能力": { ...(x.abilityUse?.["動物を導く程度の能力"] || {}), day: gs.day } } })), `🐾 ${obs.charName} の《動物を導く程度の能力》: 回避の ${sel.length}個を振り直した`); });
+              }} style={btnFull(evadeDoubutsuSel.length ? "rgba(129,199,132,0.2)" : "rgba(255,255,255,0.04)", evadeDoubutsuSel.length ? C.greenBorder : C.border, evadeDoubutsuSel.length ? C.green : C.textFaint, { fontSize: 10 })}>振り直す（{evadeDoubutsuSel.length}個）</button>
+              <button onClick={() => setEvadeDoubutsuSel(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 })}>やめる</button>
+            </div>
+          );
+        })()}
+        {/* 気質を見極める（戦闘者=被応援者）: 応援を受けた回避で出目を1つ+1 */}
+        {(user.uid === b.pcCombatant || isGm) && er.wasCheered && !er.kishitsuUsed
+          && (getActiveAbility(combatantPc)?.name === "気質を見極める程度の能力" || getActiveAbility(combatantPc)?.name === "気質を見極める程度の能力＋") && plus1Targets.length > 0 && (
+          <div style={{ marginTop: 8, padding: 6, background: "rgba(255,213,79,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+            <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>✨ 気質: 応援を受け出目を1つ+1</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+              {plus1Targets.map(({ d, i }) => (
+                <button key={i} onClick={() => upd(p => { const nd = [...dice]; nd[i] = Math.min(6, d + 1); return { ...p, battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: nd, kishitsuUsed: true } }, log: [`✨ ${combatantPc?.charName} の《気質を見極める程度の能力》: 回避の出目を ${d}→${d + 1} に変更`, ...p.log] }; })}
+                  style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
     );
   };
 
@@ -3298,9 +3365,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     return (
       <SpellCard color={C.blue} title="◆ 回避判定の結果" style={{ minWidth: 280 }} contentStyle={{ textAlign: "center", padding: 14 }}>
         <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10, flexWrap: "wrap" }}>
-          {dice.map((d, i) => (
-            <div key={i} style={{ width: 30, height: 30, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue }}>{d}</div>
-          ))}
+          {dice.map((d, i) => {
+            const selecting = evadeDoubutsuSel !== null;
+            const picked = selecting && evadeDoubutsuSel.includes(i);
+            return (
+              <div key={i} onClick={selecting ? () => setEvadeDoubutsuSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]) : undefined}
+                style={{ width: 30, height: 30, background: picked ? "rgba(129,199,132,0.25)" : "rgba(14,20,36,0.95)", border: `${picked ? 2 : 1}px solid ${picked ? C.greenBorder : d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue, cursor: selecting ? "pointer" : "default" }}>{d}</div>
+            );
+          })}
         </div>
         <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>最大{maxDie} / 目標{er.targetValue}</div>
         <div style={{ fontSize: 15, color: isSuccess ? C.green : C.red, fontWeight: 700, marginBottom: 10 }}>
@@ -3308,6 +3380,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         </div>
         {/* 応援（振り足し）: 戦闘者への絆を持つ参加PCがダイスを足せる（観戦者にも表示） */}
         {renderEvadeCheer()}
+        {/* 応援強化（奇跡/動物/気質）: 回避の出目を操作 */}
+        {renderEvadeCheerEffects()}
         {canResolve && (
           <button onClick={resolveEvade} style={{ ...btnFull(isSuccess ? C.greenBg : C.redBg, isSuccess ? C.greenBorder : C.redBorder, isSuccess ? C.green : C.red, { fontSize: 12, padding: "9px 14px" }), marginTop: 10 }}>
             判定を確定する{isSuccess ? "（成功→移動）" : "（失敗→被弾）"}
