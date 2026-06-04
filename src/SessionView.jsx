@@ -7007,6 +7007,30 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
               {sc.moveDice.includes(6) && (
                 <div style={{ fontSize: 10, color: C.red, textAlign: "center", marginTop: 4 }}>※6を選ぶとハプニングが発生します（お守りで回避可能）</div>
               )}
+              {/* 距離を操る程度の能力（サポート）: 誰かの移動ダイスをやる気1で振り直す（base=6以外/＋=全部） */}
+              {(() => {
+                const distName = getActiveAbility(myPc)?.name;
+                const isDist = distName === "距離を操る程度の能力" || distName === "距離を操る程度の能力＋";
+                if (!isDist || (myPc?.resources?.やる気?.cur || 0) < 1) return null;
+                const rerollAll = distName === "距離を操る程度の能力＋";
+                const rerollIdx = sc.moveDice.map((d, i) => ({ d, i })).filter(({ d }) => rerollAll || d !== 6).map(({ i }) => i);
+                if (rerollIdx.length === 0) return null;
+                return (
+                  <button onClick={() => animateDice(rerollIdx.length, "距離（移動振り直し）", res => upd(p => {
+                    const dice = [...(p.currentScene.moveDice || [])];
+                    rerollIdx.forEach((idx, k) => { dice[idx] = res[k]; });
+                    const r = myPc.resources.やる気 || { cur: 0, max: 99 };
+                    return {
+                      ...p,
+                      pcs: p.pcs.map(x => x.uid === myPc.uid ? { ...x, resources: { ...x.resources, やる気: { ...r, cur: Math.max(0, r.cur - 1) } } } : x),
+                      currentScene: { ...p.currentScene, moveDice: dice },
+                      log: [`🎲 ${myPc.charName} の《距離を操る程度の能力》: やる気1で移動ダイス${rerollIdx.length}個を振り直した`, ...p.log],
+                    };
+                  }))} style={{ ...btnFull("rgba(255,183,77,0.15)", "#ffb74d50", "#ffb74d", { fontSize: 10 }), marginTop: 8 }}>
+                    🎲 距離: やる気1で{rerollAll ? "全" : "6以外の"}移動ダイスを振り直す（{myPc.charName}）
+                  </button>
+                );
+              })()}
             </div>
           )}
 
