@@ -45,6 +45,12 @@ export const ABILITY_EFFECTS = {
   "水を操る程度の能力":   { freq: "day", auto: true, kind: "spend_item_gain_random", params: { randomCount: 2 } }, // 河城にとり：アイテム1つ失ってランダム2つ
   "水を操る程度の能力＋": { freq: "day", auto: true, kind: "spend_item_gain_random", params: { randomCount: 2, allowChoice: true } }, // にとり＋：ランダム2 or 好き1
 
+  // ── サポート（ダイス振り直し系・文脈依存。探索の行為判定結果画面で対応） ──
+  // 運命を操る：出目を全て裏返す（1↔6,2↔5,3↔4）。探索結果画面に振り直しUIあり（ScenePanel）。
+  // ＋（好きな数だけ裏返す）は選択UI未実装のためGM対応。発動ボタンは他文脈用の手動フォールバック。
+  "運命を操る程度の能力":   { note: "ダイスを振った直後に出目を全て裏返す（探索は結果画面で自動対応／他文脈はGM）" },
+  "運命を操る程度の能力＋": { note: "ダイスを振った直後に好きな数だけ出目を裏返す（GM対応）" },
+
   // ── サポート（黒い応援欄＝bondUsed===true を操作） ──
   "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ：他キャラの使用済み応援欄を1つ解除
   "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ＋（トリガー条件が広いだけで効果は同一）
@@ -89,6 +95,12 @@ export function applyAbilityPassiveStats(pc) {
       攻撃力: { ...atk, max: 6 },
     },
   };
+}
+
+// pc の現在有効な能力（成長後は growthAbility が as を置換）を返す。
+export function getActiveAbility(pc) {
+  if (!pc) return null;
+  return (pc.growthAbilityUnlocked && pc.growthAbility?.name) ? pc.growthAbility : (pc.as || null);
 }
 
 // ability = { name, type, desc } を受け取り、対応する効果メタを返す（無ければ null）。

@@ -7,7 +7,7 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
-import { getAbilityEffect, applyAbilityPassiveStats } from "./data/abilityEffects";
+import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 
@@ -7337,6 +7337,18 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue, animation: `diceIn 0.32s ${(i * 0.09).toFixed(2)}s cubic-bezier(0.34,1.56,0.64,1) both` }}>{d}</div>
                   ))}
                 </div>
+
+                {/* 運命を操る程度の能力（サポート・1日1回）: 出目を全て裏返す（1↔6,2↔5,3↔4） */}
+                {isMyTurn && (sc.actionDice?.length > 0) && getActiveAbility(pc)?.name === "運命を操る程度の能力" && pc.abilityUse?.["運命を操る程度の能力"]?.day !== gs.day && (
+                  <button onClick={() => upd(p => ({
+                    ...p,
+                    pcs: p.pcs.map(x => x.uid === pc.uid ? { ...x, abilityUse: { ...(x.abilityUse || {}), "運命を操る程度の能力": { ...(x.abilityUse?.["運命を操る程度の能力"] || {}), day: gs.day } } } : x),
+                    currentScene: { ...p.currentScene, actionDice: sc.actionDice.map(d => 7 - d), fumbleResolved: false, specialResolved: false },
+                    log: [`🔄 ${pc.charName} の《運命を操る程度の能力》: 出目を全て裏返した`, ...p.log],
+                  }))} style={{ ...btnFull("rgba(156,39,176,0.16)", C.purpleBorder, C.purple, { fontSize: 10 }), marginBottom: 10 }}>
+                    🔄 運命: 出目を全て裏返す
+                  </button>
+                )}
 
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
                   {isFumble ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
