@@ -7497,7 +7497,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 )}
 
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-                  {isFumble ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
+                  {isFumble && !sc.fumbleCanceled ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
                 </div>
 
                 {pendingSpecial && (
@@ -7530,6 +7530,22 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                         return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[log, ...p.log] };
                       });
                     })} style={btnFull(C.redBg, C.redBorder, C.red, { fontSize: 10 })}>🎲 変調表を振る (1D6)</button>
+                    {/* 喉の病気を癒す程度の能力（サポート）: 同スポットの保持者が他者のファンブルを無効化（base=通常失敗扱い / ＋=判定やり直し） */}
+                    {(() => {
+                      const nodoName = getActiveAbility(myPc)?.name;
+                      const nodoHolder = myPc && myPc.uid !== pc.uid && myPc.currentSpot === pc.currentSpot
+                        && (nodoName === "喉の病気を癒す程度の能力" || nodoName === "喉の病気を癒す程度の能力＋");
+                      if (!nodoHolder) return null;
+                      const isPlus = nodoName === "喉の病気を癒す程度の能力＋";
+                      return (
+                        <button onClick={() => upd(p => isPlus
+                          ? { ...p, currentScene: { ...p.currentScene, phase: "explore_roll", actionDice: undefined, fumbleResolved: false, specialResolved: false }, log: [`🩹 ${myPc.charName} の《喉の病気を癒す程度の能力＋》: ${pc.charName} のファンブルを無効化し判定をやり直す`, ...p.log] }
+                          : { ...p, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleCanceled: true }, log: [`🩹 ${myPc.charName} の《喉の病気を癒す程度の能力》: ${pc.charName} のファンブルを通常の失敗にした`, ...p.log] }
+                        )} style={{ ...btnFull("rgba(129,199,132,0.15)", C.greenBorder, C.green, { fontSize: 10 }), marginTop: 6 }}>
+                          🩹 喉の病気: ファンブルを{isPlus ? "無効化してやり直す" : "通常の失敗にする"}（{myPc.charName}）
+                        </button>
+                      );
+                    })()}
                   </div>
                 )}
 
