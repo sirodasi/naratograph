@@ -6658,6 +6658,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const [fusuiSel, setFusuiSel] = useState(null); // 風水：振り直し対象のダイス添字配列（null=非選択モード）
   const [kyoukiSel, setKyoukiSel] = useState(null); // 狂気：観戦保持者が振り直す対象のダイス添字配列（null=非選択モード）
   const [unmeiSel, setUnmeiSel] = useState(null); // 運命＋：裏返す対象のダイス添字配列（null=非選択モード）
+  const [doubutsuSel, setDoubutsuSel] = useState(null); // 動物を導く：観戦保持者が応援で振り直す対象のダイス添字配列
   const myPc = gs.pcs.find(p => p.uid === user?.uid); // 操作中ユーザーのPC（観戦者能力の判定用）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
@@ -7505,11 +7506,13 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     const fusuiOn  = fusuiSel !== null;
                     const kyoukiOn = kyoukiSel !== null;
                     const unmeiOn  = unmeiSel !== null;
-                    const selecting = fusuiOn || kyoukiOn || unmeiOn;
-                    const picked = (fusuiOn && fusuiSel.includes(i)) || (kyoukiOn && kyoukiSel.includes(i)) || (unmeiOn && unmeiSel.includes(i));
+                    const doubutsuOn = doubutsuSel !== null;
+                    const selecting = fusuiOn || kyoukiOn || unmeiOn || doubutsuOn;
+                    const picked = (fusuiOn && fusuiSel.includes(i)) || (kyoukiOn && kyoukiSel.includes(i)) || (unmeiOn && unmeiSel.includes(i)) || (doubutsuOn && doubutsuSel.includes(i));
                     const onDie = !selecting ? undefined : () => {
                       if (fusuiOn) setFusuiSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]);
                       else if (unmeiOn) setUnmeiSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]);
+                      else if (doubutsuOn) setDoubutsuSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]);
                       else setKyoukiSel(s => s.includes(i) ? s.filter(k => k !== i) : (s.length < kyoukiMax ? [...s, i] : s)); // 狂気: 霊力に応じた個数まで
                     };
                     return (
@@ -7634,6 +7637,39 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           })} style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
                         ))}
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 動物を導く程度の能力（サポート）: 同スポットの保持者が応援で選んだ出目を振り直す（絆消費・base=1日1回） */}
+                {!sc.fumbleResolved && !sc.specialResolved && (() => {
+                  const dName = getActiveAbility(myPc)?.name;
+                  if (!myPc || myPc.uid === pc.uid || myPc.currentSpot !== pc.currentSpot) return null;
+                  const isDoubutsu = dName === "動物を導く程度の能力" || dName === "動物を導く程度の能力＋";
+                  if (!isDoubutsu) return null;
+                  const bondName = `${pc.charName}への絆`;
+                  if (!(myPc.bonds || []).includes(bondName) || myPc.bondUsed?.[bondName]) return null;     // 未使用の絆が必要
+                  const isPlus = dName === "動物を導く程度の能力＋";
+                  if (!isPlus && myPc.abilityUse?.["動物を導く程度の能力"]?.day === gs.day) return null;    // base は1日1回
+                  if (!(sc.actionDice?.length > 0)) return null;
+                  return doubutsuSel === null ? (
+                    <button onClick={() => setDoubutsuSel([])} style={{ ...btnFull("rgba(129,199,132,0.14)", C.greenBorder, C.green, { fontSize: 10 }), marginBottom: 10 }}>🐾 動物: 応援でダイスを振り直す（{myPc.charName}）</button>
+                  ) : (
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
+                      <button disabled={doubutsuSel.length === 0} onClick={() => {
+                        const sel = doubutsuSel; setDoubutsuSel(null);
+                        animateDice(sel.length, "動物（振り直し）", res => upd(p => {
+                          const dice = [...(p.currentScene.actionDice || [])];
+                          sel.forEach((idx, k) => { dice[idx] = res[k]; });
+                          return {
+                            ...p,
+                            pcs: p.pcs.map(x => x.uid === myPc.uid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true }, abilityUse: isPlus ? x.abilityUse : { ...(x.abilityUse || {}), "動物を導く程度の能力": { ...(x.abilityUse?.["動物を導く程度の能力"] || {}), day: gs.day } } } : x),
+                            currentScene: { ...p.currentScene, actionDice: dice, fumbleResolved: false, specialResolved: false },
+                            log: [`🐾 ${myPc.charName} の《動物を導く程度の能力》: 応援で ${sel.length}個のダイスを振り直した`, ...p.log],
+                          };
+                        }));
+                      }} style={btnFull(doubutsuSel.length ? "rgba(129,199,132,0.2)" : "rgba(255,255,255,0.04)", doubutsuSel.length ? C.greenBorder : C.border, doubutsuSel.length ? C.green : C.textFaint, { fontSize: 10 })}>振り直す（{doubutsuSel.length}個）</button>
+                      <button onClick={() => setDoubutsuSel(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 })}>やめる</button>
                     </div>
                   );
                 })()}
