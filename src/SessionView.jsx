@@ -6620,6 +6620,29 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     };
   });
 
+  // 無意識を操る程度の能力（オート）: シーン終了時に隣接スポットへ移動してから終了する
+  const endSceneAfterMove = (destSpot) => upd(p => {
+    const scenePc = p.pcs.find(x => x.uid === pc.uid);
+    const lives = scenePc?.resources?.残り人数?.cur ?? 0;
+    const nextPcs = p.pcs.map(x => {
+      if (x.uid !== pc.uid) return x;
+      let nx = { ...x, currentSpot: destSpot };
+      if (lives === 0) nx = { ...nx, resources: { ...nx.resources, 残り人数: { ...nx.resources.残り人数, cur: 1 } } };
+      return nx;
+    });
+    const recoveryLog = lives === 0 ? [`🔵 ${pc.charName} の残り人数が0のため1に回復した`] : [];
+    return {
+      ...p,
+      pcs: nextPcs,
+      actedPcs: [...(p.actedPcs || []), pc.uid],
+      currentScene: null,
+      log: [`🌀 ${pc.charName} の《無意識を操る程度の能力》: シーン終了時に [${getSpot(destSpot)?.name}] へ移動`, `${pc.charName} のシーンを終了した`, ...recoveryLog, ...p.log]
+    };
+  });
+
+  // 隣接スポット（スポットグラフで距離1）を返す
+  const adjacentSpots = (spotId) => EDGES.filter(e => e.includes(spotId)).map(e => e[0] === spotId ? e[1] : e[0]);
+
   // クエスト解決のための弾幕ごっこを開始する。演出判定の有無に関わらず同じ戦闘を立ち上げる。
   const startQuestBattle = q => {
     const enemy = q?.enemy;
@@ -8149,12 +8172,28 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             );
           })()}
 
-          {sc.phase === "action_done" && (
-            <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
-              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
-              <button onClick={endScene} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
-            </div>
-          )}
+          {sc.phase === "action_done" && (() => {
+            const ab = getActiveAbility(pc)?.name;
+            const isMushiki = isMyTurn && (ab === "無意識を操る程度の能力" || ab === "無意識を操る程度の能力＋");
+            const adj = isMushiki ? adjacentSpots(pc.currentSpot) : [];
+            return (
+              <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
+                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
+                {isMushiki && adj.length > 0 ? (
+                  <div>
+                    <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🌀 無意識: シーン終了時に隣接スポットへ移動する</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                      {adj.map(sid => (
+                        <button key={sid} onClick={() => endSceneAfterMove(sid)} style={btnFull("rgba(156,39,176,0.14)", C.purpleBorder, C.purple, { fontSize: 10 })}>{getSpot(sid)?.name} へ移動して終了</button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={endScene} style={btnFull(C.redBg, C.redBorder, C.red)}>🎬 シーンを終了する</button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
