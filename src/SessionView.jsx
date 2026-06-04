@@ -7,7 +7,7 @@ import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
-import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility } from "./data/abilityEffects";
+import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 
@@ -6791,8 +6791,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 
     const hasTag    = spotDetail.tags.some(t => (pc.tags || []).includes(t) || pc.charName === t || (pc.ps && pc.ps.name === t));
     let diceCount   = 2 + (hasTag ? 1 : 0);
-    // 快適な拠点: 自身の拠点にいる場合+1
-    if (pc.ps?.name === "快適な拠点" && pc.currentSpot === pc.baseSpotId) diceCount++;
+    // 快適な拠点: 自身の拠点にいる場合+1（拠点拡張能力も反映）
+    if (pc.ps?.name === "快適な拠点" && isAtBase(pc)) diceCount++;
     // 寂しがり屋: 同スポットに他PCがいる場合+1（弾幕ごっこ以外）
     if (pc.ps?.name === "寂しがり屋" && gs.pcs.some(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot)) diceCount++;
     // 火＋水＋…を操る程度の能力（オート）: 移動しなかったシーンでは判定ダイス+1（＋は拠点でも）
@@ -6800,7 +6800,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       const ab = (pc.growthAbilityUnlocked && pc.growthAbility?.name) ? pc.growthAbility : pc.as;
       const didntMove = sc.startSpot != null && pc.currentSpot === sc.startSpot;
       if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力" && didntMove) diceCount++;
-      if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力＋" && (didntMove || pc.currentSpot === pc.baseSpotId)) diceCount++;
+      if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力＋" && (didntMove || isAtBase(pc))) diceCount++;
       // 打ち出の小槌を扱う程度の能力（サポート相当・オート扱い）: 弾幕ごっこ以外で判定ダイス+1（代償は低出目ファンブル＝結果画面で判定）
       if (ab?.name === "打ち出の小槌を扱う程度の能力" || ab?.name === "打ち出の小槌を扱う程度の能力＋") diceCount++;
     }
@@ -7793,7 +7793,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const hasTag = myPc && q?.specifiedTag && q.specifiedTag.split(/[、,]/).some(t => (myPc.tags ||[]).includes(t.trim()) || myPc.charName === t.trim() || (myPc.ps && myPc.ps.name === t.trim()));
             let baseDice = 2 + (hasTag ? 1 : 0);
             // 快適な拠点: 自身の拠点にいる場合+1
-            if (myPc?.ps?.name === "快適な拠点" && myPc.currentSpot === myPc.baseSpotId) baseDice++;
+            if (myPc?.ps?.name === "快適な拠点" && isAtBase(myPc)) baseDice++;
             // 寂しがり屋: 同スポットに他PCがいる場合+1
             if (myPc?.ps?.name === "寂しがり屋" && gs.pcs.some(x => x.uid !== myPc?.uid && x.currentSpot === myPc?.currentSpot)) baseDice++;
             const myDiceCount = sc.diceCounts?.[user?.uid] || baseDice;

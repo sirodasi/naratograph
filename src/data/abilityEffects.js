@@ -80,6 +80,11 @@ export const ABILITY_EFFECTS = {
   // ── オート（常時パッシブ・発動ボタンなし。効果は各サイトに組込み） ──
   "虚無を操る程度の能力":   { passive: true, note: "霊力の最大値が25・攻撃力の最大値が6（常時）" }, // applyAbilityPassiveStats で反映
   "虚無を操る程度の能力＋": { passive: true, note: "霊力の最大値が29・攻撃力の最大値が6（常時）" },
+  // 拠点拡張（getBaseSpots/isAtBase で反映）。冷気＝大蝦蟇の池・霧の湖／乾＝間欠泉地下センター・守矢神社。
+  "冷気を操る程度の能力":   { passive: true, note: "大蝦蟇の池・霧の湖を拠点として扱う（拠点判定に反映）" },
+  "冷気を操る程度の能力＋": { passive: true, note: "上記＋セッション開始時に選んだ1スポットも拠点（選択分はGM対応）" },
+  "乾を創造する程度の能力":   { passive: true, note: "間欠泉地下センター・守矢神社を拠点として扱う（拠点判定に反映）" },
+  "乾を創造する程度の能力＋": { passive: true, note: "上記＋拠点同士がルートで繋がる（移動ルール拡張はGM対応）" },
   // パチュリー：移動しなかったシーンでは探索の判定ダイス+1（startAction に組込み済み）。＋は拠点でも+1。
   "火＋水＋木＋金＋土＋日＋月を操る程度の能力":   { passive: true, note: "移動しなかったシーンでは判定ダイス+1（探索）" },
   "火＋水＋木＋金＋土＋日＋月を操る程度の能力＋": { passive: true, note: "移動しなかったシーン or 拠点では判定ダイス+1（探索）" },
@@ -126,6 +131,23 @@ export function applyAbilityPassiveStats(pc) {
 export function getActiveAbility(pc) {
   if (!pc) return null;
   return (pc.growthAbilityUnlocked && pc.growthAbility?.name) ? pc.growthAbility : (pc.as || null);
+}
+
+// pc が「拠点として扱う」スポットID配列を返す（拠点拡張能力を反映）。
+// 冷気を操る（チルノ）＝大蝦蟇の池(24)・霧の湖(34)、乾を創造する（神奈子）＝間欠泉地下センター(15)・守矢神社(22)。
+// ＋で追加選択できるスポットはGM運用（ここでは固定スポットのみ）。
+export function getBaseSpots(pc) {
+  const bases = new Set();
+  if (pc?.baseSpotId) bases.add(pc.baseSpotId);
+  const name = getActiveAbility(pc)?.name;
+  if (name === "冷気を操る程度の能力" || name === "冷気を操る程度の能力＋") { bases.add("24"); bases.add("34"); }
+  if (name === "乾を創造する程度の能力" || name === "乾を創造する程度の能力＋") { bases.add("15"); bases.add("22"); }
+  return [...bases];
+}
+
+// pc が拠点にいるか（拠点拡張を反映）
+export function isAtBase(pc) {
+  return !!pc && getBaseSpots(pc).includes(pc.currentSpot);
 }
 
 // ability = { name, type, desc } を受け取り、対応する効果メタを返す（無ければ null）。
