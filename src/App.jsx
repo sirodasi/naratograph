@@ -16,7 +16,7 @@ import {
   OFFICIAL_DANMAKU_SKILLS,
 } from "./data/gameData";
 import { SPOT_DETAILS } from "./data/spots";
-import { applyAbilityPassiveStats, getActiveAbility } from "./data/abilityEffects";
+import { applyAbilityPassiveStats, getActiveAbility, getBaseSpots } from "./data/abilityEffects";
 import { getBlockedSpots, resolveBaseSpot } from "./scenarios";
 
 // ─── ユーティリティ ─────────────────────────────────────────────
@@ -25,15 +25,17 @@ function areaColor(area) {
   return AREA_COLORS[area] ?? { bg: "rgba(30,30,30,0.85)", border: "#555" };
 }
 
-// BFS でスタート地点から各スポットへの最短距離を求める
-export function getDistances(startSpotId) {
+// BFS でスタート地点から各スポットへの最短距離を求める。
+// extraEdges: 能力による追加ルート（getAbilityMoveEdges）を渡すと EDGES に加えて探索する。
+export function getDistances(startSpotId, extraEdges = []) {
   if (!startSpotId) return {};
+  const allEdges = extraEdges.length ? [...EDGES, ...extraEdges] : EDGES;
   const dists = { [startSpotId]: 0 };
   const queue = [startSpotId];
   while (queue.length > 0) {
     const cur = queue.shift();
     const curDist = dists[cur];
-    EDGES.forEach(([a, b]) => {
+    allEdges.forEach(([a, b]) => {
       const next = a === cur ? b : b === cur ? a : null;
       if (next && dists[next] === undefined) {
         dists[next] = curDist + 1;
@@ -42,6 +44,39 @@ export function getDistances(startSpotId) {
     });
   }
   return dists;
+}
+
+// 移動BFS拡張系の能力が追加する仮想ルート（[a,b] の配列）を返す。
+// 壁をすり抜け＝同エリア内を全結合（＋は現在地と10の位±1のスポットも）／
+// 乾＋＝拠点同士を結合／坤＋＝人間の里(11)↔守矢神社(22)。
+export function getAbilityMoveEdges(pc) {
+  if (!pc) return [];
+  const name = getActiveAbility(pc)?.name;
+  if (!name) return [];
+  const edges = [];
+  const realSpots = SPOTS.filter(s => s.id !== "dream");
+  if (name === "壁をすり抜けられる程度の能力" || name === "壁をすり抜けられる程度の能力＋") {
+    const byArea = {};
+    realSpots.forEach(s => { (byArea[s.area] = byArea[s.area] || []).push(s.id); });
+    Object.values(byArea).forEach(ids => {
+      for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) edges.push([ids[i], ids[j]]);
+    });
+    if (name === "壁をすり抜けられる程度の能力＋") {
+      const cur = realSpots.find(s => s.id === pc.currentSpot);
+      if (cur) {
+        const t = Math.floor(cur.roll / 10);
+        realSpots.forEach(s => { if (s.id !== pc.currentSpot && Math.abs(Math.floor(s.roll / 10) - t) === 1) edges.push([pc.currentSpot, s.id]); });
+      }
+    }
+  }
+  if (name === "乾を創造する程度の能力＋") {
+    const bases = getBaseSpots(pc);
+    for (let i = 0; i < bases.length; i++) for (let j = i + 1; j < bases.length; j++) edges.push([bases[i], bases[j]]);
+  }
+  if (name === "坤を創造する程度の能力＋") {
+    edges.push(["11", "22"]); // 人間の里 ↔ 守矢神社（"選んだキャラ"への付与はGM運用、保持者本人に適用）
+  }
+  return edges;
 }
 
 // スポットIDからスポットオブジェクトを取得（古いセーブデータの roll 検索も対応）
@@ -146,7 +181,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const isMovePhase = gs.currentScene?.phase === "move_dest";
   const actingPc    = isMovePhase ? (gs.pcs || []).find(p => p.uid === gs.currentScene.pcUid) : null;
   const isMyTurn    = actingPc?.uid === user?.uid;
-  const dists       = actingPc ? getDistances(actingPc.currentSpot) : {};
+  const dists       = actingPc ? getDistances(actingPc.currentSpot, getAbilityMoveEdges(actingPc)) : {};
   const maxDist     = gs.currentScene?.selectedMoveDie || 0;
   const myPc        = (gs.pcs || []).find(p => p.uid === user?.uid);
   const mySpot      = myPc?.currentSpot;
@@ -919,7 +954,7 @@ function SessionApp({ roomCode, user }) {
     const actingPc = (gs.pcs || []).find(p => p.uid === sc.pcUid);
     if (!actingPc) return;
 
-    const dists     = getDistances(actingPc.currentSpot);
+    const dists     = getDistances(actingPc.currentSpot, getAbilityMoveEdges(actingPc));
     const distance  = dists[spotId] ?? 999;
     const maxDist   = sc.selectedMoveDie || 0;
     const exactDist = sc.exactMoveDist ?? null;
