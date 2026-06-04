@@ -6841,6 +6841,18 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     return ((cheerer.bonds || []).includes(bondName) && cheerer.bondUsed?.[bondName]) ? [bondName] : [];
   };
 
+  // 人を狂わす程度の能力（サポート）: 絆を持たない相手にも応援できる（1フェイズ1回・kuruwasuUsedで近似）。失敗でファンブル。
+  const KURUWASU_BOND = "（絆なし応援）";
+  const getKuruwasuCheer = (cheerer, judgePc) => {
+    if (cheerer.uid === judgePc.uid) return [];
+    const name = getActiveAbility(cheerer)?.name;
+    if (name !== "人を狂わす程度の能力" && name !== "人を狂わす程度の能力＋") return [];
+    const bondName = `${judgePc.charName}への絆`;
+    if ((cheerer.bonds || []).includes(bondName)) return [];        // 絆を持つなら通常応援
+    if (cheerer.kuruwasuUsed?.[judgePc.uid]) return [];             // この相手には使用済み
+    return [KURUWASU_BOND];
+  };
+
   // judgePc の行為判定に対する応援UI。onCheer(cheererUid, bondName, fragile) を渡す。
   const renderCheerSection = (judgePc, onCheer) => {
     const cheers = [];
@@ -6848,6 +6860,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       if (cheerer.currentSpot !== judgePc.currentSpot) return;  // 同スポット
       getCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: false }));
       getFragileCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: true }));
+      getKuruwasuCheer(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: true }));
     });
     if (cheers.length === 0) return null;
     return (
@@ -6865,13 +6878,16 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     );
   };
 
-  // 応援を1回適用（応援者の絆を消費し、指定の dice フィールドを+1）。fragile=魂の弱い所による応援（失敗時ファンブル）
+  // 応援を1回適用（応援者の絆を消費し、指定の dice フィールドを+1）。fragile=魂の弱い所/人を狂わす（失敗時ファンブル）
   const applyCheer = (cheererUid, bondName, diceField, fragile = false) => {
+    const isKuruwasu = bondName === KURUWASU_BOND;
     upd(p => ({
       ...p,
-      pcs: p.pcs.map(x => x.uid === cheererUid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
+      pcs: p.pcs.map(x => x.uid !== cheererUid ? x : (isKuruwasu
+        ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [pc.uid]: true } }   // 絆なし応援は kuruwasuUsed[対象] を消費
+        : { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } })),
       currentScene: { ...p.currentScene, [diceField]: (p.currentScene[diceField] || (diceField === "actionDiceCount" ? 2 : 2)) + 1, ...(fragile ? { fragileCheer: true } : {}) },
-      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が《${bondName}》で応援！ダイス+1${fragile ? "（魂の弱い所：失敗でファンブル）" : ""}`, ...p.log],
+      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が${isKuruwasu ? "絆なしで" : `《${bondName}》で`}応援！ダイス+1${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
     }));
   };
 
