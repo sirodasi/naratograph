@@ -5059,6 +5059,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilitySpend, setAbilitySpend] = useState(null); // アイテム消費獲得 { name, freq, params, spendItem, mode }
   const [abilityDestroy, setAbilityDestroy] = useState(null); // 破壊 { name, freq, targetUid, category }
   const [abilityReturn, setAbilityReturn] = useState(null); // 密と疎：帰還先変更 { name, freq, params, selected[], destSpot }
+  const [abilityScenePick, setAbilityScenePick] = useState(null); // 吉弔：追加シーン対象選択 { name, freq }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5292,6 +5293,22 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityReturn({ name, freq, params: meta.params || {}, selected: [], destSpot: null });
       return;
     }
+    if (meta?.auto && meta.kind === "redo_own_scene") {
+      // 自分のシーンをもう一度（行動済みを解除し、再度シーンプレイヤーに選べるように）
+      sfx.skillActivate();
+      upd(p => ({
+        ...p,
+        pcs: p.pcs.map(x => x.uid !== pc.uid ? x : withAbilityUse({ ...x }, name, freq)),
+        actedPcs: (p.actedPcs || []).filter(u => u !== pc.uid),
+        log: [`🔵 ${pc.charName} が能力《${name}》を発動：もう一度シーンを行える（行動済みを解除）`, ...p.log],
+      }));
+      return;
+    }
+    if (meta?.auto && meta.kind === "grant_extra_scene") {
+      // 選んだPCがもう一度シーンを行えるようにする（対象選択ピッカー）
+      setAbilityScenePick({ name, freq });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5506,6 +5523,23 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           return nx;
         }),
         log: [`🔵 ${pc.charName} が能力《${rt.name}》を発動：${[...targetSet].map(u => p.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・")} の帰還先を【${destName}】に${yarukiSkip ? "（夜のやる気減少なし）" : ""}`, ...p.log],
+      };
+    });
+  };
+
+  // grant_extra_scene：選んだPCを行動済みから外し、もう一度シーンを行えるようにする
+  const confirmScenePick = (targetUid) => {
+    const sp = abilityScenePick;
+    setAbilityScenePick(null);
+    if (!sp) return;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, sp.name, sp.freq).abilityUse;
+      const targetName = p.pcs.find(x => x.uid === targetUid)?.charName || "対象";
+      return {
+        ...p,
+        pcs: p.pcs.map(x => x.uid === pc.uid ? { ...x, abilityUse: selfBase } : x),
+        actedPcs: (p.actedPcs || []).filter(u => u !== targetUid),
+        log: [`🔵 ${pc.charName} が能力《${sp.name}》を発動：${targetName} がもう一度シーンを行える`, ...p.log],
       };
     });
   };
@@ -6140,6 +6174,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           </div>
         );
       })()}
+      {abilityScenePick && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityScenePick(null)}>
+          <SpellCard color="#90caf9" title={`✦ ${abilityScenePick.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>もう一度シーンを行えるようにするPCを選択</div>
+            <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+              {(gs.pcs || []).map(x => (
+                <button key={x.uid} onClick={() => confirmScenePick(x.uid)} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 11 })}>{x.charName}{(gs.actedPcs || []).includes(x.uid) ? "（行動済み）" : ""}</button>
+              ))}
+            </div>
+            <button onClick={() => setAbilityScenePick(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          </SpellCard>
+        </div>
+      )}
       {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );

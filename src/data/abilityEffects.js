@@ -43,6 +43,11 @@ export const ABILITY_EFFECTS = {
   "水難事故を引き起こす程度の能力＋": { freq: null, auto: true, kind: "party_move", params: { selfOptional: true } }, // 村紗＋：自分は移動しない選択可
   "人間を驚かす程度の能力":   { freq: null, auto: true, kind: "surprise_bond" }, // 多々良小傘：同スポット1人に2D:4、成功→絆＋やる気/失敗→相手が自分への絆
   "人間を驚かす程度の能力＋": { freq: null, auto: true, kind: "surprise_bond", params: { declareX: true } }, // ＋：X(3-6)を宣言し 2D:X
+  // シーン再処理（行動済み解除でもう一度シーンを行えるようにする）
+  "時間を操る程度の能力":   { freq: "session", auto: true, kind: "redo_own_scene" },   // 十六夜咲夜：サイクル終了時に自分のシーンをもう一度
+  "時間を操る程度の能力＋": { freq: "session", auto: true, kind: "redo_own_scene" },   // 十六夜咲夜＋：探索中いつでも
+  "逆らう気力を失わせる程度の能力":   { freq: "session", auto: true, kind: "grant_extra_scene" }, // 吉弔：選んだPCがもう一度シーンを行える
+  "逆らう気力を失わせる程度の能力＋": { freq: null,      auto: true, kind: "grant_extra_scene", note: "1セッション2回（回数管理はGM）" },
   // ドレミー：自分＋同スポットのキャラを夢の世界へ移動（party_move 雛形を流用。移動先で「夢の世界」を選ぶ。同行は1人まで=GM運用）
   "夢を喰い、夢を創る程度の能力":   { freq: null, auto: true, kind: "party_move", note: "夢の世界へ移動（同スポットのキャラ1人まで同行）" },
   "夢を喰い、夢を創る程度の能力＋": { freq: null, auto: true, kind: "party_move", params: { selfOptional: true }, note: "移動の代わりに夢の世界へ（同行1人まで）" },
