@@ -6801,6 +6801,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       const didntMove = sc.startSpot != null && pc.currentSpot === sc.startSpot;
       if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力" && didntMove) diceCount++;
       if (ab?.name === "火＋水＋木＋金＋土＋日＋月を操る程度の能力＋" && (didntMove || pc.currentSpot === pc.baseSpotId)) diceCount++;
+      // 打ち出の小槌を扱う程度の能力（サポート相当・オート扱い）: 弾幕ごっこ以外で判定ダイス+1（代償は低出目ファンブル＝結果画面で判定）
+      if (ab?.name === "打ち出の小槌を扱う程度の能力" || ab?.name === "打ち出の小槌を扱う程度の能力＋") diceCount++;
     }
     if ((pc.badStatus || []).includes("怪我")) diceCount = Math.min(2, diceCount);
     
@@ -7376,7 +7378,14 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const maxDie       = Math.max(...(sc.actionDice ||[0]));
             // 何でもひっくり返す程度の能力（オート）: 同スポットに保持者がいると ファンブル/スペシャル 条件が反転（全6=ファンブル / 1あり=スペシャル）
             const flipCond = gs.pcs.some(x => x.currentSpot === pc.currentSpot && (getActiveAbility(x)?.name === "何でもひっくり返す程度の能力" || getActiveAbility(x)?.name === "何でもひっくり返す程度の能力＋"));
-            const isFumble     = sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1));
+            // 打ち出の小槌を扱う程度の能力（判定ダイス+1の代償）: base=出目が全て2以下でファンブル / ＋=半分以上が1かつ残りが2でファンブル
+            const uchideName = getActiveAbility(pc)?.name;
+            const dice = sc.actionDice || [];
+            const uchideFumble = dice.length > 0 && (
+              uchideName === "打ち出の小槌を扱う程度の能力" ? dice.every(d => d <= 2)
+              : uchideName === "打ち出の小槌を扱う程度の能力＋" ? (dice.every(d => d <= 2) && dice.filter(d => d === 1).length * 2 >= dice.length)
+              : false);
+            const isFumble     = (sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1))) || uchideFumble;
             const isSpecial    = flipCond ? sc.actionDice?.includes(1) : sc.actionDice?.includes(6);
             const isSuccess    = sc.isAutoSuccess || (maxDie >= (sc.selectedEvent?.target || 0) && !isFumble);
             const pendingFumble  = isFumble  && !sc.fumbleResolved;
