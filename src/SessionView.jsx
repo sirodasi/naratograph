@@ -173,6 +173,8 @@ export const BAD_STATUS_TABLE = {
 };
 
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
+// 人を狂わす程度の能力の「絆なし応援」を表す擬似絆ラベル（bondUsed ではなく kuruwasuUsed[対象] を消費）
+const KURUWASU_BOND = "（絆なし応援）";
 
 // 変調免疫チェック（馬鹿スキル用）
 export function isBadStatusImmune(pc, bsName) {
@@ -2019,12 +2021,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   };
 
   // 回避判定の確定処理（成功→移動 / 失敗→被弾判定）。PCは結果フェイズの「確定」から、NPCは即時に呼ぶ。
-  const resolveEvadeApply = (isPc, res, targetValue, combatant) => {
+  // fragile=魂の弱い所/人を狂わすの応援（失敗→ファンブル）
+  const resolveEvadeApply = (isPc, res, targetValue, combatant, fragile = false) => {
     {
       const maxDie = Math.max(...res);
-      const isFumble = res.every(d => d === 1);
+      const isSuccess = maxDie >= targetValue && !res.every(d => d === 1);
+      const isFumble = res.every(d => d === 1) || (fragile && !isSuccess);
       const isSpecial = res.includes(6) && !isFumble;
-      const isSuccess = maxDie >= targetValue && !isFumble;
       const resultNotice = isFumble ? "ファンブル！" : isSpecial ? "スペシャル！" : "";
 
       if (isSuccess) {
@@ -2080,7 +2083,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const er = b.evadeRoll;
     if (!er) return;
     const combatant = pcs.find(p => p.uid === b.pcCombatant);
-    resolveEvadeApply(true, er.dice, er.targetValue, combatant);
+    resolveEvadeApply(true, er.dice, er.targetValue, combatant, er.fragile);
   };
 
   // mirror_graze_gain（ミシガンロール）: gs.battle.mirrorGraze の各保有者（回避側自身を除く）に
@@ -3267,22 +3270,39 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const bondName = `${combatantPc.charName}への絆`;
     return (cheererPc.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
   };
+  // 回避応援の fragile（魂の弱い所=使用済み絆 / 人を狂わす=絆なし）。失敗時ファンブル。
+  const getEvadeFragileCheer = (cheererPc) => {
+    if (!cheererPc || !combatantPc || cheererPc.uid === combatantPc.uid) return [];
+    if (b.participantPcUids && !b.participantPcUids.includes(cheererPc.uid)) return [];
+    const name = getActiveAbility(cheererPc)?.name;
+    const bd = `${combatantPc.charName}への絆`;
+    if ((name === "魂の弱い所に入り込む程度の能力" || name === "魂の弱い所に入り込む程度の能力＋")
+      && (cheererPc.bonds || []).includes(bd) && cheererPc.bondUsed?.[bd]) return [bd];
+    if ((name === "人を狂わす程度の能力" || name === "人を狂わす程度の能力＋")
+      && !(cheererPc.bonds || []).includes(bd) && !cheererPc.kuruwasuUsed?.[combatantPc.uid]) return [KURUWASU_BOND];
+    return [];
+  };
   // 回避応援（判定後の振り足し）: 結果フェイズで evadeRoll.dice にダイスを1つ追加する
   const renderEvadeCheer = () => {
     const cheererPc = pcs.find(p => p.uid === user.uid);
-    const usable = getEvadeCheerBonds(cheererPc);
-    if (usable.length === 0 || !b.evadeRoll) return null;
+    if (!b.evadeRoll) return null;
+    const normal = getEvadeCheerBonds(cheererPc).map(bn => ({ bn, fragile: false }));
+    const fragiles = getEvadeFragileCheer(cheererPc).map(bn => ({ bn, fragile: true }));
+    const usable = [...normal, ...fragiles];
+    if (usable.length === 0) return null;
     return (
       <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
         <div style={{ fontSize: 9, color: C.gold, marginBottom: 6, letterSpacing: 1 }}>💪 応援（ダイスを振り足す）</div>
-        {usable.map(bondName => (
-          <button key={bondName} onClick={() => animateDice(1, "応援（回避振り足し）", res => upd(p => ({
+        {usable.map(({ bn, fragile }) => (
+          <button key={bn} onClick={() => animateDice(1, "応援（回避振り足し）", res => upd(p => ({
             ...p,
-            pcs: p.pcs.map(x => x.uid === cheererPc.uid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
-            battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), res[0]], wasCheered: true } },
-            log: [`💪 ${cheererPc.charName} が《${bondName}》で応援！回避にダイスを振り足した（出目${res[0]}）`, ...p.log],
-          })))} style={{ ...btnFull("rgba(200,160,64,0.16)", C.goldDim, C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
-            《{bondName}》で応援
+            pcs: p.pcs.map(x => x.uid !== cheererPc.uid ? x : (bn === KURUWASU_BOND
+              ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [combatantPc.uid]: true } }
+              : { ...x, bondUsed: { ...x.bondUsed, [bn]: true } })),
+            battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), res[0]], wasCheered: true, ...(fragile ? { fragile: true } : {}) } },
+            log: [`💪 ${cheererPc.charName} が${bn === KURUWASU_BOND ? "絆なしで" : `《${bn}》で`}応援！回避にダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
+          })))} style={{ ...btnFull(fragile ? "rgba(156,39,176,0.16)" : "rgba(200,160,64,0.16)", fragile ? C.purpleBorder : C.goldDim, fragile ? C.purple : C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
+            {fragile ? "🩸" : ""}{bn === KURUWASU_BOND ? "絆なしで応援" : `《${bn}》で応援`}{fragile ? "(失敗=ファンブル)" : ""}
           </button>
         ))}
       </div>
@@ -6977,7 +6997,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   };
 
   // 人を狂わす程度の能力（サポート）: 絆を持たない相手にも応援できる（1フェイズ1回・kuruwasuUsedで近似）。失敗でファンブル。
-  const KURUWASU_BOND = "（絆なし応援）";
   const getKuruwasuCheer = (cheerer, judgePc) => {
     if (cheerer.uid === judgePc.uid) return [];
     const name = getActiveAbility(cheerer)?.name;
