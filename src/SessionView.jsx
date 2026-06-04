@@ -525,6 +525,18 @@ export function calcShotDiceCount(attackPower, supportDice, hasFamiliar) {
   return Math.max(1, (attackPower || 0) + (supportDice || 0) - (hasFamiliar ? 1 : 0));
 }
 
+// 剣術を扱う程度の能力（オート）: 弾幕ごっこ参加時の実効攻撃力を返す。
+// base = 決戦フェイズ以外で霊力に関わらず4固定。＋ = 常に「4以下なら4」（4未満を4に底上げ）。
+// PC以外（NPC）や非該当能力は通常の攻撃力をそのまま返す。
+export function effectiveAttackPower(entity, sessionPhase) {
+  const base = entity?.resources?.攻撃力?.cur ?? 1;
+  const ab = (entity?.growthAbilityUnlocked && entity?.growthAbility?.name) ? entity.growthAbility : entity?.as;
+  const name = ab?.name;
+  if (name === "剣術を扱う程度の能力" && sessionPhase !== "battle") return 4;
+  if (name === "剣術を扱う程度の能力＋") return Math.max(base, 4);
+  return base;
+}
+
 // かばう/使い魔自動かばう処理: 指定マスに弾幕があれば1つ除去
 // 元の grid 配列は変更せず、新しい配列と成否を返す
 export function resolveCover(grid, die) {
@@ -984,7 +996,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const bonus = b.supportDice || 0;
     // ★ 使い魔スキル: ショットダイス数 -1
     const hasFamiliar = hasOfficialSkill(attacker, "使い魔");
-    const totalDice = calcShotDiceCount(attacker.resources.攻撃力.cur, bonus, hasFamiliar);
+    // 剣術を扱う程度の能力（オート）: 弾幕ごっこ参加時の攻撃力を実効値に置換
+    const totalDice = calcShotDiceCount(effectiveAttackPower(attacker, gs.sessionPhase), bonus, hasFamiliar);
 
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
@@ -3701,14 +3714,38 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           : [];
         const recoveryLogs = recoveredNames.map(n => `🔵 ${n} の残り人数が0のため1に回復した`);
 
+        // 怪力乱神を持つ程度の能力（オート）: 探索フェイズ中の弾幕ごっこ勝利でやる気+1（＋は霊力D6も）
+        const kairikiUids = (isVictory && !isFinal)
+          ? (p.battle?.participantPcUids || (p.battle?.pcCombatant ? [p.battle.pcCombatant] : []))
+          : [];
+        const kairikiLogs = [];
+        const finalPcs = recoveredPcs.map(x => {
+          if (!kairikiUids.includes(x.uid)) return x;
+          const ab = (x.growthAbilityUnlocked && x.growthAbility?.name) ? x.growthAbility : x.as;
+          const name = ab?.name;
+          if (name !== "怪力乱神を持つ程度の能力" && name !== "怪力乱神を持つ程度の能力＋") return x;
+          const yr = x.resources.やる気 || { cur: 0, max: 99 };
+          let res = { ...x.resources, やる気: { ...yr, cur: Math.min(yr.max, yr.cur + 1) } };
+          let extra = "";
+          if (name === "怪力乱神を持つ程度の能力＋") {
+            const gain = Math.ceil(Math.random() * 6);
+            const rei = x.resources.霊力 || { cur: 0, max: 20 };
+            const nextRei = Math.min(rei.max, rei.cur + gain);
+            res = { ...res, 霊力: { ...rei, cur: nextRei }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) } };
+            extra = `・霊力+${gain}`;
+          }
+          kairikiLogs.push(`🔵 ${x.charName} の《怪力乱神》: 弾幕ごっこ勝利でやる気+1${extra}`);
+          return { ...x, resources: res };
+        });
+
         return {
           ...p,
-          pcs: recoveredPcs,
+          pcs: finalPcs,
           quests: nextQuests,
           sessionPhase: nextSessionPhase,
           actedPcs: nextActedPcs,
           battle: { ...p.battle, active: false },
-          log: [logLine, ...recoveryLogs, ...p.log]
+          log: [logLine, ...kairikiLogs, ...recoveryLogs, ...p.log]
         };
       });
     };
