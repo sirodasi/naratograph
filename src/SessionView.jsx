@@ -6596,6 +6596,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 
   const isMyTurn  = pc.uid === user?.uid || isGm;
   const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events:[], desc: "" };
+  const [fusuiSel, setFusuiSel] = useState(null); // 風水：振り直し対象のダイス添字配列（null=非選択モード）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
   const endScene = () => upd(p => {
@@ -7333,10 +7334,39 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             return (
               <div style={{ textAlign: "center" }}>
                 <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
-                  {sc.actionDice?.map((d, i) => (
-                    <div key={i} style={{ width: 32, height: 32, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue, animation: `diceIn 0.32s ${(i * 0.09).toFixed(2)}s cubic-bezier(0.34,1.56,0.64,1) both` }}>{d}</div>
-                  ))}
+                  {sc.actionDice?.map((d, i) => {
+                    const selecting = fusuiSel !== null;
+                    const picked = selecting && fusuiSel.includes(i);
+                    return (
+                      <div key={i} onClick={selecting ? () => setFusuiSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]) : undefined}
+                        style={{ width: 32, height: 32, background: picked ? "rgba(255,183,77,0.25)" : "rgba(14,20,36,0.95)", border: `${picked ? 2 : 1}px solid ${picked ? "#ffb74d" : d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue, cursor: selecting ? "pointer" : "default", animation: `diceIn 0.32s ${(i * 0.09).toFixed(2)}s cubic-bezier(0.34,1.56,0.64,1) both` }}>{d}</div>
+                    );
+                  })}
                 </div>
+
+                {/* 風水を操る程度の能力（サポート・1日1回）: 選んだ任意のダイスを振り直す */}
+                {isMyTurn && (sc.actionDice?.length > 0) && getActiveAbility(pc)?.name === "風水を操る程度の能力" && pc.abilityUse?.["風水を操る程度の能力"]?.day !== gs.day && (
+                  fusuiSel === null ? (
+                    <button onClick={() => setFusuiSel([])} style={{ ...btnFull("rgba(255,183,77,0.15)", "#ffb74d50", "#ffb74d", { fontSize: 10 }), marginBottom: 10 }}>🎲 風水: ダイスを振り直す</button>
+                  ) : (
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
+                      <button disabled={fusuiSel.length === 0} onClick={() => {
+                        const sel = fusuiSel; setFusuiSel(null);
+                        animateDice(sel.length, "風水（振り直し）", res => upd(p => {
+                          const dice = [...(p.currentScene.actionDice || [])];
+                          sel.forEach((idx, k) => { dice[idx] = res[k]; });
+                          return {
+                            ...p,
+                            pcs: p.pcs.map(x => x.uid === pc.uid ? { ...x, abilityUse: { ...(x.abilityUse || {}), "風水を操る程度の能力": { ...(x.abilityUse?.["風水を操る程度の能力"] || {}), day: gs.day } } } : x),
+                            currentScene: { ...p.currentScene, actionDice: dice, fumbleResolved: false, specialResolved: false },
+                            log: [`🎲 ${pc.charName} の《風水を操る程度の能力》: ${sel.length}個のダイスを振り直した`, ...p.log],
+                          };
+                        }));
+                      }} style={btnFull(fusuiSel.length ? "rgba(255,183,77,0.2)" : "rgba(255,255,255,0.04)", fusuiSel.length ? "#ffb74d50" : C.border, fusuiSel.length ? "#ffb74d" : C.textFaint, { fontSize: 10 })}>振り直す（{fusuiSel.length}個）</button>
+                      <button onClick={() => setFusuiSel(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 })}>やめる</button>
+                    </div>
+                  )
+                )}
 
                 {/* 運命を操る程度の能力（サポート・1日1回）: 出目を全て裏返す（1↔6,2↔5,3↔4） */}
                 {isMyTurn && (sc.actionDice?.length > 0) && getActiveAbility(pc)?.name === "運命を操る程度の能力" && pc.abilityUse?.["運命を操る程度の能力"]?.day !== gs.day && (
