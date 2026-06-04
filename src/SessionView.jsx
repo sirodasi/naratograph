@@ -7608,6 +7608,36 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 {/* 応援（判定後に宣言してダイスを振り足す）: 結果確定（変調/スペシャル処理）の前に行える */}
                 {!sc.fumbleResolved && !sc.specialResolved && renderCheerSection(pc, (cheererUid, bondName, fragile) => applyCheer(cheererUid, bondName, fragile))}
 
+                {/* 奇跡を起こす程度の能力（サポート）: 同スポットの保持者が応援の代わりに出目を1つ+1（絆を消費） */}
+                {!sc.fumbleResolved && !sc.specialResolved && (() => {
+                  const kName = getActiveAbility(myPc)?.name;
+                  if (!myPc || myPc.uid === pc.uid || myPc.currentSpot !== pc.currentSpot) return null;
+                  if (kName !== "奇跡を起こす程度の能力" && kName !== "奇跡を起こす程度の能力＋") return null;
+                  const bondName = `${pc.charName}への絆`;
+                  if (!(myPc.bonds || []).includes(bondName) || myPc.bondUsed?.[bondName]) return null; // 未使用の絆が必要
+                  const targets = (sc.actionDice || []).map((d, i) => ({ d, i })).filter(({ d }) => d < 6);
+                  if (targets.length === 0) return null;
+                  return (
+                    <div style={{ marginBottom: 10, padding: 6, background: "rgba(255,213,79,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+                      <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>✨ 奇跡: 応援で出目を1つ+1（{myPc.charName}）</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+                        {targets.map(({ d, i }) => (
+                          <button key={i} onClick={() => upd(p => {
+                            const dice = [...(p.currentScene.actionDice || [])];
+                            dice[i] = Math.min(6, dice[i] + 1);
+                            return {
+                              ...p,
+                              pcs: p.pcs.map(x => x.uid === myPc.uid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
+                              currentScene: { ...p.currentScene, actionDice: dice, fumbleResolved: false, specialResolved: false },
+                              log: [`✨ ${myPc.charName} の《奇跡を起こす程度の能力》: 応援で出目を ${d}→${d + 1} に変更`, ...p.log],
+                            };
+                          })} style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
                   {isFumble && !sc.fumbleCanceled ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
                 </div>
