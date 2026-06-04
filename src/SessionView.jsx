@@ -4867,6 +4867,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityMove, setAbilityMove] = useState(null); // パーティ移動 { name, freq, params, selected[], moveSelf }
   const [abilitySurprise, setAbilitySurprise] = useState(null); // 絆獲得判定 { name, freq, params, targetUid, x }
   const [abilitySpend, setAbilitySpend] = useState(null); // アイテム消費獲得 { name, freq, params, spendItem, mode }
+  const [abilityDestroy, setAbilityDestroy] = useState(null); // 破壊 { name, freq, targetUid, category }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5025,6 +5026,16 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         `🔵 ${pc.charName} が能力《${name}》を発動：霊力+${amt}`);
       return;
     }
+    if (meta?.auto && meta.kind === "set_rei") {
+      // 霊力を指定値にする（既に上回っていれば据え置き＝不利益を出さない）
+      const v = meta.params?.value || 10;
+      const r = pc.resources.霊力 || { cur: 0, max: 20 };
+      const nextCur = Math.max(r.cur, Math.min(r.max, v));
+      sfx.skillActivate();
+      commit(withAbilityUse({ ...pc, resources: { ...pc.resources, 霊力: { ...r, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } }, name, freq),
+        `🔵 ${pc.charName} が能力《${name}》を発動：霊力を${nextCur}にした`);
+      return;
+    }
     if (meta?.auto && meta.kind === "gain_random_item") {
       const count = meta.params?.count || 1;
       animateDice(count, `${name}（アイテム獲得）`, res => {
@@ -5078,6 +5089,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (meta?.auto && meta.kind === "spend_item_gain_random") {
       // 所持アイテム1つを失ってランダム（or 好きな）アイテムを獲得
       setAbilitySpend({ name, freq, params: meta.params || {}, spendItem: null, mode: null });
+      return;
+    }
+    if (meta?.auto && meta.kind === "destroy_one") {
+      // キャラ1人のタグ/変調/アイテムのうち1つを失わせる
+      setAbilityDestroy({ name, freq, targetUid: null, category: null });
       return;
     }
 
@@ -5248,6 +5264,30 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         ...p,
         pcs: p.pcs.map(z => z.uid === pc.uid ? { ...base, items } : z),
         log: [`🔵 ${pc.charName} が能力《${sd.name}》を発動：【${spent}】を失い【${gainItem}】を獲得`, ...p.log],
+      };
+    });
+  };
+
+  // destroy_one：対象キャラの category(タグ/変調/アイテム) の value を1つ失わせる
+  const confirmDestroy = (targetUid, category, value) => {
+    const dz = abilityDestroy;
+    setAbilityDestroy(null);
+    if (!dz) return;
+    upd(p => {
+      const selfUse = withAbilityUse({ ...pc }, dz.name, dz.freq).abilityUse;
+      const targetName = p.pcs.find(x => x.uid === targetUid)?.charName || "対象";
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          let nx = x.uid === pc.uid ? { ...x, abilityUse: selfUse } : x;
+          if (x.uid === targetUid) {
+            if (category === "タグ")   nx = { ...nx, tags: (x.tags || []).filter(t => t !== value) };
+            if (category === "変調")   nx = { ...nx, badStatus: (x.badStatus || []).filter(b => b !== value) };
+            if (category === "アイテム") nx = { ...nx, items: { ...(x.items || {}), [value]: Math.max(0, (x.items?.[value] || 0) - 1) } };
+          }
+          return nx;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${dz.name}》を発動：${targetName} の${category}《${value}》を破壊`, ...p.log],
       };
     });
   };
@@ -5803,6 +5843,57 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 </div>
               )}
               <button onClick={() => setAbilitySpend(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilityDestroy && (() => {
+        const target = abilityDestroy.targetUid ? gs.pcs.find(x => x.uid === abilityDestroy.targetUid) : null;
+        const ownedItems = target ? ITEM_NAMES.filter(it => (target.items?.[it] || 0) > 0) : [];
+        const cats = target ? [
+          ["タグ", target.tags || []],
+          ["変調", target.badStatus || []],
+          ["アイテム", ownedItems],
+        ].filter(([, arr]) => arr.length > 0) : [];
+        const curList = abilityDestroy.category === "タグ" ? (target?.tags || [])
+          : abilityDestroy.category === "変調" ? (target?.badStatus || [])
+          : abilityDestroy.category === "アイテム" ? ownedItems : [];
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityDestroy(null)}>
+            <SpellCard color={C.red} title={`✦ ${abilityDestroy.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              {!target ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>破壊する対象キャラを選択</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    {(gs.pcs || []).map(x => (
+                      <button key={x.uid} onClick={() => setAbilityDestroy(d => ({ ...d, targetUid: x.uid }))} style={btnFull("rgba(224,112,96,0.1)", C.redBorder, C.red, { fontSize: 11 })}>{x.charName}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : !abilityDestroy.category ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{target.charName} の破壊するカテゴリを選択</div>
+                  {cats.length === 0 ? (
+                    <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>破壊できる対象がありません</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                      {cats.map(([cat, arr]) => (
+                        <button key={cat} onClick={() => setAbilityDestroy(d => ({ ...d, category: cat }))} style={btnFull("rgba(224,112,96,0.1)", C.redBorder, C.red, { fontSize: 11 })}>{cat}（{arr.length}）</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{target.charName} の{abilityDestroy.category}から破壊するものを選択</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    {curList.map(v => (
+                      <button key={v} onClick={() => confirmDestroy(target.uid, abilityDestroy.category, v)} style={btnFull("rgba(224,112,96,0.12)", C.redBorder, C.red, { fontSize: 11 })}>《{v}》を破壊</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => setAbilityDestroy(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );

@@ -46,11 +46,14 @@ export const ABILITY_EFFECTS = {
   "水を操る程度の能力＋": { freq: "day", auto: true, kind: "spend_item_gain_random", params: { randomCount: 2, allowChoice: true } }, // にとり＋：ランダム2 or 好き1
 
   // ── サポート（黒い応援欄＝bondUsed===true を操作） ──
-  "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 古明地こいし：他キャラの使用済み応援欄を1つ解除
-  "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // ＋（トリガー条件が広いだけで効果は同一）
+  "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ：他キャラの使用済み応援欄を1つ解除
+  "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ＋（トリガー条件が広いだけで効果は同一）
 
   // ── サポート（タイミングを見て使用） ──
-  "花を操る程度の能力": { freq: null, auto: true, kind: "gain_rei", params: { amount: 10 } }, // 風見幽香（導入フェイズ開始時）
+  "花を操る程度の能力":   { freq: null, auto: true, kind: "gain_rei", params: { amount: 10 } }, // 風見幽香（導入フェイズ開始時）：霊力+10
+  "花を操る程度の能力＋": { freq: null, auto: true, kind: "set_rei", params: { value: 10 } },   // 風見幽香＋：霊力が10以下のとき霊力を10にする
+  "ありとあらゆるものを破壊する程度の能力":   { freq: "session", auto: true, kind: "destroy_one" }, // フランドール：キャラ1人のタグ/変調/アイテム1つを失わせる
+  "ありとあらゆるものを破壊する程度の能力＋": { freq: "day",     auto: true, kind: "destroy_one" }, // フランドール＋：1日1回
 
   // ── オート（常時パッシブ・発動ボタンなし。効果は各サイトに組込み） ──
   "虚無を操る程度の能力":   { passive: true, note: "霊力の最大値が25・攻撃力の最大値が6（常時）" }, // applyAbilityPassiveStats で反映
