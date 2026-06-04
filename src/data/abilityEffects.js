@@ -34,7 +34,8 @@ export const ABILITY_EFFECTS = {
   },
   "気を使う程度の能力":           { freq: null, auto: true, kind: "gain_yaruki", params: { amount: 1 } }, // 紅美鈴
   "気を使う程度の能力＋":         { freq: null, auto: true, kind: "gain_yaruki_selfbond", params: { amount: 1 } }, // 紅美鈴＋：やる気1点＋自身への絆
-  "比類なき脚力を持つ程度の能力": { freq: null, auto: true, kind: "gain_yaruki", params: { amount: 2 } }, // （導入フェイズ開始時）
+  "比類なき脚力を持つ程度の能力":   { freq: null, auto: true, kind: "gain_yaruki", params: { amount: 2 } }, // （導入フェイズ開始時）やる気+2
+  "比類なき脚力を持つ程度の能力＋": { freq: null, auto: true, kind: "gain_yaruki", params: { amount: 2 }, note: "加えて夜の終了時にやる気減少を受けない（App.jsxで処理）" }, // やる気+2＋夜のやる気減少免除
 
   "あらゆる薬を作る程度の能力":   { freq: null, auto: true, kind: "cure_bad_status" }, // 八意永琳：同スポットのキャラの変調1つを除去
   "あらゆる薬を作る程度の能力＋": { freq: null, auto: true, kind: "cure_bad_status", params: { grantTag: "絶好調" } }, // 八意永琳＋：除去＋絶好調タグ
