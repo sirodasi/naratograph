@@ -5058,6 +5058,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilitySurprise, setAbilitySurprise] = useState(null); // 絆獲得判定 { name, freq, params, targetUid, x }
   const [abilitySpend, setAbilitySpend] = useState(null); // アイテム消費獲得 { name, freq, params, spendItem, mode }
   const [abilityDestroy, setAbilityDestroy] = useState(null); // 破壊 { name, freq, targetUid, category }
+  const [abilityReturn, setAbilityReturn] = useState(null); // 密と疎：帰還先変更 { name, freq, params, selected[], destSpot }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5286,6 +5287,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityDestroy({ name, freq, targetUid: null, category: null });
       return;
     }
+    if (meta?.auto && meta.kind === "set_return_spot") {
+      // 帰還先を変更（自分＋選んだPCを任意スポットへ）
+      setAbilityReturn({ name, freq, params: meta.params || {}, selected: [], destSpot: null });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5478,6 +5484,28 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           return nx;
         }),
         log: [`🔵 ${pc.charName} が能力《${dz.name}》を発動：${targetName} の${category}《${value}》を破壊`, ...p.log],
+      };
+    });
+  };
+
+  // set_return_spot：自分＋選んだPCの帰還先(returnSpotId)を destSpot にする（＋は夜のやる気減少もスキップ）
+  const confirmReturn = (destSpot) => {
+    const rt = abilityReturn;
+    setAbilityReturn(null);
+    if (!rt) return;
+    const targetSet = new Set([pc.uid, ...rt.selected]);
+    const yarukiSkip = !!rt.params?.yarukiSkip;
+    const destName = getSpot(destSpot)?.name || destSpot;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, rt.name, rt.freq).abilityUse;
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          let nx = x.uid === pc.uid ? { ...x, abilityUse: selfBase } : x;
+          if (targetSet.has(x.uid)) nx = { ...nx, returnSpotId: destSpot, ...(yarukiSkip ? { returnYarukiSkip: true } : {}) };
+          return nx;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${rt.name}》を発動：${[...targetSet].map(u => p.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・")} の帰還先を【${destName}】に${yarukiSkip ? "（夜のやる気減少なし）" : ""}`, ...p.log],
       };
     });
   };
@@ -6084,6 +6112,30 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 </div>
               )}
               <button onClick={() => setAbilityDestroy(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilityReturn && (() => {
+        const others = (gs.pcs || []).filter(x => x.uid !== pc.uid);
+        const toggle = (uid) => setAbilityReturn(m => ({ ...m, selected: m.selected.includes(uid) ? m.selected.filter(u => u !== uid) : [...m.selected, uid] }));
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityReturn(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityReturn.name}`} style={{ maxWidth: 360, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>一緒に帰還先を変えるPC（自分は常に対象）を選択</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                {others.map(x => {
+                  const on = abilityReturn.selected.includes(x.uid);
+                  return <button key={x.uid} onClick={() => toggle(x.uid)} style={btnFull(on ? "rgba(144,202,249,0.25)" : "rgba(255,255,255,0.04)", on ? "#1565c0" : C.border, on ? "#90caf9" : C.textDim, { fontSize: 10, padding: "4px 8px" })}>{on ? "✓ " : ""}{x.charName}</button>;
+                })}
+              </div>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6 }}>帰還先のスポットを選択{abilityReturn.params?.yarukiSkip ? "（夜のやる気減少なし）" : ""}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 10, maxHeight: 200, overflowY: "auto" }}>
+                {(SPOTS || []).map(s => (
+                  <button key={s.id} onClick={() => confirmReturn(s.id)} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 10, padding: "5px 6px" })}>{s.name}</button>
+                ))}
+              </div>
+              <button onClick={() => setAbilityReturn(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );

@@ -88,6 +88,9 @@ export const ABILITY_EFFECTS = {
   // ── サポート（黒い応援欄＝bondUsed===true を操作） ──
   "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ：他キャラの使用済み応援欄を1つ解除
   "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ＋（トリガー条件が広いだけで効果は同一）
+  // 密と疎（伊吹萃香）：帰還先を変更（自分＋選んだPCを任意スポットへ帰還）。＋は夜のやる気減少もスキップ。
+  "密と疎を操る程度の能力":   { freq: null, auto: true, kind: "set_return_spot" },
+  "密と疎を操る程度の能力＋": { freq: null, auto: true, kind: "set_return_spot", params: { yarukiSkip: true } },
 
   // ── サポート（タイミングを見て使用） ──
   "花を操る程度の能力":   { freq: null, auto: true, kind: "gain_rei", params: { amount: 10 } }, // 風見幽香（導入フェイズ開始時）：霊力+10

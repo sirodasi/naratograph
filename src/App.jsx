@@ -897,8 +897,8 @@ function SessionApp({ roomCode, user }) {
         day++;
         nextPcs = p.pcs.map(pc => {
           let dest = pc.returnSpotId || pc.baseSpotId || "11";
-          // 比類なき脚力を持つ程度の能力＋（オート）: 夜の終了時にやる気の減少を受けない
-          const nightImmune = getActiveAbility(pc)?.name === "比類なき脚力を持つ程度の能力＋";
+          // 比類なき脚力を持つ程度の能力＋（オート）/ 密と疎を操る程度の能力＋（returnYarukiSkip）: 夜のやる気減少を受けない
+          const nightImmune = getActiveAbility(pc)?.name === "比類なき脚力を持つ程度の能力＋" || pc.returnYarukiSkip;
           let curMotive = nightImmune ? (pc.resources.やる気?.cur || 0) : Math.max(0, (pc.resources.やる気?.cur || 0) - 1);
 
           if (p.newspaper?.targetSpot && dest === p.newspaper.targetSpot && (p.newspaper.roll === 14 || p.newspaper.roll % 11 === 0)) {
@@ -910,6 +910,7 @@ function SessionApp({ roomCode, user }) {
             ...pc,
             currentSpot: dest,
             returnSpotId: null,
+            returnYarukiSkip: null,
             resources: {
               ...pc.resources,
               やる気: { ...pc.resources.やる気, cur: curMotive },
