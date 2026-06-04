@@ -6733,6 +6733,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const [kyoukiSel, setKyoukiSel] = useState(null); // 狂気：観戦保持者が振り直す対象のダイス添字配列（null=非選択モード）
   const [unmeiSel, setUnmeiSel] = useState(null); // 運命＋：裏返す対象のダイス添字配列（null=非選択モード）
   const [doubutsuSel, setDoubutsuSel] = useState(null); // 動物を導く：観戦保持者が応援で振り直す対象のダイス添字配列
+  const [qDoubutsuSel, setQDoubutsuSel] = useState(null); // クエスト版 動物：{ uid, indices } 振り直し対象（判定者別）
   const myPc = gs.pcs.find(p => p.uid === user?.uid); // 操作中ユーザーのPC（観戦者能力の判定用）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
@@ -8071,7 +8072,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   pcs: p.pcs.map(x => x.uid !== cheererUid ? x : (isKuruwasu
                     ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [judgeUid]: true } }
                     : { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } })),
-                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgeUid]: { ...roll, dice: [...roll.dice, res[0]], fragile: roll.fragile || fragile } } },
+                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgeUid]: { ...roll, dice: [...roll.dice, res[0]], fragile: roll.fragile || fragile, wasCheered: true } } },
                   log: [`💪 ${cheererName} が${isKuruwasu ? "絆なしで" : `《${bondName}》で`}応援！クエスト判定にダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
                 };
               }));
@@ -8103,6 +8104,70 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   log: [...extraLogs, `${judgePc.charName} のクエスト判定確定: ${ev.success ? "成功" : "失敗"}${ev.isFumble ? "（ファンブル）" : ev.isSpecial ? "（スペシャル）" : ""}`, ...p.log],
                 };
               });
+            };
+            // クエスト判定者 p のロールに対する応援強化（奇跡=出目+1 / 動物=振り直し / 気質=被応援で出目+1）
+            const writeRollDice = (judgeUid, newDice, consumeUid, consumeBond, extraPatch, logMsg) => upd(p2 => {
+              const r = p2.currentScene.rolls?.[judgeUid]; if (!r) return p2;
+              return {
+                ...p2,
+                pcs: consumeUid ? p2.pcs.map(x => x.uid === consumeUid ? { ...x, ...(consumeBond ? { bondUsed: { ...x.bondUsed, [consumeBond]: true } } : {}), ...(extraPatch ? extraPatch(x) : {}) } : x) : p2.pcs,
+                currentScene: { ...p2.currentScene, rolls: { ...p2.currentScene.rolls, [judgeUid]: { ...r, dice: newDice } } },
+                log: [logMsg, ...p2.log],
+              };
+            });
+            const renderQuestCheerEffects = (judge, roll) => {
+              const dice = roll.dice || [];
+              const t = dice.map((d, i) => ({ d, i })).filter(({ d }) => d < 6);
+              const oName = getActiveAbility(myPc)?.name;
+              const obsOk = myPc && myPc.uid !== judge.uid && myPc.currentSpot === sc.questLocation;
+              const bondName = `${judge.charName}への絆`;
+              const hasBond = obsOk && (myPc.bonds || []).includes(bondName) && !myPc.bondUsed?.[bondName];
+              const jName = getActiveAbility(judge)?.name;
+              return (
+                <>
+                  {hasBond && (oName === "奇跡を起こす程度の能力" || oName === "奇跡を起こす程度の能力＋") && t.length > 0 && (
+                    <div style={{ margin: "6px 0", padding: 6, background: "rgba(255,213,79,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+                      <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>✨ 奇跡: 応援で出目を1つ+1（{myPc.charName}）</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+                        {t.map(({ d, i }) => (
+                          <button key={i} onClick={() => { const nd = [...dice]; nd[i] = Math.min(6, d + 1); writeRollDice(judge.uid, nd, myPc.uid, bondName, null, `✨ ${myPc.charName} の《奇跡を起こす程度の能力》: ${judge.charName} の出目を ${d}→${d + 1} に`); }} style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {hasBond && (oName === "動物を導く程度の能力" || oName === "動物を導く程度の能力＋") && dice.length > 0 && (() => {
+                    const isPlus = oName === "動物を導く程度の能力＋";
+                    if (!isPlus && myPc.abilityUse?.["動物を導く程度の能力"]?.day === gs.day) return null;
+                    const sel = qDoubutsuSel?.uid === judge.uid ? qDoubutsuSel.indices : null;
+                    return sel === null ? (
+                      <button onClick={() => setQDoubutsuSel({ uid: judge.uid, indices: [] })} style={{ ...btnFull("rgba(129,199,132,0.14)", C.greenBorder, C.green, { fontSize: 10 }), margin: "6px 0", width: "100%" }}>🐾 動物: 応援でダイスを振り直す（{myPc.charName}）</button>
+                    ) : (
+                      <div style={{ margin: "6px 0" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginBottom: 4 }}>
+                          {dice.map((d, i) => {
+                            const picked = sel.includes(i);
+                            return <button key={i} onClick={() => setQDoubutsuSel(s => ({ uid: judge.uid, indices: s.indices.includes(i) ? s.indices.filter(k => k !== i) : [...s.indices, i] }))} style={btnFull(picked ? "rgba(129,199,132,0.25)" : "rgba(255,255,255,0.04)", picked ? C.greenBorder : C.border, picked ? C.green : C.textDim, { width: "auto", fontSize: 10, padding: "2px 7px" })}>{picked ? "✓" : ""}{d}</button>;
+                          })}
+                        </div>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          <button disabled={sel.length === 0} onClick={() => { const indices = sel; setQDoubutsuSel(null); animateDice(indices.length, "動物（振り直し）", res => { const nd = [...dice]; indices.forEach((idx, k) => { nd[idx] = res[k]; }); writeRollDice(judge.uid, nd, myPc.uid, bondName, isPlus ? null : (x => ({ abilityUse: { ...(x.abilityUse || {}), "動物を導く程度の能力": { ...(x.abilityUse?.["動物を導く程度の能力"] || {}), day: gs.day } } })), `🐾 ${myPc.charName} の《動物を導く程度の能力》: ${judge.charName} の ${indices.length}個を振り直した`); }); }} style={btnFull(sel.length ? "rgba(129,199,132,0.2)" : "rgba(255,255,255,0.04)", sel.length ? C.greenBorder : C.border, sel.length ? C.green : C.textFaint, { fontSize: 10 })}>振り直す（{sel.length}個）</button>
+                          <button onClick={() => setQDoubutsuSel(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 })}>やめる</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {judge.uid === user?.uid && roll.wasCheered && !roll.kishitsuUsed && (jName === "気質を見極める程度の能力" || jName === "気質を見極める程度の能力＋") && t.length > 0 && (
+                    <div style={{ margin: "6px 0", padding: 6, background: "rgba(255,213,79,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+                      <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>✨ 気質: 応援を受け出目を1つ+1</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+                        {t.map(({ d, i }) => (
+                          <button key={i} onClick={() => upd(p2 => { const r = p2.currentScene.rolls?.[judge.uid]; if (!r) return p2; const nd = [...r.dice]; nd[i] = Math.min(6, nd[i] + 1); return { ...p2, currentScene: { ...p2.currentScene, rolls: { ...p2.currentScene.rolls, [judge.uid]: { ...r, dice: nd, kishitsuUsed: true } } }, log: [`✨ ${judge.charName} の《気質を見極める程度の能力》: 出目を ${d}→${d + 1} に`, ...p2.log] }; })} style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
             };
             const myRoll = sc.rolls?.[user?.uid];
             // 確定済み（resolved）の判定のみ成功/全員ロール済みの集計に使う（応援の振り足しを待つため）
@@ -8223,6 +8288,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                             {p.charName}: {roll.dice.join(", ")} → {ev.success ? "成功" : ev.isFumble ? "ファンブル" : "失敗"}
                           </div>
                           {renderCheerSection(p, (cheererUid, bondName, fragile) => applyCheerQuest(cheererUid, bondName, p.uid, fragile))}
+                          {renderQuestCheerEffects(p, roll)}
                           {p.uid === user?.uid && (
                             <button onClick={() => confirmQuestRoll(p)} style={btnFull(ev.success ? C.greenBg : C.redBg, ev.success ? C.greenBorder : C.redBorder, ev.success ? C.green : C.red, { fontSize: 11 })}>
                               判定を確定する{ev.isFumble ? "（ファンブル）" : ev.success ? "（成功）" : "（失敗）"}
