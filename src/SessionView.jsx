@@ -6878,17 +6878,26 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     );
   };
 
-  // 応援を1回適用（応援者の絆を消費し、指定の dice フィールドを+1）。fragile=魂の弱い所/人を狂わす（失敗時ファンブル）
-  const applyCheer = (cheererUid, bondName, diceField, fragile = false) => {
-    const isKuruwasu = bondName === KURUWASU_BOND;
-    upd(p => ({
+  // 応援者の絆消費フラグ（絆なし応援は kuruwasuUsed[対象]、通常は bondUsed[絆名]）を返す
+  const cheerConsumePatch = (x, bondName) =>
+    bondName === KURUWASU_BOND
+      ? { kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [pc.uid]: true } }
+      : { bondUsed: { ...x.bondUsed, [bondName]: true } };
+
+  // 応援を1回適用（判定後）：ダイスを1つ振り足して結果のダイス配列に追加する。
+  // diceField で振り足し先を指定（explore=actionDice / quest は judgeUid 別に呼び出し側で処理）。fragile=失敗時ファンブル
+  const applyCheer = (cheererUid, bondName, fragile = false) => {
+    const cheererName = gs.pcs.find(x => x.uid === cheererUid)?.charName;
+    animateDice(1, "応援（振り足し）", res => upd(p => ({
       ...p,
-      pcs: p.pcs.map(x => x.uid !== cheererUid ? x : (isKuruwasu
-        ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [pc.uid]: true } }   // 絆なし応援は kuruwasuUsed[対象] を消費
-        : { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } })),
-      currentScene: { ...p.currentScene, [diceField]: (p.currentScene[diceField] || (diceField === "actionDiceCount" ? 2 : 2)) + 1, ...(fragile ? { fragileCheer: true } : {}) },
-      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が${isKuruwasu ? "絆なしで" : `《${bondName}》で`}応援！ダイス+1${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
-    }));
+      pcs: p.pcs.map(x => x.uid !== cheererUid ? x : { ...x, ...cheerConsumePatch(x, bondName) }),
+      currentScene: {
+        ...p.currentScene,
+        actionDice: [...(p.currentScene.actionDice || []), res[0]],
+        ...(fragile ? { fragileCheer: true } : {}),
+      },
+      log: [`💪 ${cheererName} が${bondName === KURUWASU_BOND ? "絆なしで" : `《${bondName}》で`}応援！ダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
+    })));
   };
 
   const acquireClue = questId => {
@@ -7379,9 +7388,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 </button>
               )}
 
-              {/* 応援: 判定者（=pc）と同スポットの、判定者への絆を持つPCが応援できる（判定ダイス+1） */}
-              {renderCheerSection(pc, (cheererUid, bondName, fragile) => applyCheer(cheererUid, bondName, "actionDiceCount", fragile))}
-
+              {/* 応援は判定後（explore_result）に宣言してダイスを振り足す方式に変更 */}
               <button onClick={rollExplore} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 判定ダイスを振る</button>
             </div>
           )}
@@ -7538,6 +7545,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     </div>
                   )
                 )}
+
+                {/* 応援（判定後に宣言してダイスを振り足す）: 結果確定（変調/スペシャル処理）の前に行える */}
+                {!sc.fumbleResolved && !sc.specialResolved && renderCheerSection(pc, (cheererUid, bondName, fragile) => applyCheer(cheererUid, bondName, fragile))}
 
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
                   {isFumble && !sc.fumbleCanceled ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
