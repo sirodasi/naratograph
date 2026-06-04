@@ -404,6 +404,7 @@ const PHASE_LABELS = {
   npc_shot_roll:     "NPCショット",
   npc_shot_after:    "NPCショット後",
   pc_evade_intro:    "PC回避判定",
+  pc_evade_result:   "PC回避結果",
   pc_evade_move:     "PC回避移動",
   npc_evade_intro:   "NPC回避判定",
   npc_evade_move:    "NPC回避移動",
@@ -1999,8 +2000,24 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const bulletCount = b.grids[isPc ? b.pcCombatant : b.npcCombatant][pos - 1];
     const targetValue = bulletCount + 3;
     const diceCount = getEvadeDiceCount(isPc);
-    
+
     animateDice(diceCount, `${isPc ? "PC" : "NPC"}回避判定`, (res) => {
+      if (isPc) {
+        // PC回避は応援（判定後の振り足し）を挟むため結果フェイズへ。確定は resolveEvade で。
+        upd(p => ({
+          ...p,
+          battle: { ...p.battle, phase: "pc_evade_result", evadeRoll: { dice: res, targetValue } },
+          log: [`🎲 ${combatant.charName || combatant.name} の回避判定: ${res.join(",")}（目標${targetValue}）`, ...p.log],
+        }));
+      } else {
+        resolveEvadeApply(false, res, targetValue, combatant);
+      }
+    });
+  };
+
+  // 回避判定の確定処理（成功→移動 / 失敗→被弾判定）。PCは結果フェイズの「確定」から、NPCは即時に呼ぶ。
+  const resolveEvadeApply = (isPc, res, targetValue, combatant) => {
+    {
       const maxDie = Math.max(...res);
       const isFumble = res.every(d => d === 1);
       const isSpecial = res.includes(6) && !isFumble;
@@ -2025,7 +2042,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           return {
             ...p,
             pcs: newPcs,
-            battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move" },
+            battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move", evadeRoll: null },
             log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")})${specialLog}` + (isPc ? " 移動先を選択してください。" : ""), ...p.log]
           };
         });
@@ -2047,12 +2064,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           return {
             ...p,
             pcs: newPcs,
-            battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check" },
+            battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", evadeRoll: null },
             log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})${fumbleLog}`, ...p.log]
           };
         });
       }
-    });
+    }
+  };
+
+  // PC回避の結果フェイズで「確定」したときに呼ぶ（応援の振り足し反映後の最終出目で解決）
+  const resolveEvade = () => {
+    const er = b.evadeRoll;
+    if (!er) return;
+    const combatant = pcs.find(p => p.uid === b.pcCombatant);
+    resolveEvadeApply(true, er.dice, er.targetValue, combatant);
   };
 
   // mirror_graze_gain（ミシガンロール）: gs.battle.mirrorGraze の各保有者（回避側自身を除く）に
@@ -3239,24 +3264,56 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const bondName = `${combatantPc.charName}への絆`;
     return (cheererPc.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
   };
+  // 回避応援（判定後の振り足し）: 結果フェイズで evadeRoll.dice にダイスを1つ追加する
   const renderEvadeCheer = () => {
     const cheererPc = pcs.find(p => p.uid === user.uid);
     const usable = getEvadeCheerBonds(cheererPc);
-    if (usable.length === 0) return null;
+    if (usable.length === 0 || !b.evadeRoll) return null;
     return (
       <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
-        <div style={{ fontSize: 9, color: C.gold, marginBottom: 6, letterSpacing: 1 }}>💪 応援（回避ダイス+1）</div>
+        <div style={{ fontSize: 9, color: C.gold, marginBottom: 6, letterSpacing: 1 }}>💪 応援（ダイスを振り足す）</div>
         {usable.map(bondName => (
-          <button key={bondName} onClick={() => upd(p => ({
+          <button key={bondName} onClick={() => animateDice(1, "応援（回避振り足し）", res => upd(p => ({
             ...p,
             pcs: p.pcs.map(x => x.uid === cheererPc.uid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
-            battle: { ...p.battle, currentEvadeDice: (p.battle.currentEvadeDice ?? getDefaultEvadeDice(combatantPc)) + 1 },
-            log: [`💪 ${cheererPc.charName} が《${bondName}》で応援！回避ダイス+1`, ...p.log],
-          }))} style={{ ...btnFull("rgba(200,160,64,0.16)", C.goldDim, C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
+            battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), res[0]] } },
+            log: [`💪 ${cheererPc.charName} が《${bondName}》で応援！回避にダイスを振り足した（出目${res[0]}）`, ...p.log],
+          })))} style={{ ...btnFull("rgba(200,160,64,0.16)", C.goldDim, C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
             《{bondName}》で応援
           </button>
         ))}
       </div>
+    );
+  };
+
+  // PC回避の結果フェイズ：出目を表示し、応援（振り足し）を受け付けてから確定する
+  const renderEvadeResult = () => {
+    const er = b.evadeRoll;
+    if (!er) return null;
+    const dice = er.dice || [];
+    const maxDie = Math.max(...dice, 0);
+    const isFumble = dice.length > 0 && dice.every(d => d === 1);
+    const isSuccess = maxDie >= er.targetValue && !isFumble;
+    const canResolve = user.uid === b.pcCombatant || isGm;
+    return (
+      <SpellCard color={C.blue} title="◆ 回避判定の結果" style={{ minWidth: 280 }} contentStyle={{ textAlign: "center", padding: 14 }}>
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10, flexWrap: "wrap" }}>
+          {dice.map((d, i) => (
+            <div key={i} style={{ width: 30, height: 30, background: "rgba(14,20,36,0.95)", border: `1px solid ${d === 6 ? C.gold : d === 1 ? C.red : C.blueBorder}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: d === 6 ? C.gold : d === 1 ? C.red : C.blue }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>最大{maxDie} / 目標{er.targetValue}</div>
+        <div style={{ fontSize: 15, color: isSuccess ? C.green : C.red, fontWeight: 700, marginBottom: 10 }}>
+          {isFumble ? "ファンブル…" : isSuccess ? "回避成功！" : "回避失敗…"}
+        </div>
+        {/* 応援（振り足し）: 戦闘者への絆を持つ参加PCがダイスを足せる（観戦者にも表示） */}
+        {renderEvadeCheer()}
+        {canResolve && (
+          <button onClick={resolveEvade} style={{ ...btnFull(isSuccess ? C.greenBg : C.redBg, isSuccess ? C.greenBorder : C.redBorder, isSuccess ? C.green : C.red, { fontSize: 12, padding: "9px 14px" }), marginTop: 10 }}>
+            判定を確定する{isSuccess ? "（成功→移動）" : "（失敗→被弾）"}
+          </button>
+        )}
+      </SpellCard>
     );
   };
 
@@ -3325,8 +3382,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 )}
               </div>
             )}
-            {/* 応援: 戦闘者への絆を持つ参加PCが回避ダイスを+1できる（観戦者にも表示） */}
-            {isPc && renderEvadeCheer()}
+            {/* 応援は判定後（pc_evade_result）にダイスを振り足す方式へ変更 */}
           </div>
         )}
         {renderSpellStep(!isPc, "evade")}
@@ -3896,6 +3952,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           spellMoveSelect: null,
           evasionRestore: null,
           spellChoose: null,
+          evadeRoll: null,
           pcLastResort: false,
           npcLastResort: false,
           spellUsedBy: {},
@@ -4169,6 +4226,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         {renderManualSpellControls()}
 
         {(b.phase === "pc_evade_intro" || b.phase === "npc_evade_intro") && renderEvadeIntro(b.phase === "pc_evade_intro")}
+
+        {b.phase === "pc_evade_result" && renderEvadeResult()}
 
         {(b.phase === "pc_evade_move" || b.phase === "npc_evade_move") && renderEvadeMove(b.phase === "pc_evade_move")}
 
