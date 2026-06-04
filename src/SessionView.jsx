@@ -6754,6 +6754,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const [unmeiSel, setUnmeiSel] = useState(null); // 運命＋：裏返す対象のダイス添字配列（null=非選択モード）
   const [doubutsuSel, setDoubutsuSel] = useState(null); // 動物を導く：観戦保持者が応援で振り直す対象のダイス添字配列
   const [qDoubutsuSel, setQDoubutsuSel] = useState(null); // クエスト版 動物：{ uid, indices } 振り直し対象（判定者別）
+  const [shiwoWarp, setShiwoWarp] = useState(false); // 死を操る：ワープ先選択モード
   const myPc = gs.pcs.find(p => p.uid === user?.uid); // 操作中ユーザーのPC（観戦者能力の判定用）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
@@ -7156,6 +7157,31 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 <button onClick={chooseMove} style={btnFull(C.blueBg,  C.blueBorder,  C.blue)}>移動する（やる気D）</button>
                 <button onClick={chooseStay} style={btnFull(C.greenBg, C.greenBorder, C.green)}>とどまる（やる気+1）</button>
               </div>
+
+              {/* 死を操る程度の能力（サポート）: 異世界エリアとそれ以外を行き来するワープ。base=移動の代わり/＋=ワープ後に通常移動 */}
+              {(getActiveAbility(pc)?.name === "死を操る程度の能力" || getActiveAbility(pc)?.name === "死を操る程度の能力＋") && (() => {
+                const inOther = SPOTS.find(s => s.id === pc.currentSpot)?.area === "異世界";
+                const dests = SPOTS.filter(s => inOther ? s.area !== "異世界" : s.area === "異世界");
+                const isPlus = getActiveAbility(pc)?.name === "死を操る程度の能力＋";
+                return shiwoWarp ? (
+                  <div style={{ padding: 6, background: "rgba(156,39,176,0.08)", border: `1px solid ${C.purpleBorder}`, borderRadius: 4 }}>
+                    <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>💀 ワープ先（{inOther ? "異世界以外" : "異世界エリア"}）を選択{isPlus ? "（その後 通常移動）" : ""}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                      {dests.map(s => (
+                        <button key={s.id} onClick={() => { setShiwoWarp(false); upd(p => ({
+                          ...p,
+                          pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, currentSpot: s.id }),
+                          currentScene: { ...p.currentScene, phase: isPlus ? "move_roll" : "action" },
+                          log: [`💀 ${pc.charName} の《死を操る程度の能力》: [${s.name}] へワープ${isPlus ? "（続けて移動）" : ""}`, ...p.log],
+                        })); }} style={btnFull("rgba(156,39,176,0.14)", C.purpleBorder, C.purple, { fontSize: 10 })}>{s.name}</button>
+                      ))}
+                    </div>
+                    <button onClick={() => setShiwoWarp(false)} style={{ ...btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 }), marginTop: 4 }}>やめる</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setShiwoWarp(true)} style={btnFull("rgba(156,39,176,0.14)", C.purpleBorder, C.purple, { fontSize: 10 })}>💀 死を操る: 異世界エリアへワープ</button>
+                );
+              })()}
 
               {/* インドア派: 移動の代わりに拠点へテレポート */}
               {pc.ps?.name === "インドア派" && pc.currentSpot !== pc.baseSpotId && (
