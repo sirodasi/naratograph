@@ -7828,9 +7828,64 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const pcsHere = gs.pcs.filter(p => p.currentSpot === sc.questLocation);
             const myPc = pcsHere.find(p => p.uid === user?.uid);
             
+            // クエスト判定の評価（dice配列から成功/ファンブル/スペシャルを算出）。fragile=失敗→ファンブル
+            const evalQuest = (diceArr, fragile) => {
+              const max = Math.max(...diceArr);
+              let isFumble = diceArr.every(d => d === 1);
+              const success = max >= 4 && !isFumble;
+              const isSpecial = diceArr.some(d => d === 6) && !isFumble;
+              if (fragile && !success && !isFumble) isFumble = true;
+              return { success, isFumble, isSpecial };
+            };
+            // 応援（判定後の振り足し）：対象 judgeUid のロールにダイスを1つ追加
+            const applyCheerQuest = (cheererUid, bondName, judgeUid, fragile) => {
+              const cheererName = gs.pcs.find(x => x.uid === cheererUid)?.charName;
+              animateDice(1, "応援（振り足し）", res => upd(p => {
+                const roll = p.currentScene.rolls?.[judgeUid];
+                if (!roll) return p;
+                const isKuruwasu = bondName === KURUWASU_BOND;
+                return {
+                  ...p,
+                  pcs: p.pcs.map(x => x.uid !== cheererUid ? x : (isKuruwasu
+                    ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [judgeUid]: true } }
+                    : { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } })),
+                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgeUid]: { ...roll, dice: [...roll.dice, res[0]], fragile: roll.fragile || fragile } } },
+                  log: [`💪 ${cheererName} が${isKuruwasu ? "絆なしで" : `《${bondName}》で`}応援！クエスト判定にダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
+                };
+              }));
+            };
+            // 判定確定：振り足し後の最終出目でファンブル/スペシャルを適用し resolved にする
+            const confirmQuestRoll = (judgePc) => {
+              upd(p => {
+                const roll = p.currentScene.rolls?.[judgePc.uid];
+                if (!roll) return p;
+                const ev = evalQuest(roll.dice, roll.fragile);
+                let newPcs = p.pcs;
+                const extraLogs = [];
+                if (ev.isFumble) {
+                  const bsKey = Math.floor(Math.random() * 6) + 1;
+                  const bsName = BAD_STATUS_TABLE[bsKey]?.name;
+                  if (bsName) {
+                    const immune = isBadStatusImmune(judgePc, bsName);
+                    newPcs = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, badStatus: immune ? (x.badStatus || []) : [...(x.badStatus || []), bsName] });
+                    extraLogs.push(immune ? `🛡 ${judgePc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${judgePc.charName} は変調《${bsName}》を獲得した`);
+                  }
+                } else if (ev.isSpecial && ev.success) {
+                  const gain = Math.ceil(Math.random() * 6);
+                  newPcs = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
+                  extraLogs.push(`✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`);
+                }
+                return {
+                  ...p, pcs: newPcs,
+                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgePc.uid]: { ...roll, resolved: true } } },
+                  log: [...extraLogs, `${judgePc.charName} のクエスト判定確定: ${ev.success ? "成功" : "失敗"}${ev.isFumble ? "（ファンブル）" : ev.isSpecial ? "（スペシャル）" : ""}`, ...p.log],
+                };
+              });
+            };
             const myRoll = sc.rolls?.[user?.uid];
-            const anySuccess = Object.values(sc.rolls || {}).some(r => r.success);
-            const allRolled = pcsHere.every(p => sc.rolls?.[p.uid]);
+            // 確定済み（resolved）の判定のみ成功/全員ロール済みの集計に使う（応援の振り足しを待つため）
+            const anySuccess = Object.values(sc.rolls || {}).some(r => r.resolved && evalQuest(r.dice, r.fragile).success);
+            const allRolled = pcsHere.every(p => sc.rolls?.[p.uid]?.resolved);
             
             const hasTag = myPc && q?.specifiedTag && q.specifiedTag.split(/[、,]/).some(t => (myPc.tags ||[]).includes(t.trim()) || myPc.charName === t.trim() || (myPc.ps && myPc.ps.name === t.trim()));
             let baseDice = 2 + (hasTag ? 1 : 0);
@@ -7850,13 +7905,14 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
                   {pcsHere.map(p => {
                     const r = sc.rolls?.[p.uid];
+                    const ev = r ? evalQuest(r.dice, r.fragile) : null;
                     return (
                       <div key={p.uid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
                         <div style={{ fontSize: 11, color: C.text }}>{p.charName}</div>
-                        <div style={{ fontSize: 11, color: r ? (r.success ? C.green : C.red) : C.textFaint }}>
-                          {r ? (r.success ? `成功 (${r.dice.join(", ")})` : `失敗 (${r.dice.join(", ")})`) : "待機中..."}
-                          {r?.isSpecial && <span style={{ color: C.gold, marginLeft: 4 }}>⭐スペシャル</span>}
-                          {r?.isFumble && <span style={{ color: C.red, marginLeft: 4 }}>💀ファンブル</span>}
+                        <div style={{ fontSize: 11, color: r ? (ev.success ? C.green : C.red) : C.textFaint }}>
+                          {r ? (`${ev.success ? "成功" : "失敗"} (${r.dice.join(", ")})${r.resolved ? "" : "・応援待ち"}`) : "待機中..."}
+                          {ev?.isSpecial && <span style={{ color: C.gold, marginLeft: 4 }}>⭐スペシャル</span>}
+                          {ev?.isFumble && <span style={{ color: C.red, marginLeft: 4 }}>💀ファンブル</span>}
                         </div>
                       </div>
                     );
@@ -7889,13 +7945,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       </button>
                     )}
 
-                    {/* 応援: 判定者（=myPc）への絆を持つ同スポットPCが応援できる（判定ダイス+1） */}
-                    {renderCheerSection(myPc, (cheererUid, bondName) => upd(p => ({
-                      ...p,
-                      pcs: p.pcs.map(x => x.uid === cheererUid ? { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } } : x),
-                      currentScene: { ...p.currentScene, diceCounts: { ...(p.currentScene.diceCounts || {}), [myPc.uid]: (p.currentScene.diceCounts?.[myPc.uid] || baseDice) + 1 } },
-                      log: [`💪 ${p.pcs.find(x => x.uid === cheererUid)?.charName} が《${bondName}》で応援！クエスト判定ダイス+1`, ...p.log],
-                    })))}
+                    {/* 応援は判定後（振り足し）に変更。ここでは判定前のダイス調整のみ */}
 
                     {/* 瀟洒: 3ダイス以上かつ霊力1消費で自動成功 */}
                     {myPc.ps?.name === "瀟洒" && myDiceCount >= 3 && (myPc.resources.霊力?.cur || 0) >= 1 && (
@@ -7927,49 +7977,38 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     )}
 
                     <button onClick={() => animateDice(myDiceCount, "クエスト判定", res => {
-                      const max = Math.max(...res);
-                      const isFumble = res.every(d => d === 1);
-                      const isSpecial = res.some(d => d === 6) && !isFumble;
-                      const success = max >= 4 && !isFumble;
-                      upd(p => {
-                        let newPcs = p.pcs;
-                        const extraLogs = [];
-                        if (isFumble) {
-                          const bsKey = Math.floor(Math.random() * 6) + 1;
-                          const bsName = BAD_STATUS_TABLE[bsKey]?.name;
-                          if (bsName) {
-                            const immune = isBadStatusImmune(myPc, bsName);
-                            newPcs = p.pcs.map(x => x.uid !== myPc.uid ? x : { ...x, badStatus: immune ? (x.badStatus||[]) : [...(x.badStatus || []), bsName] });
-                            extraLogs.push(immune ? `🛡 ${myPc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${myPc.charName} は変調《${bsName}》を獲得した`);
-                          }
-                        } else if (isSpecial && success) {
-                          const gain = Math.ceil(Math.random() * 6);
-                          newPcs = p.pcs.map(x => x.uid !== myPc.uid ? x : {
-                            ...x, resources: {
-                              ...x.resources,
-                              霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) },
-                              攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) }
-                            }
-                          });
-                          extraLogs.push(`✨ スペシャル！ ${myPc.charName} は霊力 +${gain}点回復した`);
-                        }
-                        return {
-                          ...p,
-                          pcs: newPcs,
-                          currentScene: {
-                            ...p.currentScene,
-                            rolls: { ...(p.currentScene.rolls||{}), [user.uid]: { dice: res, success, isSpecial, isFumble } }
-                          },
-                          log: [
-                            ...extraLogs,
-                            `${myPc.charName} はクエスト「${q?.name}」の判定で ${res.join(", ")} を出し、${success ? "成功" : "失敗"}した！${isFumble ? "（ファンブル！）" : isSpecial ? "（スペシャル！）" : ""}`,
-                            ...p.log
-                          ]
-                        };
-                      });
+                      // 出目のみ保存（成功/ファンブル/スペシャルの効果は応援の振り足し後「判定確定」で適用）
+                      upd(p => ({
+                        ...p,
+                        currentScene: { ...p.currentScene, rolls: { ...(p.currentScene.rolls||{}), [user.uid]: { dice: res, fragile: false, resolved: false } } },
+                        log: [`${myPc.charName} はクエスト「${q?.name}」の判定で ${res.join(", ")} を出した`, ...p.log],
+                      }));
                     })} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
                       🎲 行為判定を行う
                     </button>
+                  </div>
+                )}
+
+                {/* 判定後パネル：未確定のロールごとに 応援（振り足し）→ 判定確定。応援は観戦者にも見えるよう全PC分表示、確定は本人のみ */}
+                {!anySuccess && pcsHere.some(p => sc.rolls?.[p.uid] && !sc.rolls[p.uid].resolved) && (
+                  <div style={{ marginBottom: 12 }}>
+                    {pcsHere.filter(p => sc.rolls?.[p.uid] && !sc.rolls[p.uid].resolved).map(p => {
+                      const roll = sc.rolls[p.uid];
+                      const ev = evalQuest(roll.dice, roll.fragile);
+                      return (
+                        <div key={p.uid} style={{ padding: 8, marginBottom: 6, background: "rgba(0,0,0,0.2)", borderRadius: 6, border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 11, color: ev.success ? C.green : C.red, marginBottom: 6, textAlign: "center" }}>
+                            {p.charName}: {roll.dice.join(", ")} → {ev.success ? "成功" : ev.isFumble ? "ファンブル" : "失敗"}
+                          </div>
+                          {renderCheerSection(p, (cheererUid, bondName, fragile) => applyCheerQuest(cheererUid, bondName, p.uid, fragile))}
+                          {p.uid === user?.uid && (
+                            <button onClick={() => confirmQuestRoll(p)} style={btnFull(ev.success ? C.greenBg : C.redBg, ev.success ? C.greenBorder : C.redBorder, ev.success ? C.green : C.red, { fontSize: 11 })}>
+                              判定を確定する{ev.isFumble ? "（ファンブル）" : ev.success ? "（成功）" : "（失敗）"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
