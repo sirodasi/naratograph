@@ -6954,6 +6954,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       currentScene: {
         ...p.currentScene,
         actionDice: [...(p.currentScene.actionDice || []), res[0]],
+        wasCheered: true,
         ...(fragile ? { fragileCheer: true } : {}),
       },
       log: [`💪 ${cheererName} が${bondName === KURUWASU_BOND ? "絆なしで" : `《${bondName}》で`}応援！ダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
@@ -7673,6 +7674,28 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                     </div>
                   );
                 })()}
+
+                {/* 気質を見極める程度の能力（サポート）: 判定者(pc)が応援された時、出目を1つ+1（1判定1回） */}
+                {!sc.fumbleResolved && !sc.specialResolved && isMyTurn && sc.wasCheered && !sc.kishitsuUsed
+                  && (getActiveAbility(pc)?.name === "気質を見極める程度の能力" || getActiveAbility(pc)?.name === "気質を見極める程度の能力＋")
+                  && (() => {
+                    const targets = (sc.actionDice || []).map((d, i) => ({ d, i })).filter(({ d }) => d < 6);
+                    if (targets.length === 0) return null;
+                    return (
+                      <div style={{ marginBottom: 10, padding: 6, background: "rgba(255,213,79,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 4 }}>
+                        <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>✨ 気質: 応援を受け出目を1つ+1</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+                          {targets.map(({ d, i }) => (
+                            <button key={i} onClick={() => upd(p => {
+                              const dice = [...(p.currentScene.actionDice || [])];
+                              dice[i] = Math.min(6, dice[i] + 1);
+                              return { ...p, currentScene: { ...p.currentScene, actionDice: dice, kishitsuUsed: true, fumbleResolved: false, specialResolved: false }, log: [`✨ ${pc.charName} の《気質を見極める程度の能力》: 応援を受け出目を ${d}→${d + 1} に変更`, ...p.log] };
+                            })} style={btnFull("rgba(255,213,79,0.16)", C.goldDim, C.gold, { width: "auto", fontSize: 10, padding: "3px 8px" })}>{d}→{d + 1}</button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
                   {isFumble && !sc.fumbleCanceled ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
