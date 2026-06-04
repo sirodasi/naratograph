@@ -109,6 +109,7 @@ export const ABILITY_EFFECTS = {
   // 移動BFS拡張（App.jsx getAbilityMoveEdges で getDistances に追加エッジを供給）
   "壁をすり抜けられる程度の能力":   { passive: true, note: "移動時、同エリア内のスポット同士がルートで繋がる（移動BFSで自動対応）" },
   "壁をすり抜けられる程度の能力＋": { passive: true, note: "同上＋現在地と10の位±1のスポットも繋がる（移動BFSで自動対応）" },
+  "坤を創造する程度の能力":         { passive: true, note: "人間の里⇔守矢神社の移動置換（保持者がセッションにいる時、11/22のPCに移動UI）" },
   "坤を創造する程度の能力＋":       { passive: true, note: "人間の里↔守矢神社にルート（保持者本人に自動対応・他キャラへの付与はGM）" },
   // 死を操る：異世界エリアとそれ以外を行き来するワープ（move_or_stay にUIあり）。base=移動の代わり/＋=ワープ後に通常移動。
   "死を操る程度の能力":   { passive: true, note: "移動の代わりに異世界エリア⇔それ以外へワープ（移動画面で自動対応）" },

@@ -7235,6 +7235,21 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 );
               })()}
 
+              {/* 坤を創造する程度の能力（諏訪子・サポート）: 人間の里(11)⇔守矢神社(22) の移動。保持者がセッションにいる時に可。 */}
+              {(pc.currentSpot === "11" || pc.currentSpot === "22") && gs.pcs.some(x => getActiveAbility(x)?.name === "坤を創造する程度の能力") && (() => {
+                const dest = pc.currentSpot === "11" ? "22" : "11";
+                return (
+                  <button onClick={() => upd(p => ({
+                    ...p,
+                    pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, currentSpot: dest }),
+                    currentScene: { ...p.currentScene, phase: "action" },
+                    log: [`🌐 ${pc.charName}《坤を創造する程度の能力》: [${getSpot(dest)?.name}] へ移動`, ...p.log],
+                  }))} style={btnFull("rgba(129,199,132,0.14)", C.greenBorder, C.green, { fontSize: 10 })}>
+                    🌐 坤: {getSpot(dest)?.name} へ移動
+                  </button>
+                );
+              })()}
+
               {/* インドア派: 移動の代わりに拠点へテレポート */}
               {pc.ps?.name === "インドア派" && pc.currentSpot !== pc.baseSpotId && (
                 <button onClick={() => upd(p => ({
