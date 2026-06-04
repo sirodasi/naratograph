@@ -6598,6 +6598,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events:[], desc: "" };
   const [fusuiSel, setFusuiSel] = useState(null); // 風水：振り直し対象のダイス添字配列（null=非選択モード）
   const [kyoukiSel, setKyoukiSel] = useState(null); // 狂気：観戦保持者が振り直す対象のダイス添字配列（null=非選択モード）
+  const [unmeiSel, setUnmeiSel] = useState(null); // 運命＋：裏返す対象のダイス添字配列（null=非選択モード）
   const myPc = gs.pcs.find(p => p.uid === user?.uid); // 操作中ユーザーのPC（観戦者能力の判定用）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
@@ -7357,17 +7358,27 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const pendingSpecial = isSpecial && !isFumble && !sc.specialResolved;
             const canProceed   = !pendingFumble && !pendingSpecial;
 
+            // 狂気（観戦保持者）の振り直し可能数：base=霊力3で1個、＋=霊力3点ごとに1個
+            const kyoukiName = getActiveAbility(myPc)?.name;
+            const kyoukiPlus = kyoukiName === "狂気を操る程度の能力＋";
+            const kyoukiHolder = myPc && myPc.uid !== pc.uid && myPc.currentSpot === pc.currentSpot
+              && (kyoukiName === "狂気を操る程度の能力" || kyoukiPlus);
+            const myRei = myPc?.resources?.霊力?.cur || 0;
+            const kyoukiMax = kyoukiPlus ? Math.floor(myRei / 3) : (myRei >= 3 ? 1 : 0);
+
             return (
               <div style={{ textAlign: "center" }}>
                 <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
                   {sc.actionDice?.map((d, i) => {
                     const fusuiOn  = fusuiSel !== null;
                     const kyoukiOn = kyoukiSel !== null;
-                    const selecting = fusuiOn || kyoukiOn;
-                    const picked = (fusuiOn && fusuiSel.includes(i)) || (kyoukiOn && kyoukiSel.includes(i));
+                    const unmeiOn  = unmeiSel !== null;
+                    const selecting = fusuiOn || kyoukiOn || unmeiOn;
+                    const picked = (fusuiOn && fusuiSel.includes(i)) || (kyoukiOn && kyoukiSel.includes(i)) || (unmeiOn && unmeiSel.includes(i));
                     const onDie = !selecting ? undefined : () => {
                       if (fusuiOn) setFusuiSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]);
-                      else setKyoukiSel(s => s.includes(i) ? s.filter(k => k !== i) : (s.length < 1 ? [...s, i] : s)); // 狂気base: 1個まで
+                      else if (unmeiOn) setUnmeiSel(s => s.includes(i) ? s.filter(k => k !== i) : [...s, i]);
+                      else setKyoukiSel(s => s.includes(i) ? s.filter(k => k !== i) : (s.length < kyoukiMax ? [...s, i] : s)); // 狂気: 霊力に応じた個数まで
                     };
                     return (
                       <div key={i} onClick={onDie}
@@ -7400,27 +7411,27 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   )
                 )}
 
-                {/* 狂気を操る程度の能力（サポート）: 同スポットの保持者が霊力3消費で判定ダイス1つを振り直す（観戦者操作） */}
-                {myPc && myPc.uid !== pc.uid && myPc.currentSpot === pc.currentSpot && (sc.actionDice?.length > 0) && getActiveAbility(myPc)?.name === "狂気を操る程度の能力" && (myPc.resources?.霊力?.cur || 0) >= 3 && (
+                {/* 狂気を操る程度の能力（サポート）: 同スポットの保持者が霊力3点ごとに判定ダイス1つを振り直す（観戦者操作）。base=1個 / ＋=霊力に応じ複数 */}
+                {kyoukiHolder && (sc.actionDice?.length > 0) && kyoukiMax > 0 && (
                   kyoukiSel === null ? (
-                    <button onClick={() => setKyoukiSel([])} style={{ ...btnFull("rgba(156,39,176,0.16)", C.purpleBorder, C.purple, { fontSize: 10 }), marginBottom: 10 }}>🌀 狂気: 霊力3で1つ振り直す（{myPc.charName}）</button>
+                    <button onClick={() => setKyoukiSel([])} style={{ ...btnFull("rgba(156,39,176,0.16)", C.purpleBorder, C.purple, { fontSize: 10 }), marginBottom: 10 }}>🌀 狂気: 霊力3ごとに振り直す（{myPc.charName}・最大{kyoukiMax}個）</button>
                   ) : (
                     <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
                       <button disabled={kyoukiSel.length === 0} onClick={() => {
-                        const idx = kyoukiSel[0]; setKyoukiSel(null);
-                        animateDice(1, "狂気（振り直し）", res => upd(p => {
+                        const sel = kyoukiSel; setKyoukiSel(null);
+                        animateDice(sel.length, "狂気（振り直し）", res => upd(p => {
                           const dice = [...(p.currentScene.actionDice || [])];
-                          dice[idx] = res[0];
+                          sel.forEach((idx, k) => { dice[idx] = res[k]; });
                           const r = myPc.resources.霊力 || { cur: 0, max: 20 };
-                          const nextRei = Math.max(0, r.cur - 3);
+                          const nextRei = Math.max(0, r.cur - 3 * sel.length);
                           return {
                             ...p,
                             pcs: p.pcs.map(x => x.uid === myPc.uid ? { ...x, resources: { ...x.resources, 霊力: { ...r, cur: nextRei }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextRei / 5) } } } : x),
                             currentScene: { ...p.currentScene, actionDice: dice, fumbleResolved: false, specialResolved: false },
-                            log: [`🌀 ${myPc.charName} の《狂気を操る程度の能力》: 霊力3を消費し ${pc.charName} のダイス1つを振り直した`, ...p.log],
+                            log: [`🌀 ${myPc.charName} の《狂気を操る程度の能力》: 霊力${3 * sel.length}を消費し ${pc.charName} のダイス${sel.length}個を振り直した`, ...p.log],
                           };
                         }));
-                      }} style={btnFull(kyoukiSel.length ? "rgba(156,39,176,0.2)" : "rgba(255,255,255,0.04)", kyoukiSel.length ? C.purpleBorder : C.border, kyoukiSel.length ? C.purple : C.textFaint, { fontSize: 10 })}>振り直す</button>
+                      }} style={btnFull(kyoukiSel.length ? "rgba(156,39,176,0.2)" : "rgba(255,255,255,0.04)", kyoukiSel.length ? C.purpleBorder : C.border, kyoukiSel.length ? C.purple : C.textFaint, { fontSize: 10 })}>振り直す（{kyoukiSel.length}個・霊力{3 * kyoukiSel.length}）</button>
                       <button onClick={() => setKyoukiSel(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 })}>やめる</button>
                     </div>
                   )
@@ -7436,6 +7447,30 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   }))} style={{ ...btnFull("rgba(156,39,176,0.16)", C.purpleBorder, C.purple, { fontSize: 10 }), marginBottom: 10 }}>
                     🔄 運命: 出目を全て裏返す
                   </button>
+                )}
+
+                {/* 運命を操る程度の能力＋（サポート・1日1回）: 好きな数だけ出目を裏返す（選択式） */}
+                {isMyTurn && (sc.actionDice?.length > 0) && getActiveAbility(pc)?.name === "運命を操る程度の能力＋" && pc.abilityUse?.["運命を操る程度の能力＋"]?.day !== gs.day && (
+                  unmeiSel === null ? (
+                    <button onClick={() => setUnmeiSel([])} style={{ ...btnFull("rgba(156,39,176,0.16)", C.purpleBorder, C.purple, { fontSize: 10 }), marginBottom: 10 }}>🔄 運命＋: 裏返すダイスを選ぶ</button>
+                  ) : (
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
+                      <button disabled={unmeiSel.length === 0} onClick={() => {
+                        const sel = unmeiSel; setUnmeiSel(null);
+                        upd(p => {
+                          const dice = [...(p.currentScene.actionDice || [])];
+                          sel.forEach(idx => { dice[idx] = 7 - dice[idx]; });
+                          return {
+                            ...p,
+                            pcs: p.pcs.map(x => x.uid === pc.uid ? { ...x, abilityUse: { ...(x.abilityUse || {}), "運命を操る程度の能力＋": { ...(x.abilityUse?.["運命を操る程度の能力＋"] || {}), day: gs.day } } } : x),
+                            currentScene: { ...p.currentScene, actionDice: dice, fumbleResolved: false, specialResolved: false },
+                            log: [`🔄 ${pc.charName} の《運命を操る程度の能力＋》: ${sel.length}個の出目を裏返した`, ...p.log],
+                          };
+                        });
+                      }} style={btnFull(unmeiSel.length ? "rgba(156,39,176,0.2)" : "rgba(255,255,255,0.04)", unmeiSel.length ? C.purpleBorder : C.border, unmeiSel.length ? C.purple : C.textFaint, { fontSize: 10 })}>裏返す（{unmeiSel.length}個）</button>
+                      <button onClick={() => setUnmeiSel(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 10 })}>やめる</button>
+                    </div>
+                  )
                 )}
 
                 <div style={{ fontSize: 18, color: isSuccess ? C.green : C.red, fontWeight: "bold", marginBottom: 12, animation: "diceResultIn 0.42s 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
