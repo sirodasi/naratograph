@@ -53,6 +53,10 @@ Lobby → PrepRoom → Intro → Explore → Battle → (Bonus) → Epilogue →
 
 Phase is tracked as `gs.sessionPhase` and transitions are explicit with confirmation modals.
 
+### Responsive / Mobile
+
+`useIsMobile(breakpoint = 820)` ([src/useIsMobile.js](src/useIsMobile.js), shared to avoid an App↔Lobby import cycle) drives layout switches via `window.matchMedia`. On mobile (`SessionApp`): the `RightPanel` (normally a fixed 300px sidebar) becomes a right-side **drawer** (`min(90vw,360px)`, `translateX` toggled by a floating ☰/✕ button + tap-backdrop); content (map/battle) goes full-width. `RightPanel` takes a `width` prop (300 desktop / "100%" mobile). The drawer **auto-opens** when `currentScene.pcUid === user.uid` (your turn), and the button pulses (`panelAlertGlow`) while your scene is active and the drawer is closed. `PrepRoom` (Lobby) stacks its two columns (`flexDirection` column) and wraps the header on mobile; the character grid already uses `auto-fill`. Battle grids (`BattleGrid` fixed 210px) wrap via the existing `flexWrap`; modals are `width: "90%"` + `maxWidth`.
+
 ### State Management
 
 Firebase Realtime Database is the **only** source of truth. The `gs` (game state) object is synced to `rooms/{roomCode}/state`. All mutations go through the `upd()` callback:
