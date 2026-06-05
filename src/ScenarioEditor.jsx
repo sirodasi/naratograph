@@ -1143,12 +1143,23 @@ function ProfilePage({ onClose }) {
   };
 
   const saveName = async()=> {
-    if(!newName.trim())return;
+    const u = auth.currentUser; // 最新のユーザーを取得（キャプチャ済み user の失効対策）
+    if(!newName.trim()||!u||nameSaving)return;
     setNameSaving(true);
-    await updateProfile(user,{displayName:newName.trim()}).catch(()=> {});
-    setNameSaving(false);
-    setNameSaved(true);
-    setTimeout(() => setNameSaved(false),2500);
+    try {
+      // updateProfile がハングしてもUIが固まらないよう8秒でタイムアウトさせる
+      await Promise.race([
+        updateProfile(u,{displayName:newName.trim()}),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),8000)),
+      ]);
+      setNameSaved(true);
+      setTimeout(() => setNameSaved(false),2500);
+    } catch(e) {
+      console.error("表示名の保存に失敗", e);
+      alert("表示名の保存に失敗しました。通信状況を確認して、もう一度お試しください。");
+    } finally {
+      setNameSaving(false); // 成功/失敗/タイムアウトに関わらず必ず解除
+    }
   };
 
   const saveScenario = async(sc)=> {

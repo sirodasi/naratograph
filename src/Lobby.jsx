@@ -118,10 +118,17 @@ function UsernameSetup({ user, onDone }) {
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    if (!name.trim()) return;
+    const u = auth.currentUser || user;
+    if (!name.trim() || saving) return;
     setSaving(true);
-    await updateProfile(user, { displayName: name.trim() }).catch(() => {});
-    onDone(name.trim());
+    try {
+      // updateProfile がハングしても先に進めるよう8秒でタイムアウト
+      await Promise.race([
+        updateProfile(u, { displayName: name.trim() }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
+      ]);
+    } catch (e) { console.error("表示名の保存に失敗", e); }
+    onDone(name.trim()); // 保存失敗時もローカル名で続行
   };
 
   return (
