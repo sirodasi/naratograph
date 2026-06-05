@@ -287,6 +287,8 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [showProfile, setShowProfile]     = useState(false);
   const [selectedChar, setSelectedChar]   = useState(null);
+  const [selectedGrownId, setSelectedGrownId] = useState(null); // 成長インスタンスを選択中ならそのID（未成長は null）
+  const [myGrownChars, setMyGrownChars]   = useState({}); // { instanceId: { charId, charName, ds, tags, enhancementsUsed, specialBond, ... } }
   const [selectedSkillId, setSelectedSkillId] = useState(null);
   const [diceResult, setDiceResult]       = useState(null);
   const [diceAnim, setDiceAnim]           = useState(false);
@@ -308,6 +310,16 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
     });
     return () => unsub();
   }, [roomCode]);
+
+  // 自分の成長済みキャラ（インスタンス）を読み込み
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await get(ref(db, `grownChars/${user.uid}`));
+        setMyGrownChars(snap.exists() ? snap.val() : {});
+      } catch { /* noop */ }
+    })();
+  }, [user.uid]);
 
   // セッション開始後はリロードして SessionApp へ遷移
   useEffect(() => {
@@ -341,13 +353,9 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
 
   const confirmChar = async () => {
     if (!selectedChar) return;
-    // 過去セッションの成長記録（playerGrowth/{uid}/{charId}）を読み込んで反映する
-    let growth = null;
-    try {
-      const snap = await get(ref(db, `playerGrowth/${user.uid}/${selectedChar.id}`));
-      if (snap.exists()) growth = snap.val();
-    } catch (e) { /* 読めなくても続行 */ }
-    const used = growth?.enhancementsUsed || [];
+    // 成長インスタンスを選んでいればその成長を反映、未成長なら素のキャラ
+    const grown = selectedGrownId ? myGrownChars[selectedGrownId] : null;
+    const used = grown?.enhancementsUsed || [];
     await update(ref(db, `rooms/${roomCode}/players/${user.uid}`), {
       charId:        selectedChar.id,
       charName:      selectedChar.name,
@@ -356,12 +364,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       base:          selectedChar.base || "人間の里",
       customPortrait: selectedChar.customPortrait || null,
       // 成長: タグは基本＋獲得タグ、弾幕は再修得があれば上書き、強化フラグ/特別な絆を反映
-      tags:          [...(selectedChar.tags || []), ...((growth?.tags) || [])],
+      tags:          [...(selectedChar.tags || []), ...((grown?.tags) || [])],
       as:  selectedChar.as ?? null,
-      ds:  growth?.ds || selectedChar.ds || null,
+      ds:  grown?.ds || selectedChar.ds || null,
       growthAbilityUnlocked: used.includes("ability"),
       growthSpellUnlocked:   used.includes("spell"),
-      specialBond:           growth?.specialBond || null,
+      specialBond:           grown?.specialBond || null,
+      grownInstanceId:       selectedGrownId || null,
     });
     setStep("skillSelect");
   };
@@ -556,11 +565,11 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                   const taken = Object.values(room.players || {}).some(p => p.charId === c.id && p.uid !== user.uid);
                   const banned = (room.scenarioData?.bannedChars || []).includes(c.name);
                   const disabled = taken || banned;
-                  const isSel = selectedChar?.id === c.id;
+                  const isSel = selectedChar?.id === c.id && !selectedGrownId; // 未成長として選択中
                   return (
                     <div
                       key={c.id}
-                      onClick={() => { if (!disabled) setSelectedChar(isSel ? null : c); }}
+                      onClick={() => { if (!disabled) { setSelectedGrownId(null); setSelectedChar(isSel ? null : c); } }}
                       style={{ border: `2px solid ${isSel ? C.gold : disabled ? "#1e2535" : "rgba(255,255,255,0.05)"}`, borderRadius: 5, padding: 4, cursor: disabled ? "not-allowed" : "pointer", background: isSel ? C.goldBg : disabled ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.02)", opacity: disabled ? 0.35 : 1, textAlign: "center", animation: `lbFadeUp 0.28s ${Math.min(i * 0.015, 0.5).toFixed(2)}s both` }}
                     >
                       <CharSprite spriteRow={c.spriteRow} spriteCol={c.spriteCol} size={66} style={{ margin: "0 auto" }} />
@@ -570,7 +579,42 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 })}
               </div>
 
-              {selectedChar && (
+              {/* 成長済みキャラクター（自分の成長インスタンス・未成長とは別扱い） */}
+              {Object.keys(myGrownChars).length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 9, color: C.gold, letterSpacing: 2, marginBottom: 6 }}>★ 成長済みキャラクター</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(112px,1fr))", gap: 5, maxHeight: 220, overflowY: "auto" }}>
+                    {Object.entries(myGrownChars).map(([iid, g]) => {
+                      const base = CHARACTERS.find(c => c.id === g.charId);
+                      if (!base) return null;
+                      const taken = Object.values(room.players || {}).some(p => p.charId === g.charId && p.uid !== user.uid);
+                      const banned = (room.scenarioData?.bannedChars || []).includes(g.charName);
+                      const disabled = taken || banned;
+                      const isSel = selectedGrownId === iid;
+                      const enh = (g.enhancementsUsed || []).map(e => e === "spell" ? "追加スペカ" : e === "ability" ? "能力＋" : "特別な絆").join("・");
+                      return (
+                        <div
+                          key={iid}
+                          onClick={() => { if (disabled) return; if (isSel) { setSelectedChar(null); setSelectedGrownId(null); } else { setSelectedChar(base); setSelectedGrownId(iid); } }}
+                          style={{ border: `2px solid ${isSel ? C.gold : disabled ? "#1e2535" : C.goldDim}`, borderRadius: 5, padding: 5, cursor: disabled ? "not-allowed" : "pointer", background: isSel ? C.goldBg : disabled ? "rgba(0,0,0,0.3)" : "rgba(255,213,79,0.05)", opacity: disabled ? 0.35 : 1, textAlign: "center" }}
+                        >
+                          <CharSprite spriteRow={base.spriteRow} spriteCol={base.spriteCol} size={48} style={{ margin: "0 auto" }} />
+                          <div style={{ fontSize: 8, color: C.gold, marginTop: 2, lineHeight: 1.3 }}>★{g.charName}</div>
+                          <div style={{ fontSize: 7, color: C.textFaint, lineHeight: 1.3, marginTop: 1 }}>{(g.tags || []).slice(0, 2).join("・")}{enh ? ` / ${enh}` : ""}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {selectedChar && (() => {
+                const grown = selectedGrownId ? myGrownChars[selectedGrownId] : null;
+                const dsShow = grown?.ds || selectedChar.ds;
+                const tagsShow = [...(selectedChar.tags || []), ...((grown?.tags) || [])];
+                const enhLabels = (grown?.enhancementsUsed || []).map(e => e === "spell" ? "追加スペカ取得" : e === "ability" ? "能力スキル＋" : "特別な絆");
+                const abilityShow = (grown?.enhancementsUsed || []).includes("ability") ? selectedChar.growthAbility : selectedChar.as;
+                return (
                 <div style={{ padding: 14, background: C.goldBg, border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
                   <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
                     {selectedChar.customPortrait
@@ -578,24 +622,35 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                       : <CharSprite spriteRow={selectedChar.spriteRow} spriteCol={selectedChar.spriteCol} size={80} />
                     }
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 15, color: C.gold, marginBottom: 4 }}>{selectedChar.name}</div>
-                      <div style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>タグ: {selectedChar.tags?.map(t => `《${t}》`).join(" ")}</div>
+                      <div style={{ fontSize: 15, color: C.gold, marginBottom: 4 }}>{selectedChar.name}{grown && <span style={{ fontSize: 10, marginLeft: 6, padding: "1px 6px", background: "rgba(255,213,79,0.2)", border: `1px solid ${C.goldDim}`, borderRadius: 8 }}>★成長済み</span>}</div>
+                      <div style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>タグ: {tagsShow.map(t => `《${t}》`).join(" ")}</div>
                       <div style={{ fontSize: 10, color: C.textDim }}>拠点: {selectedChar.base}</div>
                     </div>
                   </div>
-                  <div style={S.sec}>【能力スキル】{selectedChar.as?.name} ({selectedChar.as?.type})</div>
-                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{selectedChar.as?.desc}</div>
-                  <div style={S.sec}>【弾幕スキル】{selectedChar.ds?.name}</div>
-                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{selectedChar.ds?.desc}</div>
+                  {grown && (
+                    <div style={{ padding: 8, background: "rgba(255,213,79,0.07)", border: `1px solid ${C.goldDim}`, borderRadius: 4, marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: C.gold, marginBottom: 3 }}>★ 成長内容</div>
+                      {enhLabels.length > 0 && <div style={{ fontSize: 9, color: C.textDim }}>強化: {enhLabels.join(" / ")}</div>}
+                      {grown.specialBond && <div style={{ fontSize: 9, color: C.textDim }}>特別な絆: 《{grown.specialBond.target}への{grown.specialBond.word || "敬意"}》（親密度{grown.specialBond.intimacy ?? 1}）</div>}
+                    </div>
+                  )}
+                  <div style={S.sec}>【能力スキル】{abilityShow?.name} ({abilityShow?.type})</div>
+                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{abilityShow?.desc}</div>
+                  <div style={S.sec}>【弾幕スキル】{dsShow?.name}</div>
+                  <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{dsShow?.desc}</div>
                   <div style={S.sec}>【スペルカード】</div>
                   {selectedChar.spellCards?.map((sc, i) => (
                     <div key={i} style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>・{sc}</div>
                   ))}
+                  {(grown?.enhancementsUsed || []).includes("spell") && selectedChar.growthSpellCard && (
+                    <div style={{ fontSize: 10, color: C.gold, marginBottom: 2 }}>・{typeof selectedChar.growthSpellCard === "string" ? selectedChar.growthSpellCard : selectedChar.growthSpellCard?.name}（追加）</div>
+                  )}
                   <button onClick={confirmChar} style={{ ...btn(C.goldBg, C.goldDim, C.gold, { width: "100%", marginTop: 12 }) }}>
-                    このキャラクターで決定する →
+                    {grown ? "★この成長キャラで決定する →" : "このキャラクターで決定する →"}
                   </button>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 

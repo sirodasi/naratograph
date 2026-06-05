@@ -4806,7 +4806,7 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
 // ─── 成長セレモニー（PCの成長／強化） ──────────────────────────────
 // ルール: セッション終了時、各PCは「成長」(弾幕スキル再修得＋タグ獲得・両方可)と
 // 「強化」(追加スペカ／能力スキル＋／特別な絆・いずれか1つ、各強化は生涯1回)を受けられる。
-// 永続化は Firebase playerGrowth/{uid}/{charId}。親密度のライブ機構は別途。
+// 永続化は Firebase grownChars/{uid}/{instanceId}（成長キャラはインスタンス単位で分離）。親密度のライブ機構は別途。
 const ENHANCE_LABELS = { spell: "追加スペルカードの取得", ability: "能力スキルの強化（＋）", bond: "特別な絆の獲得" };
 
 function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
@@ -4829,15 +4829,15 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
   const [done, setDone] = useState({});        // uid -> true（適用済み）
   const [loading, setLoading] = useState(true);
 
-  // 既存の成長レコードを読み込み（生涯1回の強化判定に使用）
+  // 既存の成長インスタンスを読み込み（成長キャラで参加した場合のみ。生涯1回の強化判定に使用）
   useEffect(() => {
     let alive = true;
     (async () => {
       const acc = {};
       for (const pc of myPcs) {
-        if (!pc.charId) continue;
+        if (!pc.grownInstanceId) continue; // 未成長キャラは既存レコードなし
         try {
-          const snap = await dbGet(dbRef(db, `playerGrowth/${pc.uid}/${pc.charId}`));
+          const snap = await dbGet(dbRef(db, `grownChars/${pc.uid}/${pc.grownInstanceId}`));
           if (snap.exists()) acc[pc.uid] = snap.val();
         } catch (e) { /* 読めなくても続行 */ }
       }
@@ -4868,15 +4868,21 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
         specialBond = { target: target?.charName || "?", targetUid: form.bondTarget || null, intimacy: 1, word }; // 新規取得で旧絆は上書き（消失）
       }
     }
+    // インスタンスID: 成長キャラで参加していれば更新、未成長なら新規（＝別の成長キャラとして分離）
+    const instanceId = pc.grownInstanceId || `g_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const record = {
-      ds: chosenDs || existing.ds || null,
-      tags: newTag ? [...(existing.tags || []), newTag] : (existing.tags || []),
+      charId: pc.charId || null,
+      charName: pc.charName || "?",
+      ds: chosenDs || existing.ds || pc.ds || null,
+      tags: newTag ? [...(existing.tags || []), newTag] : (existing.tags || []), // 成長で獲得したタグのみ（基本タグは選択時に合成）
       enhancementsUsed: [...usedSet],
       specialBond: specialBond || null,
+      createdAt: existing.createdAt || Date.now(),
+      updatedAt: Date.now(),
     };
     // Firebase 永続化（charId が無い独自キャラはスキップ）
     if (pc.charId) {
-      try { await dbSet(dbRef(db, `playerGrowth/${pc.uid}/${pc.charId}`), record); } catch (e) { console.error(e); }
+      try { await dbSet(dbRef(db, `grownChars/${pc.uid}/${instanceId}`), record); } catch (e) { console.error(e); }
     }
     // gs にも反映（表示・エクスポート用）
     const logs = [];
@@ -4887,6 +4893,7 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
       ...p,
       pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
         ...x,
+        grownInstanceId: instanceId,
         ds: chosenDs || x.ds,
         tags: newTag ? Array.from(new Set([...(x.tags || []), newTag])) : x.tags,
         growthAbilityUnlocked: x.growthAbilityUnlocked || usedSet.has("ability"),

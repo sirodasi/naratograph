@@ -862,6 +862,7 @@ function SessionApp({ roomCode, user }) {
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,
           growthAbilityUnlocked: p.growthAbilityUnlocked ?? false,
           specialBond: p.specialBond ?? null, // 成長で獲得した特別な絆 { target, targetUid, intimacy }
+          grownInstanceId: p.grownInstanceId ?? null, // 成長キャラのインスタンスID（未成長は null）
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
           baseSpotId,
@@ -1541,7 +1542,18 @@ export default function App() {
     if (!roomCode) return;
     const roomRef = ref(db, `rooms/${roomCode}`);
     const unsub   = onValue(roomRef, snap => {
-      setRoomPhase(snap.exists() ? (snap.val().phase || "prep") : "error");
+      if (!snap.exists()) {
+        // ルームが存在しない（セッション終了で削除 or 不正URL）→ ロビーへ戻る
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("room");
+          window.history.replaceState({}, "", url);
+        } catch { /* noop */ }
+        setRoomCode(null);
+        setRoomPhase(null);
+        return;
+      }
+      setRoomPhase(snap.val().phase || "prep");
     });
     return () => unsub();
   }, [roomCode]);
