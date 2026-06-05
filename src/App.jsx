@@ -857,6 +857,7 @@ function SessionApp({ roomCode, user }) {
           growthAbility: p.growthAbility ?? charData?.growthAbility ?? null,
           growthSpellUnlocked: p.growthSpellUnlocked ?? false,
           growthAbilityUnlocked: p.growthAbilityUnlocked ?? false,
+          specialBond: p.specialBond ?? null, // 成長で獲得した特別な絆 { target, targetUid, intimacy }
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
           baseSpotId,
@@ -1279,7 +1280,7 @@ function SessionApp({ roomCode, user }) {
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
         {gs.sessionPhase === "end" ? (
-          <SessionEndView gs={gs} upd={upd} isGm={mode === "gm"} />
+          <SessionEndView gs={gs} upd={upd} isGm={mode === "gm"} user={user} />
         ) : gs.sessionPhase === "battle_bonus" ? (
           <BonusPhaseView
             gs={gs} upd={upd} user={user} isGm={mode === "gm"}

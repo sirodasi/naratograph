@@ -10,6 +10,8 @@ import { getSpellCardEffect } from "./data/spellCardEffects";
 import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
+import { db } from "./firebase";
+import { ref as dbRef, set as dbSet, get as dbGet } from "firebase/database";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
@@ -4672,10 +4674,192 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
   );
 }
 
+// ─── 成長セレモニー（PCの成長／強化） ──────────────────────────────
+// ルール: セッション終了時、各PCは「成長」(弾幕スキル再修得＋タグ獲得・両方可)と
+// 「強化」(追加スペカ／能力スキル＋／特別な絆・いずれか1つ、各強化は生涯1回)を受けられる。
+// 永続化は Firebase playerGrowth/{uid}/{charId}。親密度のライブ機構は別途。
+const ENHANCE_LABELS = { spell: "追加スペルカードの取得", ability: "能力スキルの強化（＋）", bond: "特別な絆の獲得" };
+
+function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
+  // 操作対象PC（GMは全員、PLは自分のPCのみ）
+  const myPcs = (gs.pcs || []).filter(pc => isGm || pc.uid === user?.uid);
+  // セッションに登場したキャラの弾幕スキルプール（PC＋シナリオNPC）
+  const danmakuPool = (() => {
+    const map = new Map();
+    (gs.pcs || []).forEach(pc => { if (pc.ds?.name) map.set(pc.ds.name, pc.ds); });
+    const sd = gs.scenarioData || {};
+    const collect = e => { if (e?.ds?.name) map.set(e.ds.name, e.ds); };
+    (sd.quests || []).forEach(q => collect(q.enemy));
+    (sd.finalBattleEnemies || []).forEach(collect);
+    (gs.quests || []).forEach(q => collect(q.enemy));
+    return [...map.values()];
+  })();
+
+  const [records, setRecords] = useState({}); // uid -> Firebase既存成長レコード
+  const [forms, setForms] = useState({});     // uid -> { newDs, newTag, enhance, bondTarget }
+  const [done, setDone] = useState({});        // uid -> true（適用済み）
+  const [loading, setLoading] = useState(true);
+
+  // 既存の成長レコードを読み込み（生涯1回の強化判定に使用）
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const acc = {};
+      for (const pc of myPcs) {
+        if (!pc.charId) continue;
+        try {
+          const snap = await dbGet(dbRef(db, `playerGrowth/${pc.uid}/${pc.charId}`));
+          if (snap.exists()) acc[pc.uid] = snap.val();
+        } catch (e) { /* 読めなくても続行 */ }
+      }
+      if (alive) { setRecords(acc); setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const setForm = (uid, patch) => setForms(f => ({ ...f, [uid]: { ...(f[uid] || {}), ...patch } }));
+
+  const applyGrowth = async (pc) => {
+    const form = forms[pc.uid] || {};
+    const existing = records[pc.uid] || {};
+    const usedSet = new Set(existing.enhancementsUsed || []);
+    // 弾幕再修得
+    const chosenDs = form.newDs ? danmakuPool.find(d => d.name === form.newDs) : null;
+    // タグ
+    const newTag = (form.newTag || "").trim();
+    // 強化（未使用のもののみ）
+    let specialBond = existing.specialBond || null;
+    let enhanceApplied = null;
+    if (form.enhance && !usedSet.has(form.enhance)) {
+      usedSet.add(form.enhance);
+      enhanceApplied = form.enhance;
+      if (form.enhance === "bond") {
+        const target = gs.pcs.find(x => x.uid === form.bondTarget);
+        specialBond = { target: target?.charName || "?", targetUid: form.bondTarget || null, intimacy: 1 }; // 新規取得で旧絆は上書き（消失）
+      }
+    }
+    const record = {
+      ds: chosenDs || existing.ds || null,
+      tags: newTag ? [...(existing.tags || []), newTag] : (existing.tags || []),
+      enhancementsUsed: [...usedSet],
+      specialBond: specialBond || null,
+    };
+    // Firebase 永続化（charId が無い独自キャラはスキップ）
+    if (pc.charId) {
+      try { await dbSet(dbRef(db, `playerGrowth/${pc.uid}/${pc.charId}`), record); } catch (e) { console.error(e); }
+    }
+    // gs にも反映（表示・エクスポート用）
+    const logs = [];
+    if (chosenDs) logs.push(`弾幕スキルを《${chosenDs.name}》に再修得`);
+    if (newTag) logs.push(`タグ《${newTag}》を獲得`);
+    if (enhanceApplied) logs.push(ENHANCE_LABELS[enhanceApplied]);
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
+        ...x,
+        ds: chosenDs || x.ds,
+        tags: newTag ? Array.from(new Set([...(x.tags || []), newTag])) : x.tags,
+        growthAbilityUnlocked: x.growthAbilityUnlocked || usedSet.has("ability"),
+        growthSpellUnlocked: x.growthSpellUnlocked || usedSet.has("spell"),
+        specialBond: record.specialBond || x.specialBond || null,
+      }),
+      log: [`🌟 ${pc.charName} が成長した：${logs.join(" / ") || "（変更なし）"}`, ...p.log],
+    }));
+    setRecords(r => ({ ...r, [pc.uid]: record }));
+    setDone(d => ({ ...d, [pc.uid]: true }));
+    sfx.skillActivate();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease", padding: 16 }} onClick={onClose}>
+      <div style={{ background: "linear-gradient(180deg,#0d1122,#07090f)", border: `2px solid ${C.goldDim}`, borderRadius: 10, padding: "22px 22px 18px", maxWidth: 560, width: "100%", maxHeight: "88vh", overflowY: "auto", boxShadow: `0 0 40px ${C.gold}22`, animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+        <div style={{ textAlign: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: C.gold, marginBottom: 3 }}>◆ 成長 ◆</div>
+          <div style={{ fontSize: 15, color: C.gold, letterSpacing: 2 }}>PCの成長と強化</div>
+          <div style={{ fontSize: 9, color: C.textFaint, marginTop: 4, lineHeight: 1.7 }}>成長させる出来事があったと感じたなら、弾幕スキル再修得＋タグ獲得（両方可）と、強化1つ（各強化は生涯1回）を受けられます</div>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", color: C.textFaint, fontSize: 11, padding: "20px 0" }}>成長記録を読み込み中…</div>
+        ) : myPcs.length === 0 ? (
+          <div style={{ textAlign: "center", color: C.textFaint, fontSize: 11, padding: "20px 0" }}>成長させられるPCがいません</div>
+        ) : myPcs.map(pc => {
+          const form = forms[pc.uid] || {};
+          const rec = records[pc.uid] || {};
+          const used = new Set(rec.enhancementsUsed || []);
+          const isDone = done[pc.uid];
+          return (
+            <div key={pc.uid} style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.03)", border: `1px solid ${isDone ? C.greenBorder : C.border}`, borderRadius: 6, opacity: isDone ? 0.7 : 1 }}>
+              <div style={{ fontSize: 13, color: C.gold, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>{pc.charName}</span>
+                {isDone && <span style={{ fontSize: 10, color: C.green }}>✅ 適用済み</span>}
+              </div>
+              {isDone ? (
+                <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.8 }}>
+                  弾幕: {pc.ds?.name || "-"} ／ タグ: {(pc.tags || []).join("・")}
+                  {pc.specialBond && <div>特別な絆: 《{pc.specialBond.target}への敬意》（親密度{pc.specialBond.intimacy}）</div>}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* 弾幕スキル再修得 */}
+                  <div>
+                    <div style={{ fontSize: 10, color: C.blue, marginBottom: 3 }}>弾幕スキルの再修得（現在: {pc.ds?.name || "なし"}）</div>
+                    <select value={form.newDs || ""} onChange={e => setForm(pc.uid, { newDs: e.target.value })} style={{ ...iStyle, width: "100%", fontSize: 11, padding: "5px 6px" }}>
+                      <option value="">（再修得しない）</option>
+                      {danmakuPool.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                    </select>
+                    {form.newDs && <div style={{ fontSize: 9, color: C.textFaint, marginTop: 3, lineHeight: 1.6 }}>{danmakuPool.find(d => d.name === form.newDs)?.desc}</div>}
+                  </div>
+                  {/* タグ獲得 */}
+                  <div>
+                    <div style={{ fontSize: 10, color: C.blue, marginBottom: 3 }}>タグの獲得（自由記述・絆/スペカ不可）</div>
+                    <input value={form.newTag || ""} onChange={e => setForm(pc.uid, { newTag: e.target.value })} placeholder="例: 勇敢、料理上手 …" style={{ ...iStyle, width: "100%", fontSize: 11, padding: "5px 6px" }} />
+                    {(rec.tags || []).length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginTop: 3 }}>取得済み: {rec.tags.join("・")}</div>}
+                  </div>
+                  {/* 強化 */}
+                  <div>
+                    <div style={{ fontSize: 10, color: C.gold, marginBottom: 3 }}>強化（いずれか1つ・各強化は生涯1回）</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {[["", "（強化しない）", false], ["spell", ENHANCE_LABELS.spell, used.has("spell")], ["ability", ENHANCE_LABELS.ability, used.has("ability")], ["bond", ENHANCE_LABELS.bond, used.has("bond")]].map(([val, label, isUsed]) => (
+                        <label key={val} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: isUsed ? C.textFaint : C.text, cursor: isUsed ? "not-allowed" : "pointer" }}>
+                          <input type="radio" name={`enh_${pc.uid}`} disabled={isUsed} checked={(form.enhance || "") === val} onChange={() => setForm(pc.uid, { enhance: val })} />
+                          {label}{isUsed && "（取得済み）"}
+                          {val === "spell" && pc.growthSpellCard && <span style={{ fontSize: 9, color: C.textFaint }}>：{typeof pc.growthSpellCard === "string" ? pc.growthSpellCard : pc.growthSpellCard?.name}</span>}
+                          {val === "ability" && pc.growthAbility?.name && <span style={{ fontSize: 9, color: C.textFaint }}>：{pc.growthAbility.name}</span>}
+                        </label>
+                      ))}
+                    </div>
+                    {form.enhance === "bond" && (
+                      <div style={{ marginTop: 5 }}>
+                        <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>特別な絆の対象（既存の特別な絆は上書きされます）</div>
+                        <select value={form.bondTarget || ""} onChange={e => setForm(pc.uid, { bondTarget: e.target.value })} style={{ ...iStyle, width: "100%", fontSize: 11, padding: "5px 6px" }}>
+                          <option value="">（対象を選択）</option>
+                          {(gs.pcs || []).filter(x => x.uid !== pc.uid).map(x => <option key={x.uid} value={x.uid}>{x.charName}への敬意</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    disabled={form.enhance === "bond" && !form.bondTarget}
+                    onClick={() => applyGrowth(pc)}
+                    style={{ ...btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 12 }), opacity: (form.enhance === "bond" && !form.bondTarget) ? 0.4 : 1 }}>
+                    🌟 成長を適用する
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <button onClick={onClose} style={{ width: "100%", marginTop: 14, padding: "9px", cursor: "pointer", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.textDim, fontSize: 12, fontFamily: "'Noto Serif JP', serif" }}>閉じる</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── SessionEndView ───────────────────────────────────────────────
-export function SessionEndView({ gs, upd, isGm }) {
+export function SessionEndView({ gs, upd, isGm, user }) {
   const isVictory = gs.battle?.result === "pc_win";
   const pcs = gs.pcs || [];
+  const [showGrowth, setShowGrowth] = useState(false);
 
   const ac  = isVictory ? C.gold    : C.red;
   const ab  = isVictory ? C.goldDim : C.redBorder;
@@ -4851,6 +5035,21 @@ export function SessionEndView({ gs, upd, isGm }) {
             })}
           </div>
 
+          {/* 成長セレモニー */}
+          <div style={{ marginBottom: 10, animation: `endFadeUp 0.5s ${0.92 + pcs.length * 0.13}s both` }}>
+            <button
+              onClick={() => setShowGrowth(true)}
+              style={{
+                padding: "9px 24px", background: C.goldBg,
+                border: `1px solid ${C.goldDim}`, borderRadius: 6,
+                color: C.gold, fontSize: 12, cursor: "pointer", letterSpacing: 2,
+                boxShadow: `0 0 12px ${C.gold}18`,
+              }}
+            >
+              🌟 PCの成長・強化
+            </button>
+          </div>
+
           {/* ログ書き出し（全員） */}
           <div style={{ marginBottom: 14, animation: `endFadeUp 0.5s ${0.95 + pcs.length * 0.13}s both` }}>
             <button
@@ -4890,6 +5089,8 @@ export function SessionEndView({ gs, upd, isGm }) {
           )}
         </div>
       </div>
+
+      {showGrowth && <GrowthCeremony gs={gs} upd={upd} user={user} isGm={isGm} onClose={() => setShowGrowth(false)} />}
     </div>
   );
 }

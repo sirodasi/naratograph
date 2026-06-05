@@ -339,6 +339,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
 
   const confirmChar = async () => {
     if (!selectedChar) return;
+    // 過去セッションの成長記録（playerGrowth/{uid}/{charId}）を読み込んで反映する
+    let growth = null;
+    try {
+      const snap = await get(ref(db, `playerGrowth/${user.uid}/${selectedChar.id}`));
+      if (snap.exists()) growth = snap.val();
+    } catch (e) { /* 読めなくても続行 */ }
+    const used = growth?.enhancementsUsed || [];
     await update(ref(db, `rooms/${roomCode}/players/${user.uid}`), {
       charId:        selectedChar.id,
       charName:      selectedChar.name,
@@ -346,9 +353,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       spriteCol:     selectedChar.spriteCol ?? -1,
       base:          selectedChar.base || "人間の里",
       customPortrait: selectedChar.customPortrait || null,
-      tags:          selectedChar.tags ||[],
+      // 成長: タグは基本＋獲得タグ、弾幕は再修得があれば上書き、強化フラグ/特別な絆を反映
+      tags:          [...(selectedChar.tags || []), ...((growth?.tags) || [])],
       as:  selectedChar.as ?? null,
-      ds:  selectedChar.ds ?? null,
+      ds:  growth?.ds || selectedChar.ds || null,
+      growthAbilityUnlocked: used.includes("ability"),
+      growthSpellUnlocked:   used.includes("spell"),
+      specialBond:           growth?.specialBond || null,
     });
     setStep("skillSelect");
   };
