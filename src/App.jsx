@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
-import { BackstoryScreen, EpilogueView, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
+import { BackstoryScreen, EpilogueView, SceneStage, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
@@ -192,24 +192,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const blockedSpots = getBlockedSpots(gs.scenarioData, gs);
 
   if (gs.sceneMode) {
-    return (
-      <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#040608" }}>
-        {sceneData.bg && (
-          <img src={sceneData.bg} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
-        )}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)" }} />
-        <div style={{ position: "absolute", bottom: 110, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 16, alignItems: "flex-end" }}>
-          {(sceneData.portraits ||[]).map((p, i) => (
-            p.img && <img key={i} src={p.img} alt={p.name || ""} style={{ height: 320, objectFit: "contain", filter: "drop-shadow(0 4px 24px rgba(0,0,0,0.8))" }} />
-          ))}
-        </div>
-        {gs.sceneText && (
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px" }}>
-            <div style={{ fontSize: 14, color: "#c8b89a", lineHeight: 2.1, fontFamily: "'Noto Serif JP', serif", whiteSpace: "pre-wrap" }}>{gs.sceneText}</div>
-          </div>
-        )}
-      </div>
-    );
+    return <SceneStage sceneData={sceneData} sceneText={gs.sceneText} />;
   }
 
   const mapFilter = isNight   ? "brightness(0.45) sepia(0) saturate(0.5)"
@@ -1184,7 +1167,7 @@ function SessionApp({ roomCode, user }) {
 
   if (gs.sessionPhase === "epilogue") {
     return (
-      <EpilogueView gs={gs} upd={upd} isGm={mode === "gm"} onProceed={() => upd(p => ({ ...p, sessionPhase: "end", log: ["✦ 終幕。セッションの幕が下りる。", ...p.log] }))} />
+      <EpilogueView gs={gs} upd={upd} isGm={mode === "gm"} sceneData={sceneData} setSceneData={setSceneDataAndSync} onProceed={() => upd(p => ({ ...p, sessionPhase: "end", log: ["✦ 終幕。セッションの幕が下りる。", ...p.log] }))} />
     );
   }
 

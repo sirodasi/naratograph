@@ -268,42 +268,107 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
   );
 }
 
+// ─── SceneStage（描写の表示）: 背景＋立ち絵＋テキスト。探索の描写モードと終幕で共用 ──
+export function SceneStage({ sceneData, sceneText }) {
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#040608" }}>
+      {sceneData?.bg && (
+        <img src={sceneData.bg} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+      )}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)" }} />
+      <div style={{ position: "absolute", bottom: 110, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 16, alignItems: "flex-end" }}>
+        {(sceneData?.portraits || []).map((p, i) => (
+          p.img && <img key={i} src={p.img} alt={p.name || ""} style={{ height: 320, objectFit: "contain", filter: "drop-shadow(0 4px 24px rgba(0,0,0,0.8))" }} />
+        ))}
+      </div>
+      {sceneText && (
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px" }}>
+          <div style={{ fontSize: 14, color: "#c8b89a", lineHeight: 2.1, fontFamily: "'Noto Serif JP', serif", whiteSpace: "pre-wrap" }}>{sceneText}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SceneEditor（描写の編集・GM用）: モード切替（任意）＋テキスト＋背景＋立ち絵。RightPanel と終幕で共用 ──
+export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle = true }) {
+  const loadImage = (file, maxW, cb) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const scale  = Math.min(1, maxW / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width  = img.width  * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        cb(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div>
+      {showModeToggle && (
+        <button onClick={() => upd(p => ({ ...p, sceneMode: !p.sceneMode }))} style={{ width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer", marginBottom: 8, background: gs.sceneMode ? "rgba(121,134,203,0.2)" : "rgba(255,255,255,0.03)", border: gs.sceneMode ? "1px solid #7986cb60" : `1px solid ${C.border}`, color: gs.sceneMode ? "#9fa8da" : C.textFaint, fontSize: 12 }}>
+          {gs.sceneMode ? "🎭 描写モード ON（クリックで解除）" : "🎭 描写モードを開始"}
+        </button>
+      )}
+      <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>テキスト（PLに表示）</div>
+      <textarea value={gs.sceneText || ""} onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))} placeholder="PLに見せたいテキスト…" style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }} />
+
+      <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>背景画像</div>
+      {sceneData.bg ? (
+        <div style={{ position: "relative", marginBottom: 6 }}>
+          <img src={sceneData.bg} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 3, border: `1px solid ${C.border}` }} />
+          <button onClick={() => setSceneData(d => ({ ...d, bg: null }))} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(8,8,12,0.9)", border: "1px solid #3a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 11, padding: 0 }}>✕</button>
+        </div>
+      ) : (
+        <label style={{ display: "block", padding: "8px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint, marginBottom: 6 }}>
+          ＋ 背景画像
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 1280, url => setSceneData(d => ({ ...d, bg: url })))} />
+        </label>
+      )}
+
+      <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
+      {(sceneData.portraits || []).map((p, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+          <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
+          <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
+          <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
+        </div>
+      ))}
+      {(sceneData.portraits || []).length < 4 && (
+        <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
+          ＋ 立ち絵を追加
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })))} />
+        </label>
+      )}
+    </div>
+  );
+}
+
 // ─── EpilogueView（終幕）: 決戦後・終了画面の前に挟む描写フェイズ ──────────
-// GM が終幕の描写を書き（gs.epilogueText・シナリオの ending を既定値）、全員に表示してから終了画面へ。
-export function EpilogueView({ gs, upd, isGm, onProceed }) {
-  const saved = gs.epilogueText ?? gs.scenarioData?.ending ?? "";
-  const [draft, setDraft] = useState(saved);
+// 探索の描写モードと同じ形（背景＋立ち絵＋テキスト）。GM がシーンを編集し全員に見せてから終了画面へ。
+export function EpilogueView({ gs, upd, isGm, sceneData, setSceneData, onProceed }) {
   const proceeding = useRef(false);
-  const save = () => { if (draft !== (gs.epilogueText ?? "")) upd(p => ({ ...p, epilogueText: draft })); };
-  const proceed = () => { save(); if (!proceeding.current) { proceeding.current = true; onProceed(); } };
+  const proceed = () => { if (!proceeding.current) { proceeding.current = true; onProceed(); } };
 
   return (
-    <div style={{ background: "#06040a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", padding: "40px 60px", boxSizing: "border-box" }}>
-      <style>{`@keyframes epiIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes epiPulse{0%,100%{opacity:.45}50%{opacity:1}}`}</style>
-      <div style={{ maxWidth: 760, width: "100%", animation: "epiIn 1.1s ease" }}>
-        <div style={{ fontSize: 12, color: "#a98", letterSpacing: 10, textAlign: "center", marginBottom: 6 }}>◆ 終 幕 ◆</div>
-        <div style={{ fontSize: 10, color: "#5a4a40", letterSpacing: 4, textAlign: "center", marginBottom: 24 }}>{gs.scenarioData?.name || ""}</div>
-        {isGm ? (
-          <>
-            <textarea
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              onBlur={save}
-              placeholder="終幕の描写を入力…（プレイヤーにも表示されます）"
-              style={{ width: "100%", minHeight: 240, background: "rgba(255,255,255,0.03)", border: "1px solid #3a2e26", borderRadius: 6, color: "#d8c8b4", fontSize: 14, lineHeight: 2.1, padding: 16, fontFamily: "'Noto Serif JP', serif", resize: "vertical", boxSizing: "border-box", outline: "none" }}
-            />
-            <div style={{ textAlign: "center", marginTop: 22, display: "flex", gap: 12, justifyContent: "center" }}>
-              <button onClick={save} style={{ padding: "9px 22px", background: "rgba(255,255,255,0.04)", border: "1px solid #3a2e26", borderRadius: 6, color: "#bfa890", fontSize: 11, cursor: "pointer", letterSpacing: 1, fontFamily: "'Noto Serif JP', serif" }}>表示を更新</button>
-              <button onClick={proceed} style={{ padding: "9px 26px", background: "rgba(180,140,90,0.14)", border: "1px solid #6a5436", borderRadius: 6, color: "#e0c89a", fontSize: 12, cursor: "pointer", letterSpacing: 2, fontFamily: "'Noto Serif JP', serif", boxShadow: "0 0 12px rgba(180,140,90,0.14)" }}>終了画面へ進む ▶</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 15, color: "#d8c8b4", lineHeight: 2.4, whiteSpace: "pre-wrap", textAlign: "justify", minHeight: "4em" }}>{saved || "…"}</div>
-            <div style={{ textAlign: "center", marginTop: 40, fontSize: 10, color: "#4a3d33", letterSpacing: 3, animation: "epiPulse 2.4s ease infinite" }}>GMが終幕を進めるのを待っています…</div>
-          </>
-        )}
-      </div>
+    <div style={{ position: "relative", width: "100%", height: "100vh", background: "#040608", fontFamily: "'Noto Serif JP', serif" }}>
+      <SceneStage sceneData={sceneData} sceneText={gs.sceneText} />
+      <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", fontSize: 13, color: "#d8c0a0", letterSpacing: 10, textShadow: "0 2px 8px #000", zIndex: 5 }}>◆ 終 幕 ◆</div>
+      {isGm ? (
+        <div style={{ position: "absolute", top: 0, right: 0, height: "100%", width: 300, boxSizing: "border-box", background: "rgba(6,8,16,0.93)", borderLeft: "1px solid #1e2535", padding: 14, overflowY: "auto", zIndex: 10 }}>
+          <div style={{ fontSize: 11, color: "#c0a888", letterSpacing: 2, marginBottom: 10, paddingBottom: 5, borderBottom: `1px solid ${C.border}` }}>終幕の描写（背景・立ち絵・テキスト）</div>
+          <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} showModeToggle={false} />
+          <button onClick={proceed} style={{ width: "100%", marginTop: 16, padding: "11px", background: "rgba(180,140,90,0.16)", border: "1px solid #6a5436", borderRadius: 6, color: "#e0c89a", fontSize: 12, cursor: "pointer", letterSpacing: 2, fontFamily: "'Noto Serif JP', serif", boxShadow: "0 0 12px rgba(180,140,90,0.14)" }}>終了画面へ進む ▶</button>
+        </div>
+      ) : (
+        <div style={{ position: "absolute", top: 16, right: 18, fontSize: 9, color: "#5a4a3a", letterSpacing: 2, zIndex: 5 }}>GMが終幕を進めています…</div>
+      )}
     </div>
   );
 }
@@ -10014,73 +10079,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {tab === "scene" && isGm && (
                 <div>
                   <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
-                  <button onClick={() => upd(p => ({ ...p, sceneMode: !p.sceneMode }))} style={{ width: "100%", padding: "8px", borderRadius: 4, cursor: "pointer", marginBottom: 8, background: gs.sceneMode ? "rgba(121,134,203,0.2)" : "rgba(255,255,255,0.03)", border: gs.sceneMode ? "1px solid #7986cb60" : `1px solid ${C.border}`, color: gs.sceneMode ? "#9fa8da" : C.textFaint, fontSize: 12 }}>
-                    {gs.sceneMode ? "🎭 描写モード ON（クリックで解除）" : "🎭 描写モードを開始"}
-                  </button>
-                  <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>テキスト（PLに表示）</div>
-                  <textarea value={gs.sceneText || ""} onChange={e => upd(p => ({ ...p, sceneText: e.target.value }))} placeholder="PLに見せたいテキスト…" style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", fontSize: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3, height: 80, resize: "vertical" }} />
-
-                  <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>背景画像</div>
-                  {sceneData.bg ? (
-                    <div style={{ position: "relative", marginBottom: 6 }}>
-                      <img src={sceneData.bg} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 3, border: `1px solid ${C.border}` }} />
-                      <button onClick={() => setSceneData(d => ({ ...d, bg: null }))} style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, background: "rgba(8,8,12,0.9)", border: "1px solid #3a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 11, padding: 0 }}>✕</button>
-                    </div>
-                  ) : (
-                    <label style={{ display: "block", padding: "8px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint, marginBottom: 6 }}>
-                      ＋ 背景画像
-                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
-                        const f = e.target.files[0];
-                        if (!f) return;
-                        const reader = new FileReader();
-                        reader.onload = ev => {
-                          const img = new Image();
-                          img.onload = () => {
-                            const scale  = Math.min(1, 1280 / img.width);
-                            const canvas = document.createElement("canvas");
-                            canvas.width  = img.width  * scale;
-                            canvas.height = img.height * scale;
-                            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                            setSceneData(d => ({ ...d, bg: canvas.toDataURL("image/jpeg", 0.8) }));
-                          };
-                          img.src = ev.target.result;
-                        };
-                        reader.readAsDataURL(f);
-                      }} />
-                    </label>
-                  )}
-
-                  <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
-                  {(sceneData.portraits ||[]).map((p, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-                      <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
-                      <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
-                      <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
-                    </div>
-                  ))}
-                  {(sceneData.portraits ||[]).length < 4 && (
-                    <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
-                      ＋ 立ち絵を追加
-                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
-                        const f = e.target.files[0];
-                        if (!f) return;
-                        const reader = new FileReader();
-                        reader.onload = ev => {
-                          const img = new Image();
-                          img.onload = () => {
-                            const scale  = Math.min(1, 600 / img.width);
-                            const canvas = document.createElement("canvas");
-                            canvas.width  = img.width  * scale;
-                            canvas.height = img.height * scale;
-                            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                            setSceneData(d => ({ ...d, portraits:[...(d.portraits || []), { img: canvas.toDataURL("image/jpeg", 0.85), name: "" }] }));
-                          };
-                          img.src = ev.target.result;
-                        };
-                        reader.readAsDataURL(f);
-                      }} />
-                    </label>
-                  )}
+                  <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} />
                 </div>
               )}
 
