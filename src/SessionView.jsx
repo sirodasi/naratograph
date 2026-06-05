@@ -5897,7 +5897,10 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                   ) : (
                     <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                       <button onClick={() => setMinionMove(m.id)} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>移動</button>
-                      <button onClick={() => upd(p => ({ ...p, log: [`手 ${pc.charName} の手下がアクションを行った（効果はGM処理）`, ...p.log] }))} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>アクション</button>
+                      {/* 手下でシーンを行う（袿姫/藍）: 手下のスポットでアクション、効果は所有者が受ける */}
+                      {!gs.currentScene && (
+                        <button onClick={() => upd(p => ({ ...p, currentScene: { pcUid: pc.uid, minionId: m.id, phase: "action", startSpot: m.currentSpot, moveDice: [], actionDice: [], actionDiceCount: 2 }, log: [`🎬 ${pc.charName} の手下がシーン（アクション）を行う @ ${getSpot(m.currentSpot)?.name}`, ...p.log] }))} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>手下でシーン</button>
+                      )}
                       <button onClick={() => upd(p => ({ ...p, minions: (p.minions || []).filter(x => x.id !== m.id), log: [`手 ${pc.charName} の手下が退場した`, ...p.log] }))} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { width: "auto", fontSize: 8, padding: "3px 6px" })}>除去</button>
                     </div>
                   )}
@@ -6990,7 +6993,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   if (!pc) return null;
 
   const isMyTurn  = pc.uid === user?.uid || isGm;
-  const spotDetail = SPOT_DETAILS[pc.currentSpot] || { tags: [], events:[], desc: "" };
+  // 手下シーン: sc.minionId があるとシーンの「位置」は手下のスポット。効果(霊力/絆/手がかり)は所有者pcが受ける。
+  const sceneMinion = sc.minionId ? (gs.minions || []).find(m => m.id === sc.minionId) : null;
+  const sceneSpot = sceneMinion ? sceneMinion.currentSpot : pc.currentSpot;
+  const spotDetail = SPOT_DETAILS[sceneSpot] || { tags: [], events:[], desc: "" };
   const [fusuiSel, setFusuiSel] = useState(null); // 風水：振り直し対象のダイス添字配列（null=非選択モード）
   const [kyoukiSel, setKyoukiSel] = useState(null); // 狂気：観戦保持者が振り直す対象のダイス添字配列（null=非選択モード）
   const [unmeiSel, setUnmeiSel] = useState(null); // 運命＋：裏返す対象のダイス添字配列（null=非選択モード）
@@ -7300,7 +7306,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 
   const acquireClue = questId => {
     upd(p => {
-      const spotId   = pc.currentSpot;
+      const spotId   = sceneSpot; // 手下シーンなら手下のスポット
       const newClues = (p.clues ||[]).filter(c => c !== spotId);
 
       let resolvedAuto = false;
@@ -7342,7 +7348,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     });
   };
 
-  const hasClueHere = gs.clues?.includes(pc.currentSpot);
+  const hasClueHere = gs.clues?.includes(sceneSpot);
 
   const gainBond = targetName => {
     if ((pc.badStatus || []).includes("不機嫌")) {
@@ -7382,9 +7388,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <CharSprite spriteRow={pc.spriteRow ?? -1} spriteCol={pc.spriteCol ?? -1} size={32} />
         <div>
-          <div style={{ fontSize: 10, color: C.blue }}>現在のシーンプレイヤー</div>
+          <div style={{ fontSize: 10, color: C.blue }}>現在のシーンプレイヤー{sceneMinion && <span style={{ color: "#ce93d8" }}>（手下が代行）</span>}</div>
           <div style={{ fontSize: 13, color: C.text }}>
-            {pc.charName} <span style={{ fontSize: 9, color: C.textFaint }}>@ {getSpot(pc.currentSpot)?.name}</span>
+            {pc.charName}{sceneMinion && <span style={{ color: "#ce93d8" }}> の手下</span>} <span style={{ fontSize: 9, color: C.textFaint }}>@ {getSpot(sceneSpot)?.name}</span>
           </div>
         </div>
       </div>
@@ -7757,7 +7763,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             <div>
               <div style={{ fontSize: 10, color: C.gold, marginBottom: 8, borderBottom: `1px solid ${C.gold}40` }}>探索イベントを選択</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {(SPOT_DETAILS[pc.currentSpot]?.events ||[]).map((ev, i) => (
+                {(SPOT_DETAILS[sceneSpot]?.events ||[]).map((ev, i) => (
                   <button key={i} onClick={() => selectEvent(ev)} style={btnFull("rgba(255,255,255,0.03)", C.border, C.text, { textAlign: "left", padding: "8px" })}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
                       <span style={{ fontSize: 11 }}>{ev.name}</span>
