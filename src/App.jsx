@@ -911,12 +911,37 @@ function SessionApp({ roomCode, user }) {
     });
   };
 
+  // リミット（"N日目の{サイクル}"）を1サイクル分早める
+  const shortenLimit = (lim) => {
+    if (!lim) return lim;
+    const m = lim.match(/^(\d+)日目の(.+)$/);
+    if (!m) return lim;
+    let d = parseInt(m[1]); let ci = CYCLES.indexOf(m[2]);
+    if (ci < 0) return lim;
+    ci -= 1;
+    if (ci < 0) { ci = CYCLES.length - 1; d -= 1; }
+    if (d < 1) return lim;
+    return `${d}日目の${CYCLES[ci]}`;
+  };
+
   const doAdvanceCycle = () => {
     upd(p => {
       let day      = p.day || 1;
       let cycleIdx = p.cycleIdx || 0;
       const logMsgs = [];
       let nextPcs = p.pcs;
+
+      // 永遠と須臾を操る程度の能力（蓬莱山輝夜）: 夜サイクルの終了で帰還/やる気減少を行わず夜をもう一度（base=リミット-1）
+      if (cycleIdx === CYCLES.length - 1 && p.eternityNight) {
+        const newLimit = p.eternityShorten ? shortenLimit(p.limit) : p.limit;
+        return {
+          ...p,
+          eternityNight: null, eternityShorten: null,
+          actedPcs: [], currentScene: null, reiryokuDone: false,
+          ...(newLimit !== p.limit ? { limit: newLimit } : {}),
+          log: [`🌙 永遠と須臾：帰還とやる気減少を行わず、夜サイクルをもう一度行う${newLimit !== p.limit ? `（リミット→${newLimit}）` : ""}`, ...p.log],
+        };
+      }
 
       if (cycleIdx === 0) {
         nextPcs = nextPcs.map(pc => ({

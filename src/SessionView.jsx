@@ -5381,6 +5381,18 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityReiBoost({ name, freq, amount: 0, selected: cur, target: "itemSwap" });
       return;
     }
+    if (meta?.auto && meta.kind === "set_eternity_night") {
+      // 永遠と須臾：この夜サイクルの終了で帰還/やる気減少を行わず夜をもう一度（base=リミット-1）
+      sfx.skillActivate();
+      upd(p => ({
+        ...p,
+        pcs: p.pcs.map(x => x.uid === pc.uid ? withAbilityUse({ ...x }, name, freq) : x),
+        eternityNight: true,
+        eternityShorten: !!meta.params?.shorten,
+        log: [`🔵 ${pc.charName} が能力《${name}》を発動：この夜サイクルの終了で夜をもう一度行う（帰還・やる気減少なし${meta.params?.shorten ? "・リミット-1" : ""}）`, ...p.log],
+      }));
+      return;
+    }
     if (meta?.auto && meta.kind === "consume_others_item") {
       // 財産を消費させる：他者のアイテム1つを消費し、その効果を自分に適用（対象→アイテムの2段ピッカー）
       setAbilityFortune({ name, freq, targetUid: null });

@@ -73,9 +73,10 @@ export const ABILITY_EFFECTS = {
   // 境界（八雲紫）：ダイス＋やる気消費＋任意/拠点移動＋アクション。boundary_move で対応。
   "境界を操る程度の能力":   { freq: null, auto: true, kind: "boundary_move" },
   "境界を操る程度の能力＋": { freq: null, auto: true, kind: "boundary_move", params: { plus: true } },
-  // 永遠と須臾＝夜サイクル再処理はGM対応（手動フォールバック）。
-  "永遠と須臾を操る程度の能力":   { note: "夜サイクル終了時：帰還とやる気減少を行わず夜サイクルをもう一度（リミット-1）。GM対応" },
-  "永遠と須臾を操る程度の能力＋": { note: "同上（リミット短縮なし）。GM対応" },
+  // 永遠と須臾（蓬莱山輝夜）：夜サイクル終了時、帰還/やる気減少なしで夜サイクルをもう一度（base=リミット-1）。
+  // gs.eternityNight フラグ→ App.jsx doAdvanceCycle で処理。
+  "永遠と須臾を操る程度の能力":   { freq: "session", auto: true, kind: "set_eternity_night", params: { shorten: true } },
+  "永遠と須臾を操る程度の能力＋": { freq: "session", auto: true, kind: "set_eternity_night" }, // リミット短縮なし
   // ドレミー：自分＋同スポットのキャラを夢の世界へ移動（party_move 雛形を流用。移動先で「夢の世界」を選ぶ。同行は1人まで=GM運用）
   "夢を喰い、夢を創る程度の能力":   { freq: null, auto: true, kind: "party_move", note: "夢の世界へ移動（同スポットのキャラ1人まで同行）" },
   "夢を喰い、夢を創る程度の能力＋": { freq: null, auto: true, kind: "party_move", params: { selfOptional: true }, note: "移動の代わりに夢の世界へ（同行1人まで）" },
