@@ -5061,6 +5061,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityReturn, setAbilityReturn] = useState(null); // 密と疎：帰還先変更 { name, freq, params, selected[], destSpot }
   const [abilityScenePick, setAbilityScenePick] = useState(null); // 吉弔：追加シーン対象選択 { name, freq }
   const [abilityBoost, setAbilityBoost] = useState(null); // 核融合：同スポット他PCのやる気+ { name, freq, amount }
+  const [minionMove, setMinionMove] = useState(null); // 手下移動：移動する手下のid（null=非選択）
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5848,6 +5849,32 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                   ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
                   : <button onClick={() => setAbilityModal(activeAbility)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
               )}
+            </div>
+          )}
+
+          {/* 手下（minion）操作パネル: 自分の手下を移動/アクション/除去 */}
+          {(gs.minions || []).some(m => m.ownerUid === pc.uid) && (
+            <div style={{ marginTop: 6, padding: 6, background: "rgba(206,147,216,0.08)", border: "1px solid #ce93d850", borderRadius: 4 }}>
+              <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>手 手下（{(gs.minions || []).filter(m => m.ownerUid === pc.uid).length}）</div>
+              {(gs.minions || []).filter(m => m.ownerUid === pc.uid).map((m, i) => (
+                <div key={m.id} style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 9, color: C.textDim, marginBottom: 2 }}>手下{i + 1} @ {getSpot(m.currentSpot)?.name || "-"}</div>
+                  {minionMove === m.id ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3 }}>
+                      {(SPOTS || []).map(s => (
+                        <button key={s.id} onClick={() => { setMinionMove(null); upd(p => ({ ...p, minions: (p.minions || []).map(x => x.id === m.id ? { ...x, currentSpot: s.id } : x), log: [`手 ${pc.charName} の手下が[${s.name}]へ移動`, ...p.log] })); }} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { fontSize: 8, padding: "3px 4px" })}>{s.name}</button>
+                      ))}
+                      <button onClick={() => setMinionMove(null)} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { fontSize: 8, padding: "3px 4px" })}>やめる</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                      <button onClick={() => setMinionMove(m.id)} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>移動</button>
+                      <button onClick={() => upd(p => ({ ...p, log: [`手 ${pc.charName} の手下がアクションを行った（効果はGM処理）`, ...p.log] }))} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>アクション</button>
+                      <button onClick={() => upd(p => ({ ...p, minions: (p.minions || []).filter(x => x.id !== m.id), log: [`手 ${pc.charName} の手下が退場した`, ...p.log] }))} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { width: "auto", fontSize: 8, padding: "3px 6px" })}>除去</button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
