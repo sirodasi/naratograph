@@ -9068,10 +9068,36 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
           {sc.phase === "action_done" && (() => {
             const ab = getActiveAbility(pc)?.name;
             const isMushiki = isMyTurn && (ab === "無意識を操る程度の能力" || ab === "無意識を操る程度の能力＋");
+            const isChonoryoku = isMyTurn && (ab === "超能力を操る程度の能力" || ab === "超能力を操る程度の能力＋");
             const adj = isMushiki ? adjacentSpots(pc.currentSpot) : [];
             return (
               <div style={{ textAlign: "center", animation: "fadeUp 0.3s ease" }}>
                 <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>全てのアクションが終了しました</div>
+                {/* 超能力を操る（菫子）: シーン終了時にコマを取り除く（次シーン開始時にランダム配置）。＋は霊力D6も */}
+                {isChonoryoku && (
+                  <button onClick={() => {
+                    const isPlus = ab === "超能力を操る程度の能力＋";
+                    const applyEnd = (reiGain) => upd(p => {
+                      const scenePc = p.pcs.find(x => x.uid === pc.uid);
+                      const lives = scenePc?.resources?.残り人数?.cur ?? 0;
+                      return {
+                        ...p,
+                        pcs: p.pcs.map(x => {
+                          if (x.uid !== pc.uid) return x;
+                          let nx = { ...x, offMap: true };
+                          if (lives === 0) nx = { ...nx, resources: { ...nx.resources, 残り人数: { ...nx.resources.残り人数, cur: 1 } } };
+                          if (reiGain) { const r = nx.resources.霊力 || { cur: 0, max: 20 }; const nr = Math.min(r.max, r.cur + reiGain); nx = { ...nx, resources: { ...nx.resources, 霊力: { ...r, cur: nr }, 攻撃力: { ...nx.resources.攻撃力, cur: 1 + Math.floor(nr / 5) } } }; }
+                          return nx;
+                        }),
+                        actedPcs: [...(p.actedPcs || []), pc.uid],
+                        currentScene: null,
+                        log: [`🛸 ${pc.charName} の《超能力を操る程度の能力》：マップからコマを取り除いた（次シーン開始時にランダム配置）${reiGain ? `・霊力+${reiGain}` : ""}`, ...p.log],
+                      };
+                    });
+                    if (isPlus) animateDice(1, "超能力（霊力獲得）", res => applyEnd(res[0]));
+                    else applyEnd(0);
+                  }} style={{ ...btnFull("rgba(100,181,246,0.16)", C.blueBorder, C.blue, { fontSize: 10 }), marginBottom: 6 }}>🛸 超能力: コマを取り除いて終了</button>
+                )}
                 {isMushiki && adj.length > 0 ? (
                   <div>
                     <div style={{ fontSize: 10, color: C.purple, marginBottom: 6 }}>🌀 無意識: シーン終了時に隣接スポットへ移動する</div>
@@ -9143,10 +9169,15 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     if (!targetPc) return;
     const selectedUid = sceneSelect;
     setSceneSelect(""); // upd()より先にクリアして二重起動を防ぐ
+    // 超能力を操る（菫子）: コマを取り除いていた(offMap)場合、シーン開始時にランダムスポットへ配置
+    const placeSpots = (SPOTS || []).filter(s => s.id !== "dream");
+    const randomSpot = targetPc.offMap && placeSpots.length ? placeSpots[Math.floor(Math.random() * placeSpots.length)] : null;
+    const startSpot = randomSpot ? randomSpot.id : targetPc.currentSpot;
     upd(p => ({
       ...p,
-      currentScene: { pcUid: selectedUid, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2, startSpot: targetPc.currentSpot },
-      log:[`🎬 ${targetPc.charName} のシーンが開始された`, ...p.log],
+      pcs: randomSpot ? p.pcs.map(x => x.uid === selectedUid ? { ...x, currentSpot: randomSpot.id, offMap: null } : x) : p.pcs,
+      currentScene: { pcUid: selectedUid, phase: "move_or_stay", moveDice: [], actionDice: [], actionDiceCount: 2, startSpot },
+      log:[`🎬 ${targetPc.charName} のシーンが開始された`, ...(randomSpot ? [`🛸 ${targetPc.charName} の超能力：[${randomSpot.name}] にランダム配置された`] : []), ...p.log],
     }));
   };
 

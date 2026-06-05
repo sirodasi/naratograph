@@ -392,7 +392,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         });
 
         return (gs.pcs || []).map(pc => {
-          if (!pc.currentSpot) return null;
+          if (!pc.currentSpot || pc.offMap) return null; // 超能力でコマを取り除いている間は非表示
           const spot = SPOTS.find(s => s.id === pc.currentSpot);
           if (!spot) return null;
 

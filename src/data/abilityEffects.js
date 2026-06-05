@@ -142,6 +142,11 @@ export const ABILITY_EFFECTS = {
   "あらゆるものの背中に扉を作る程度の能力":   { freq: null, auto: true, reactive: true, kind: "select_rei_boost", params: { amount: 1 }, note: "選んだキャラの霊力増加を+1（対象選択）" },
   "あらゆるものの背中に扉を作る程度の能力＋": { freq: null, auto: true, reactive: true, kind: "select_rei_boost", params: { amount: 2 }, note: "選んだキャラの霊力増加を+2（対象選択）" },
 
+  // 超能力を操る（宇佐見菫子）：シーン終了時にコマを取り除き（offMap）、次のシーン開始時にランダム配置。
+  // action_done のボタンと startScene で対応（＋は霊力D6も）。
+  "超能力を操る程度の能力":   { note: "シーン終了時にコマを取り除き次シーン開始時にランダム配置（結果画面で自動対応）" },
+  "超能力を操る程度の能力＋": { note: "同上＋霊力D6を増加（結果画面で自動対応）" },
+
   "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ：他キャラの使用済み応援欄を1つ解除
   "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ＋（トリガー条件が広いだけで効果は同一）
   // 密と疎（伊吹萃香）：帰還先を変更（自分＋選んだPCを任意スポットへ帰還）。＋は夜のやる気減少もスキップ。
