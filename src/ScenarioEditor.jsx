@@ -1105,6 +1105,7 @@ function ProfilePage({ onClose }) {
   const [newName, setNewName] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [grownChars, setGrownChars] = useState({}); // { instanceId: { charId, charName, ds, tags, enhancementsUsed, specialBond, ... } }
   const user = auth.currentUser;
 
   useEffect(()=> {
@@ -1127,6 +1128,19 @@ function ProfilePage({ onClose }) {
     });
     return() => unsub();
   },[user]);
+
+  // 自分の成長キャラ（インスタンス）を取得
+  useEffect(()=> {
+    if(!user)return;
+    const r = ref(db,`grownChars/${user.uid}`);
+    const unsub = onValue(r,snap => { setGrownChars(snap.exists() ? snap.val() : {}); });
+    return() => unsub();
+  },[user]);
+
+  const deleteGrown = async(iid, name)=> {
+    if(!confirm(`成長キャラ「${name}」を削除しますか？（元に戻せません）`))return;
+    await remove(ref(db,`grownChars/${user.uid}/${iid}`));
+  };
 
   const saveName = async()=> {
     if(!newName.trim())return;
@@ -1160,7 +1174,8 @@ function ProfilePage({ onClose }) {
     />
   );
 
-  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"]];
+  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"]];
+  const ENH_LABEL = { spell:"追加スペカ取得", ability:"能力スキル＋", bond:"特別な絆" };
 
   return(
     <div style={{background:BG,minHeight:"100vh",fontFamily:"'Noto Serif JP', serif",color:C.text,padding:16}}>
@@ -1271,6 +1286,35 @@ function ProfilePage({ onClose }) {
                       削除
                     </button>
                   </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── 成長キャラ ── */}
+      {view==="grown"&&(
+        <div style={{maxWidth:700}}>
+          <div style={{fontSize:12,color:C.text,marginBottom:4}}>成長したキャラクター</div>
+          <div style={{fontSize:9,color:C.textFaint,marginBottom:12}}>セッション終了時の成長で記録されたキャラクターです。参加時に「★成長済みキャラクター」から選択できます。</div>
+          {Object.keys(grownChars).length===0&&(
+            <div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>成長したキャラクターはまだいません</div>
+          )}
+          {Object.entries(grownChars).sort((a,b)=>(b[1].updatedAt||b[1].createdAt||0)-(a[1].updatedAt||a[1].createdAt||0)).map(([iid,g])=>{
+            const date = (g.updatedAt||g.createdAt) ? new Date(g.updatedAt||g.createdAt).toLocaleDateString("ja-JP") : "—";
+            const enh = (g.enhancementsUsed||[]).map(e=>ENH_LABEL[e]||e);
+            return(
+              <div key={iid} style={{padding:"12px 14px",marginBottom:8,background:C.card,border:`1px solid ${C.goldDim}`,borderRadius:5}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,color:C.gold,letterSpacing:1,marginBottom:5}}>★ {g.charName} <span style={{fontSize:9,color:C.textFaint,marginLeft:6}}>更新: {date}</span></div>
+                    <div style={{fontSize:10,color:C.textDim,marginBottom:2}}>弾幕スキル: {g.ds?.name||"—"}</div>
+                    {(g.tags||[]).length>0&&<div style={{fontSize:10,color:C.textDim,marginBottom:2}}>獲得タグ: {(g.tags||[]).map(t=>`《${t}》`).join(" ")}</div>}
+                    {enh.length>0&&<div style={{fontSize:10,color:C.textDim,marginBottom:2}}>強化: {enh.join(" / ")}</div>}
+                    {g.specialBond&&<div style={{fontSize:10,color:C.gold}}>特別な絆: 《{g.specialBond.target}への{g.specialBond.word||"敬意"}》（親密度{g.specialBond.intimacy??1}/10）</div>}
+                  </div>
+                  <button onClick={()=>deleteGrown(iid,g.charName)} style={btn(C.redBg,C.redBorder,C.red,{padding:"4px 10px",fontSize:10,flexShrink:0,marginLeft:12})}>削除</button>
                 </div>
               </div>
             );
