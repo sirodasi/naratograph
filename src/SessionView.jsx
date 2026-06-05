@@ -1510,7 +1510,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         upd(p => ({
           ...mergeConsumeWithBattle(p, {
             spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
-            extraInterventionPool: { remaining: count, usedDice: [], withDieChoice },
+            // declarerUid: 宣言者（対戦者）自身が追加援護/かばうを行う
+            extraInterventionPool: { remaining: count, usedDice: [], withDieChoice, declarerUid: attackerId },
           }),
           log: [`🔮 ${attackerName}：${spellCard.name}！ (援護/かばう+${count}回${withDieChoice ? "・ダイス任意" : ""})`, ...p.log],
         }));
@@ -10863,26 +10864,35 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
               </div>
             )}
 
-            {/* 追加援護/かばう権（extra_support_cover 系スペルカード） */}
-            {b.extraInterventionPool && b.extraInterventionPool.remaining > 0 && isSpectator && (
-              <div style={{ padding: 10, background: "rgba(200,160,64,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
-                <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>
-                  ✨ 追加介入権 ({b.extraInterventionPool.remaining}回残り){b.extraInterventionPool.withDieChoice && <span style={{ color: C.textFaint, fontSize: 8 }}> · ダイス任意選択</span>}
+            {/* 追加援護/かばう権（extra_support_cover 系スペルカード）: 宣言者(対戦者)自身が使う。
+                援護=自分のショット直前 / かばう=相手のショット直後（フェイズ整合）。NPC宣言はGM操作。 */}
+            {b.extraInterventionPool && b.extraInterventionPool.remaining > 0 && (() => {
+              const pool = b.extraInterventionPool;
+              const declarerIsPc = pool.declarerUid === b.pcCombatant;
+              const canUse = user.uid === pool.declarerUid || (isGm && pool.declarerUid === b.npcCombatant);
+              if (!canUse) return null;
+              const supportPhases = declarerIsPc ? ["pc_shot_intro", "pc_shot_roll"] : ["npc_shot_intro", "npc_shot_roll"];
+              const coverPhase    = declarerIsPc ? "npc_shot_after" : "pc_shot_after";
+              return (
+                <div style={{ padding: 10, background: "rgba(200,160,64,0.08)", border: `1px solid ${C.goldDim}`, borderRadius: 6 }}>
+                  <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 6 }}>
+                    ✨ 追加介入権 ({pool.remaining}回残り){pool.withDieChoice && <span style={{ color: C.textFaint, fontSize: 8 }}> · ダイス任意選択</span>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <button
+                      onClick={handleExtraSupport}
+                      disabled={!supportPhases.includes(b.phase)}
+                      style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
+                    >💥 追加援護射撃<span style={{ fontSize: 7, color: C.textFaint, marginLeft: 3 }}>自ショット前</span></button>
+                    <button
+                      onClick={handleExtraCover}
+                      disabled={b.phase !== coverPhase}
+                      style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
+                    >🛡️ 追加かばう<span style={{ fontSize: 7, color: C.textFaint, marginLeft: 3 }}>敵ショット後</span></button>
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <button
-                    onClick={handleExtraSupport}
-                    disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
-                    style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
-                  >💥 追加援護射撃</button>
-                  <button
-                    onClick={handleExtraCover}
-                    disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
-                    style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
-                  >🛡️ 追加かばう</button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div style={{ marginTop: 4 }}>
               <div style={{ fontSize: 8, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 2, marginBottom: 4 }}>陣営状況</div>
