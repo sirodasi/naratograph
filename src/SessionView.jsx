@@ -2275,7 +2275,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       const nextDice = noLoss ? currentDice : Math.max(0, currentDice - 1);
       const nextNoEvasionLoss = noLoss
         ? { ...p.battle.noEvasionLoss, [combatantId]: false }  // 1回使ったら消費
-        : p.battle.noEvasionLoss;
+        : (p.battle.noEvasionLoss || {}); // 空オブジェクトはFirebaseが除去→undefined書込防止
 
       const updatedEntity = {
         ...currentEntity,
@@ -2344,7 +2344,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       const currentDice = p.battle.currentEvadeDice ?? getDefaultEvadeDice(entity);
       const noLoss = p.battle.noEvasionLoss?.[combatantId];
       const nextDice = noLoss ? currentDice : Math.max(0, currentDice - 1);
-      const nextNoEvasionLoss = noLoss ? { ...p.battle.noEvasionLoss, [combatantId]: false } : p.battle.noEvasionLoss;
+      const nextNoEvasionLoss = noLoss ? { ...p.battle.noEvasionLoss, [combatantId]: false } : (p.battle.noEvasionLoss || {});
       const updated = { ...entity, resources: { ...entity.resources, グレイズ: { ...entity.resources.グレイズ, cur: nextGraze } } };
       const basePcs = isPc ? p.pcs.map(x => x.uid === combatantId ? updated : x) : p.pcs;
       const baseNpcs = isPc ? p.battle.participants.npcs : p.battle.participants.npcs.map(n => n.id === combatantId ? updated : n);

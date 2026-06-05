@@ -142,6 +142,19 @@ const DEFAULT_GS = {
 
 const DEFAULT_SCENE = { bg: null, portraits: [] };
 
+// Firebase は値に undefined を含むと set が例外を投げる（"contains undefined in property ..."）。
+// 空オブジェクト/配列を書くと除去される影響で、次回の読み戻しが undefined になり、それを再書込すると失敗する。
+// 書込直前にオブジェクトのキーから undefined を再帰的に除去して防御する（ローカル state は元のまま）。
+function stripUndefined(v) {
+  if (Array.isArray(v)) return v.map(stripUndefined);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const k in v) if (v[k] !== undefined) out[k] = stripUndefined(v[k]);
+    return out;
+  }
+  return v;
+}
+
 // ─── カスタムフック ──────────────────────────────────────────────
 
 function useMapBounds(containerRef) {
@@ -864,7 +877,7 @@ function SessionApp({ roomCode, user }) {
       const next = typeof fn === "function" ? fn(prev) : fn;
       if (!fired) {
         fired = true;
-        set(ref(db, gsPath), next).catch(console.error);
+        set(ref(db, gsPath), stripUndefined(next)).catch(console.error);
       }
       return next;
     });
