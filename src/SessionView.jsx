@@ -3549,10 +3549,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const defender   = isPc ? combatantPc : combatantNpc;
           const canImmortal = hasOfficialSkill(defender, "不死身") && !isDanmakuUsed(defenderId, "不死身");
           const reiryoku = (defender?.resources?.霊力?.cur || 0);
-          const canAfford = reiryoku >= 10;
+          // 老いることも死ぬこともない程度の能力（藤原妹紅・オート）: 決戦以外で不死身の霊力消費を3点(＋2点)に軽減
+          const immortalCost = (() => {
+            const ab = getActiveAbility(defender)?.name;
+            if (gs.sessionPhase !== "battle") {
+              if (ab === "老いることも死ぬこともない程度の能力")   return 3;
+              if (ab === "老いることも死ぬこともない程度の能力＋") return 2;
+            }
+            return 10;
+          })();
+          const canAfford = reiryoku >= immortalCost;
           return canImmortal ? (
             <div style={{ marginBottom: 10, padding: "8px 10px", background: "rgba(255,100,100,0.1)", border: `1px solid ${C.redBorder}`, borderRadius: 5 }}>
-              <div style={{ fontSize: 10, color: C.red, marginBottom: 4 }}>💀 不死身 — 霊力10点消費で被弾を打ち消す</div>
+              <div style={{ fontSize: 10, color: C.red, marginBottom: 4 }}>💀 不死身 — 霊力{immortalCost}点消費で被弾を打ち消す</div>
               <div style={{ fontSize: 9, color: C.textDim, marginBottom: 6 }}>現在霊力: {reiryoku}点{!canAfford ? "（不足）" : ""}</div>
               <button
                 disabled={!canAfford}
@@ -3564,19 +3573,19 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                       pcs: p.pcs.map(x => x.uid !== defenderId ? x : {
                         ...x, resources: {
                           ...x.resources,
-                          霊力: { ...x.resources.霊力, cur: x.resources.霊力.cur - 10 },
-                          攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((x.resources.霊力.cur - 10) / 5) }
+                          霊力: { ...x.resources.霊力, cur: x.resources.霊力.cur - immortalCost },
+                          攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((x.resources.霊力.cur - immortalCost) / 5) }
                         }
                       }),
                       battle: { ...p.battle, phase: next },
-                      log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-10・攻撃力更新）`, ...p.log]
+                      log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-${immortalCost}・攻撃力更新）`, ...p.log]
                     }));
                   } else {
                     upd(p => ({ ...p,
                       battle: { ...p.battle, phase: next,
-                        participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== defenderId ? n : { ...n, resources: { ...n.resources, 霊力: { ...n.resources.霊力, cur: n.resources.霊力.cur - 10 } } }) }
+                        participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== defenderId ? n : { ...n, resources: { ...n.resources, 霊力: { ...n.resources.霊力, cur: n.resources.霊力.cur - immortalCost } } }) }
                       },
-                      log: [`🛡 ${combatantNpc?.name} の『不死身』が発動（霊力-10）`, ...p.log]
+                      log: [`🛡 ${combatantNpc?.name} の『不死身』が発動（霊力-${immortalCost}）`, ...p.log]
                     }));
                   }
                 }}
