@@ -52,6 +52,13 @@ export const ABILITY_EFFECTS = {
   "念写をする程度の能力":   { freq: null, auto: true, kind: "consume_rei_newspaper", params: { reiDice: true }, note: "霊力D6消費後、GMが文々。新聞表を振る" },
   "念写をする程度の能力＋": { freq: null, auto: true, kind: "consume_rei_newspaper", params: { rei: 1 }, note: "霊力1消費後、GMが文々。新聞表を振る" },
 
+  // 探し物を探し当てる（ナズーリン）：2D:4判定で手がかりを配置（成功=任意/失敗=ランダム）。1日1回。
+  "探し物を探し当てる程度の能力":   { freq: "day", auto: true, kind: "search_place_clue" },
+  "探し物を探し当てる程度の能力＋": { freq: "day", auto: true, kind: "search_place_clue", note: "探索イベントの実行として扱い特殊効果も発生（特殊効果はGM）" },
+  // 十人の話を同時に聞く（神子）：同スポットの他キャラ全員への絆を取得（交流）。
+  "十人の話を同時に聞く程度の能力":   { freq: null, auto: true, kind: "gain_bonds_same_spot", note: "探索イベント実行シーンで自動取得（ボタンで適用）" },
+  "十人の話を同時に聞く程度の能力＋": { freq: null, auto: true, kind: "gain_bonds_same_spot", note: "相手に自分への絆を取らせる選択も可（その選択はGM）" },
+
   "あらゆる薬を作る程度の能力":   { freq: null, auto: true, kind: "cure_bad_status" }, // 八意永琳：同スポットのキャラの変調1つを除去
   "あらゆる薬を作る程度の能力＋": { freq: null, auto: true, kind: "cure_bad_status", params: { grantTag: "絶好調" } }, // 八意永琳＋：除去＋絶好調タグ
   "水難事故を引き起こす程度の能力":   { freq: null, auto: true, kind: "party_move" }, // 村紗：同スポットのキャラと共に好きなスポットへ移動
@@ -161,6 +168,9 @@ export const ABILITY_EFFECTS = {
   "剣術を扱う程度の能力＋": { passive: true, note: "弾幕ごっこで攻撃力が4未満なら4扱い" },
   "怪力乱神を持つ程度の能力":   { passive: true, note: "探索中の弾幕ごっこ勝利でやる気+1" },
   "怪力乱神を持つ程度の能力＋": { passive: true, note: "探索中の弾幕ごっこ勝利でやる気+1・霊力D6" },
+  // 神仏を見つけ出す（あうん・オート）：シーン終了時、神(＋は巫女/神)タグへの絆の応援欄を解除（endScene の jinbutsuRefresh）。
+  "神仏を見つけ出す程度の能力":   { passive: true, note: "シーン終了時に《神》タグへの絆の応援欄を解除（自動対応）" },
+  "神仏を見つけ出す程度の能力＋": { passive: true, note: "シーン終了時に《巫女》《神》タグへの絆の応援欄を解除（自動対応）" },
   // 無意識（こいし）：シーン終了時に隣接スポットへ移動（action_done に移動UI）。＋のサイクル終了移動はGM対応。
   "無意識を操る程度の能力":   { passive: true, note: "シーン終了時に1スポット離れたスポットへ移動（自動対応）" },
   "無意識を操る程度の能力＋": { passive: true, note: "シーン終了時＋サイクル終了時に移動（サイクル終了分はGM対応）" },

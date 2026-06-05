@@ -5063,6 +5063,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityScenePick, setAbilityScenePick] = useState(null); // 吉弔：追加シーン対象選択 { name, freq }
   const [abilityBoost, setAbilityBoost] = useState(null); // 核融合：同スポット他PCのやる気+ { name, freq, amount }
   const [minionMove, setMinionMove] = useState(null); // 手下移動：移動する手下のid（null=非選択）
+  const [abilitySearchClue, setAbilitySearchClue] = useState(null); // 探し物：手がかり配置スポット選択 { name, freq }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5337,6 +5338,39 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (meta?.auto && meta.kind === "boost_other_yaruki") {
       // 同スポットの他PCのやる気獲得に+α（対象選択ピッカー）
       setAbilityBoost({ name, freq, amount: meta.params?.amount || 1 });
+      return;
+    }
+    if (meta?.auto && meta.kind === "search_place_clue") {
+      // 2D:4 判定 → 成功なら任意スポットに手がかり配置（ピッカー）／失敗ならランダムスポットに配置
+      animateDice(2, `${name}（2D:4）`, res => {
+        const success = Math.max(...res) >= 4;
+        if (success) {
+          // 使用フラグだけ先に記録し、配置先をピッカーで選ぶ
+          commit(withAbilityUse({ ...pc }, name, freq), `🔵 ${pc.charName} が能力《${name}》発動：成功(出目${res.join(",")})→手がかりを配置するスポットを選択`);
+          setAbilitySearchClue({ name, freq });
+        } else {
+          const spots = (SPOTS || []).filter(s => s.id !== "dream");
+          const dest = spots[Math.floor(Math.random() * spots.length)];
+          upd(p => ({
+            ...p,
+            pcs: p.pcs.map(x => x.uid === pc.uid ? withAbilityUse({ ...x }, name, freq) : x),
+            clues: Array.from(new Set([...(p.clues || []), dest.id])),
+            log: [`🔵 ${pc.charName} が能力《${name}》発動：失敗(出目${res.join(",")})→ランダムに [${dest.name}] へ手がかりを配置`, ...p.log],
+          }));
+        }
+      });
+      return;
+    }
+    if (meta?.auto && meta.kind === "gain_bonds_same_spot") {
+      // 同スポットの自分以外のキャラ全員への絆を取得（交流）
+      const others = (gs.pcs || []).filter(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot && !(x.badStatus || []).includes("不機嫌"));
+      if (others.length === 0) { commit(withAbilityUse({ ...pc }, name, freq), `🔵 ${pc.charName} が能力《${name}》発動：同スポットに対象がいません`); return; }
+      const newBonds = [...(pc.bonds || [])];
+      const newBondUsed = { ...(pc.bondUsed || {}) };
+      others.forEach(o => { const b = `${o.charName}への絆`; if (!newBonds.includes(b)) newBonds.push(b); newBondUsed[b] = false; });
+      sfx.skillActivate();
+      commit(withAbilityUse({ ...pc, bonds: newBonds, bondUsed: newBondUsed }, name, freq),
+        `🔵 ${pc.charName} が能力《${name}》発動：${others.map(o => o.charName).join("・")} への絆を取得`);
       return;
     }
     if (meta?.auto && meta.kind === "disguise") {
@@ -5620,6 +5654,16 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         log: [`🔵 ${pc.charName} が能力《${sp.name}》を発動：${targetName} がもう一度シーンを行える`, ...p.log],
       };
     });
+  };
+
+  // search_place_clue（探し物）成功時：選んだスポットに手がかりを配置
+  const confirmSearchClue = (spotId) => {
+    setAbilitySearchClue(null);
+    upd(p => ({
+      ...p,
+      clues: Array.from(new Set([...(p.clues || []), spotId])),
+      log: [`🔵 ${pc.charName} の《探し物を探し当てる程度の能力》：[${getSpot(spotId)?.name}] へ手がかりを配置`, ...p.log],
+    }));
   };
 
   // boost_other_yaruki（核融合）：同スポットの他PCのやる気を amount だけ増やす
@@ -6338,6 +6382,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           </div>
         );
       })()}
+      {abilitySearchClue && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilitySearchClue(null)}>
+          <SpellCard color={C.gold} title={`✦ ${abilitySearchClue.name}`} style={{ maxWidth: 360, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>手がかりを配置するスポットを選択</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 10, maxHeight: 220, overflowY: "auto" }}>
+              {(SPOTS || []).filter(s => s.id !== "dream").map(s => (
+                <button key={s.id} onClick={() => confirmSearchClue(s.id)} style={btnFull(gs.clues?.includes(s.id) ? "rgba(255,255,255,0.02)" : "rgba(200,160,64,0.12)", gs.clues?.includes(s.id) ? C.border : C.goldDim, gs.clues?.includes(s.id) ? C.textFaint : C.gold, { fontSize: 10, padding: "5px 6px" })}>{s.name}{gs.clues?.includes(s.id) ? "（有）" : ""}</button>
+              ))}
+            </div>
+            <button onClick={() => setAbilitySearchClue(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          </SpellCard>
+        </div>
+      )}
       {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );
@@ -7011,21 +7068,40 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
   const myPc = gs.pcs.find(p => p.uid === user?.uid); // 操作中ユーザーのPC（観戦者能力の判定用）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
+  // 神仏を見つけ出す（あうん・オート）: シーン終了時、神(＋は巫女/神)タグを持つキャラへの絆のチェック(bondUsed)を解除
+  const jinbutsuRefresh = (x) => {
+    const abName = getActiveAbility(x)?.name;
+    if (abName !== "神仏を見つけ出す程度の能力" && abName !== "神仏を見つけ出す程度の能力＋") return null;
+    const wantTags = abName === "神仏を見つけ出す程度の能力＋" ? ["巫女", "神"] : ["神"];
+    const charHasTag = (cn) => {
+      const t = gs.pcs.find(z => z.charName === cn) || CHARACTERS.find(c => c.name === cn || c.id === cn);
+      return (t?.tags || []).some(tag => wantTags.includes(tag));
+    };
+    const nbu = { ...(x.bondUsed || {}) };
+    let changed = false;
+    (x.bonds || []).forEach(b => { const m = b.match(/^(.+)への絆$/); if (m && nbu[b] && charHasTag(m[1])) { nbu[b] = false; changed = true; } });
+    return changed ? nbu : null;
+  };
+
   const endScene = () => upd(p => {
     const scenePc = p.pcs.find(x => x.uid === pc.uid);
     const lives = scenePc?.resources?.残り人数?.cur ?? 0;
-    const nextPcs = lives === 0
-      ? p.pcs.map(x => x.uid !== pc.uid ? x : {
-          ...x, resources: { ...x.resources, 残り人数: { ...x.resources.残り人数, cur: 1 } }
-        })
-      : p.pcs;
+    const jinbutsuBu = jinbutsuRefresh(pc);
+    const nextPcs = p.pcs.map(x => {
+      if (x.uid !== pc.uid) return x;
+      let nx = x;
+      if (lives === 0) nx = { ...nx, resources: { ...nx.resources, 残り人数: { ...nx.resources.残り人数, cur: 1 } } };
+      if (jinbutsuBu) nx = { ...nx, bondUsed: jinbutsuBu };
+      return nx;
+    });
     const recoveryLog = lives === 0 ? [`🔵 ${pc.charName} の残り人数が0のため1に回復した`] : [];
+    const jinbutsuLog = jinbutsuBu ? [`🔵 ${pc.charName} の《神仏を見つけ出す程度の能力》：神タグへの絆の応援欄を解除`] : [];
     return {
       ...p,
       pcs: nextPcs,
       actedPcs: [...(p.actedPcs || []), pc.uid],
       currentScene: null,
-      log: [`${pc.charName} のシーンを終了した`, ...recoveryLog, ...p.log]
+      log: [`${pc.charName} のシーンを終了した`, ...jinbutsuLog, ...recoveryLog, ...p.log]
     };
   });
 
