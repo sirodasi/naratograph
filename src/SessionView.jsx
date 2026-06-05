@@ -5903,7 +5903,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                       <button onClick={() => setMinionMove(m.id)} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>移動</button>
                       {/* 手下でシーンを行う（袿姫/藍）: 手下のスポットでアクション、効果は所有者が受ける */}
                       {!gs.currentScene && (
-                        <button onClick={() => upd(p => ({ ...p, currentScene: { pcUid: pc.uid, minionId: m.id, phase: "action", startSpot: m.currentSpot, moveDice: [], actionDice: [], actionDiceCount: 2 }, log: [`🎬 ${pc.charName} の手下がシーン（アクション）を行う @ ${getSpot(m.currentSpot)?.name}`, ...p.log] }))} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>手下でシーン</button>
+                        <button onClick={() => upd(p => ({ ...p, currentScene: { pcUid: pc.uid, minionId: m.id, phase: "move_or_stay", startSpot: m.currentSpot, moveDice: [], actionDice: [], actionDiceCount: 2 }, log: [`🎬 ${pc.charName} の手下がシーン（移動とアクション）を行う @ ${getSpot(m.currentSpot)?.name}`, ...p.log] }))} style={btnFull("rgba(206,147,216,0.12)", "#ce93d850", "#ce93d8", { width: "auto", fontSize: 8, padding: "3px 6px" })}>手下でシーン</button>
                       )}
                       <button onClick={() => upd(p => ({ ...p, minions: (p.minions || []).filter(x => x.id !== m.id), log: [`手 ${pc.charName} の手下が退場した`, ...p.log] }))} style={btnFull("rgba(255,255,255,0.04)", C.border, C.textFaint, { width: "auto", fontSize: 8, padding: "3px 6px" })}>除去</button>
                     </div>
