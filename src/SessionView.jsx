@@ -4597,6 +4597,7 @@ export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
       battle: p.initialBattle || p.battle,
       bonusStatus: null,
       initialBattle: null,
+      minions: [], // 手下は探索フェイズ専用。決戦移行で退場
       log: ["⚔️ 全員の準備が整いました。最終決戦を開始します！", ...p.log]
     }));
   };
@@ -4860,7 +4861,7 @@ export function SessionEndView({ gs, upd, isGm }) {
             <button
               onClick={() => {
                 if (window.confirm("セッションを終了しますか？ルームが閉じられます。")) {
-                  upd(p => ({ ...p, sessionPhase: "ended", log: ["📖 セッション終了。", ...p.log] }));
+                  upd(p => ({ ...p, sessionPhase: "ended", minions: [], log: ["📖 セッション終了。", ...p.log] }));
                 }
               }}
               style={{

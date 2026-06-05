@@ -1061,6 +1061,7 @@ function SessionApp({ roomCode, user }) {
         battle: initialBattle,
         actedPcs: [],
         currentScene: null,
+        minions: [], // 手下は探索フェイズ専用。決戦移行で退場
         log: [...logAdd, "⚔️ 決戦フェイズへ移行します。",...p.log],
       }
     });
