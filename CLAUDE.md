@@ -253,7 +253,7 @@ When starting a 弾幕ごっこ quest battle, set `battle.scenePcUid` to `curren
 
 `getDistances(startSpotId)` in `App.jsx` runs BFS over the spot graph (defined in `gameData.js`) to compute shortest paths. Results gate which spots a PC can move to in one turn.
 
-### 能力スキル (Ability Skills) — 自動化進行中
+### 能力スキル (Ability Skills) — ★全120能力 自動化完了
 
 Each character has a base ability `pc.as = { name, type, desc }` and a grown version `pc.growthAbility` (same shape). `type` is `アクション` / `サポート` / `オート`. Built onto the PC object in `App.jsx` (both `as` and `growthAbility` are carried). There are **120** abilities (60 chars × {as, growthAbility}); 2 share a name (「魔法を使う程度の能力」＝霧雨魔理沙[アクション] / 聖白蓮[オート]) — disambiguated by `type`.
 
@@ -269,7 +269,7 @@ Each character has a base ability `pc.as = { name, type, desc }` and a grown ver
 
 **手下 (minion) subsystem**: `gs.minions = [{ id, ownerUid, ownerName, currentSpot }]`. `spawn_minion` adds one (人形/偶像 at spot, 式神 at base + SC cost). Rendered as a small 「手」 token layer in `MapView` (App.jsx). PCCard shows an owner-only panel to move (spot picker) / log an action / remove each minion. Minion-acts-in-scene re-processing is GM-run.
 
-**118/120 automated (累計~58 commits)**. The only GM-manual ability left is **空を飛ぶ程度の能力** (reroll any 表 right after rolling — would need deferred application across every table roll; not worth a cross-cutting refactor for one ability). Notable infra built: `gs.unluckyPhase` (紫苑 phase-wide fumble), `gs.reiBoostTargets`→`doReiryoku` (隠岐奈), `gs.itemSwapTargets` (千亦), `gs.eternityNight`→`doAdvanceCycle` night re-run + `shortenLimit` (輝夜), `consume_others_item` reusing `ITEM_DATA.use` (女苑), newspaper `windReroll` in RightPanel (文), `pc.untargetable` toggle excluded from target pickers (ぬえ), `pc.offMap`→random placement at `startScene` (菫子), `immortalCost` (妹紅), minion scene (`currentScene.minionId`+`sceneSpot`). Per-entry `note`s flag remaining ＋-only nuances handled by GM.
+**★ All 120/120 automated (累計~59 commits)**. Notable infra built: `gs.unluckyPhase` (紫苑 phase-wide fumble), `gs.reiBoostTargets`→`doReiryoku` (隠岐奈), `gs.itemSwapTargets` (千亦), `gs.eternityNight`→`doAdvanceCycle` night re-run + `shortenLimit` (輝夜), `consume_others_item` reusing `ITEM_DATA.use` (女苑), newspaper `windReroll` in RightPanel (文), `pc.untargetable` toggle excluded from target pickers (ぬえ), `pc.offMap`→random placement at `startScene` (菫子), `immortalCost` (妹紅), minion scene (`currentScene.minionId`+`sceneSpot`), and **table-roll reroll woven into `animateDice`** (霊夢 空を飛ぶ): a 空を飛ぶ holder rolling アイテム/変調/ペナルティ/ハプニング/手がかりイベント表 gets a reroll prompt (`pendingReroll` state + `pendingRerollCb` ref in `SessionApp`; cb deferred until 確定; `pc.soraFlewDay` = once/day). Per-entry `note`s flag the only residual GM bits (＋-only "行為判定以外" extra rolls beyond the 5 tables). All effect-less/contextual `note`-only entries are still real automations living in ScenePanel/BattleView/RightPanel.
 
 ### 個性スキル (Personality Skills)
 
