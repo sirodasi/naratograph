@@ -5366,19 +5366,23 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       return;
     }
     if (meta?.auto && meta.kind === "spawn_minion") {
-      // 手下をマップに登場させる（あなたのスポット or 拠点）。式神はSC消費。
+      // 手下をマップに登場させる（あなたのスポット or 拠点）。式神はSC消費＋手下シーン再処理。
       const pr = meta.params || {};
       const spot = pr.at === "base" ? (pc.baseSpotId || pc.currentSpot) : pc.currentSpot;
       const scCost = pr.costSC || (pr.costSCorRei ? 1 : 0);
       const sc = pc.resources.スペルカード || { cur: 0, max: 99 };
       const costPatch = scCost ? { resources: { ...pc.resources, スペルカード: { ...sc, cur: Math.max(0, sc.cur - scCost) } } } : {};
-      const minionId = `m_${pc.uid}_${Date.now()}`;
+      // 式神: 既に手下がいればそれを使う（いなければ拠点に登場）
+      const existing = pr.redoScene ? (gs.minions || []).find(m => m.ownerUid === pc.uid) : null;
+      const minionId = existing ? existing.id : `m_${pc.uid}_${Date.now()}`;
+      const minionSpot = existing ? existing.currentSpot : spot;
       sfx.skillActivate();
       upd(p => ({
         ...p,
         pcs: p.pcs.map(x => x.uid !== pc.uid ? x : withAbilityUse({ ...x, ...costPatch }, name, freq)),
-        minions: [...(p.minions || []), { id: minionId, ownerUid: pc.uid, ownerName: pc.charName, currentSpot: spot }],
-        log: [`🔵 ${pc.charName} が能力《${name}》を発動：手下を[${getSpot(spot)?.name}]に登場${scCost ? `（SC-${scCost}）` : ""}`, ...p.log],
+        minions: existing ? (p.minions || []) : [...(p.minions || []), { id: minionId, ownerUid: pc.uid, ownerName: pc.charName, currentSpot: spot }],
+        ...(pr.redoScene ? { actedPcs: (p.actedPcs || []).filter(u => u !== pc.uid), currentScene: { pcUid: pc.uid, minionId, phase: "move_or_stay", startSpot: minionSpot, moveDice: [], actionDice: [], actionDiceCount: 2 } } : {}),
+        log: [`🔵 ${pc.charName} が能力《${name}》を発動：${existing ? "手下" : `手下を[${getSpot(spot)?.name}]に登場し`}でシーンを再処理${scCost ? `（SC-${scCost}）` : ""}`, ...p.log],
       }));
       return;
     }
@@ -7131,7 +7135,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     upd(p => {
       let logAdd = `${pc.charName} は移動ダイスで「${val}」を選んだ`;
 
-      if (val === 6) {
+      // 手下シーンの移動はハプニングを発生させず通常移動として扱う（手下はタグ等を持たないため）
+      if (val === 6 && !sc.minionId) {
         return { ...p, currentScene: { ...p.currentScene, phase: "happening_roll" }, log: [logAdd + "（ハプニング発生！）", ...p.log] };
       }
       let actualVal = val;
@@ -7156,6 +7161,17 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     if (!sc.selectedDestSpot) return;
     const dest = sc.selectedDestSpot;
     const sDetail = SPOTS.find(s => s.id === dest);
+
+    // 手下シーン: 移動するのは手下（手下はタグを持たないため新聞ペナルティは適用しない）
+    if (sc.minionId) {
+      upd(p => ({
+        ...p,
+        minions: (p.minions || []).map(m => m.id === sc.minionId ? { ...m, currentSpot: dest } : m),
+        currentScene: { ...p.currentScene, phase: "action" },
+        log: [`手 ${pc.charName} の手下が [${sDetail?.name}] に移動した`, ...p.log],
+      }));
+      return;
+    }
 
     const isMountain = sDetail?.area === "妖怪の山" && dest !== "22";
     const isHuman = (pc.tags || []).includes("人間");

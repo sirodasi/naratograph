@@ -181,7 +181,10 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const isMovePhase = gs.currentScene?.phase === "move_dest";
   const actingPc    = isMovePhase ? (gs.pcs || []).find(p => p.uid === gs.currentScene.pcUid) : null;
   const isMyTurn    = actingPc?.uid === user?.uid;
-  const dists       = actingPc ? getDistances(actingPc.currentSpot, getAbilityMoveEdges(actingPc)) : {};
+  // 手下シーンの移動は手下のスポットから（手下は能力ルート拡張なし）
+  const actingMinion = isMovePhase && gs.currentScene?.minionId ? (gs.minions || []).find(m => m.id === gs.currentScene.minionId) : null;
+  const moveStart   = actingMinion ? actingMinion.currentSpot : actingPc?.currentSpot;
+  const dists       = moveStart ? getDistances(moveStart, actingMinion ? [] : getAbilityMoveEdges(actingPc)) : {};
   const maxDist     = gs.currentScene?.selectedMoveDie || 0;
   const myPc        = (gs.pcs || []).find(p => p.uid === user?.uid);
   const mySpot      = myPc?.currentSpot;
@@ -984,7 +987,10 @@ function SessionApp({ roomCode, user }) {
     const actingPc = (gs.pcs || []).find(p => p.uid === sc.pcUid);
     if (!actingPc) return;
 
-    const dists     = getDistances(actingPc.currentSpot, getAbilityMoveEdges(actingPc));
+    // 手下シーンなら手下のスポットを起点に判定（移動するのは手下）
+    const sMinion = sc.minionId ? (gs.minions || []).find(m => m.id === sc.minionId) : null;
+    const startSpot = sMinion ? sMinion.currentSpot : actingPc.currentSpot;
+    const dists     = getDistances(startSpot, sMinion ? [] : getAbilityMoveEdges(actingPc));
     const distance  = dists[spotId] ?? 999;
     const maxDist   = sc.selectedMoveDie || 0;
     const exactDist = sc.exactMoveDist ?? null;

@@ -42,8 +42,8 @@ export const ABILITY_EFFECTS = {
   "人形を操る程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "登場後、手下にアクションか移動を行わせる" },
   "偶像を作り出す程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "あなたのシーンで手下が代わりに移動とアクション（手下パネルで操作）" }, // 埴安神袿姫
   "偶像を作り出す程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "同上＋1日1度シーン終了直前にアクション消費なしで使用可（タイミングはGM）" },
-  "式神を操る程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSC: 1 }, note: "SC1消費。手下がいなければ拠点に登場し、シーンを手下で再処理（再処理はGM/シーン再開）" }, // 八雲藍
-  "式神を操る程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSCorRei: true }, note: "SC1点か霊力5点消費。同上" },
+  "式神を操る程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSC: 1, redoScene: true }, note: "シーン終了時にSC1消費。手下がいなければ拠点に登場し、手下シーンを再処理" }, // 八雲藍
+  "式神を操る程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSCorRei: true, redoScene: true }, note: "SC1点か霊力5点消費。同上（霊力消費の選択はGM）" },
 
   // なりすまし（二ツ岩マミゾウ）：任意キャラに化ける（pc.disguisedAs）。絆取得時の選択はGM。
   "化けさせる程度の能力":   { freq: null, auto: true, kind: "disguise", note: "選んだキャラとしても扱う。絆取得時の選択はGM。任意のタイミングで解除可" },
