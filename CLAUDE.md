@@ -39,7 +39,7 @@ Tests live in [src/__tests__/](src/__tests__/). Firebase is mocked via [src/__te
 ### Session Flow
 
 ```
-Lobby → PrepRoom → Intro → Explore → Battle → (Bonus) → End
+Lobby → PrepRoom → Intro → Explore → Battle → (Bonus) → Epilogue → End
 ```
 
 1. **Lobby** (`Lobby.jsx`): Auth, room creation/joining, character + skill selection
@@ -48,6 +48,8 @@ Lobby → PrepRoom → Intro → Explore → Battle → (Bonus) → End
 4. **Explore**: Map movement, resource management, quest/clue discovery
 5. **Battle**: Turn-based danmaku (bullet pattern) mini-game
 6. **Bonus** (optional, config-gated): Extra actions if solving before the time limit
+7. **Epilogue** (`sessionPhase: "epilogue"`, `EpilogueView`): after the **final** battle (any outcome, `isFinal`), a GM-authored 終幕 narration (`gs.epilogueText`, default `scenarioData.ending`) shown to all before the end screen. `finishBattle` routes `isFinal ? "epilogue" : "explore"`.
+8. **End** (`SessionEndView`): result + 成長 ceremony; the GM's end button exports the log (.txt) and **deletes the Firebase room** (`remove(rooms/{roomCode})`) — clients then hit `roomPhase: "error"`.
 
 Phase is tracked as `gs.sessionPhase` and transitions are explicit with confirmation modals.
 
