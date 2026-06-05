@@ -11,7 +11,7 @@ import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase 
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 import { db } from "./firebase";
-import { ref as dbRef, set as dbSet, get as dbGet } from "firebase/database";
+import { ref as dbRef, set as dbSet, get as dbGet, remove as dbRemove } from "firebase/database";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
@@ -262,6 +262,46 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
               : <span style={{ fontSize: 10, color: "#2a3545", letterSpacing: 2 }}>GMがフェイズを進めるまでお待ちください…</span>
             }
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── EpilogueView（終幕）: 決戦後・終了画面の前に挟む描写フェイズ ──────────
+// GM が終幕の描写を書き（gs.epilogueText・シナリオの ending を既定値）、全員に表示してから終了画面へ。
+export function EpilogueView({ gs, upd, isGm, onProceed }) {
+  const saved = gs.epilogueText ?? gs.scenarioData?.ending ?? "";
+  const [draft, setDraft] = useState(saved);
+  const proceeding = useRef(false);
+  const save = () => { if (draft !== (gs.epilogueText ?? "")) upd(p => ({ ...p, epilogueText: draft })); };
+  const proceed = () => { save(); if (!proceeding.current) { proceeding.current = true; onProceed(); } };
+
+  return (
+    <div style={{ background: "#06040a", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif", padding: "40px 60px", boxSizing: "border-box" }}>
+      <style>{`@keyframes epiIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes epiPulse{0%,100%{opacity:.45}50%{opacity:1}}`}</style>
+      <div style={{ maxWidth: 760, width: "100%", animation: "epiIn 1.1s ease" }}>
+        <div style={{ fontSize: 12, color: "#a98", letterSpacing: 10, textAlign: "center", marginBottom: 6 }}>◆ 終 幕 ◆</div>
+        <div style={{ fontSize: 10, color: "#5a4a40", letterSpacing: 4, textAlign: "center", marginBottom: 24 }}>{gs.scenarioData?.name || ""}</div>
+        {isGm ? (
+          <>
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={save}
+              placeholder="終幕の描写を入力…（プレイヤーにも表示されます）"
+              style={{ width: "100%", minHeight: 240, background: "rgba(255,255,255,0.03)", border: "1px solid #3a2e26", borderRadius: 6, color: "#d8c8b4", fontSize: 14, lineHeight: 2.1, padding: 16, fontFamily: "'Noto Serif JP', serif", resize: "vertical", boxSizing: "border-box", outline: "none" }}
+            />
+            <div style={{ textAlign: "center", marginTop: 22, display: "flex", gap: 12, justifyContent: "center" }}>
+              <button onClick={save} style={{ padding: "9px 22px", background: "rgba(255,255,255,0.04)", border: "1px solid #3a2e26", borderRadius: 6, color: "#bfa890", fontSize: 11, cursor: "pointer", letterSpacing: 1, fontFamily: "'Noto Serif JP', serif" }}>表示を更新</button>
+              <button onClick={proceed} style={{ padding: "9px 26px", background: "rgba(180,140,90,0.14)", border: "1px solid #6a5436", borderRadius: 6, color: "#e0c89a", fontSize: 12, cursor: "pointer", letterSpacing: 2, fontFamily: "'Noto Serif JP', serif", boxShadow: "0 0 12px rgba(180,140,90,0.14)" }}>終了画面へ進む ▶</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 15, color: "#d8c8b4", lineHeight: 2.4, whiteSpace: "pre-wrap", textAlign: "justify", minHeight: "4em" }}>{saved || "…"}</div>
+            <div style={{ textAlign: "center", marginTop: 40, fontSize: 10, color: "#4a3d33", letterSpacing: 3, animation: "epiPulse 2.4s ease infinite" }}>GMが終幕を進めるのを待っています…</div>
+          </>
         )}
       </div>
     </div>
@@ -3848,7 +3888,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           });
         }
 
-        const nextSessionPhase = (isVictory && isFinal) ? "end" : "explore";
+        // 決戦（最終決戦）後は勝敗にかかわらず終幕フェイズへ。通常クエスト戦は探索へ戻る。
+        const nextSessionPhase = isFinal ? "epilogue" : "explore";
         const logLine = isVictory
           ? (isFinal ? "🏆 最終決戦制覇！セッション終了！" : `🏆 弾幕ごっこ勝利！クエスト「${relatedQ?.name || ""}」が解決されました。`)
           : (isFinal ? "💀 最終決戦敗北...セッション終了。" : "💀 弾幕ごっこ敗北...探索フェイズへ戻ります。");
@@ -3969,12 +4010,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             )}
             {isVictory && isFinal && (
               <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.8 }}>
-                全ての強敵を撃破しました。<br />セッションが終了します。
+                全ての強敵を撃破しました。<br />終幕へ進みます。
               </div>
             )}
             {!isVictory && (
               <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.8 }}>
-                {isFinal ? "最終決戦に敗れました。セッションが終了します。" : "残念でした。探索フェイズへ戻ります。"}
+                {isFinal ? "最終決戦に敗れました。終幕へ進みます。" : "残念でした。探索フェイズへ戻ります。"}
               </div>
             )}
           </div>
@@ -3983,7 +4024,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             {isGm ? (
               <button onClick={finishBattle}
                 style={{ ...btnFull(isVictory ? C.goldBg : C.redBg, acColorDim, acColor), padding: "10px", letterSpacing: 2, fontSize: 12 }}>
-                {isFinal ? "セッション終了" : "探索フェイズへ戻る"}
+                {isFinal ? "終幕へ進む" : "探索フェイズへ戻る"}
               </button>
             ) : (
               <div style={{ fontSize: 10, color: C.textDim }}>GMが戦闘を終了するのを待っています...</div>
@@ -4735,7 +4776,8 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
       enhanceApplied = form.enhance;
       if (form.enhance === "bond") {
         const target = gs.pcs.find(x => x.uid === form.bondTarget);
-        specialBond = { target: target?.charName || "?", targetUid: form.bondTarget || null, intimacy: 1 }; // 新規取得で旧絆は上書き（消失）
+        const word = (form.bondWord || "").trim() || "敬意"; // PLが自由に決める言葉（既定: 敬意）
+        specialBond = { target: target?.charName || "?", targetUid: form.bondTarget || null, intimacy: 1, word }; // 新規取得で旧絆は上書き（消失）
       }
     }
     const record = {
@@ -4796,7 +4838,7 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
               {isDone ? (
                 <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.8 }}>
                   弾幕: {pc.ds?.name || "-"} ／ タグ: {(pc.tags || []).join("・")}
-                  {pc.specialBond && <div>特別な絆: 《{pc.specialBond.target}への敬意》（親密度{pc.specialBond.intimacy}）</div>}
+                  {pc.specialBond && <div>特別な絆: 《{pc.specialBond.target}への{pc.specialBond.word || "敬意"}》（親密度{pc.specialBond.intimacy}）</div>}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -4828,15 +4870,22 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
                         </label>
                       ))}
                     </div>
-                    {form.enhance === "bond" && (
-                      <div style={{ marginTop: 5 }}>
-                        <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>特別な絆の対象（既存の特別な絆は上書きされます）</div>
-                        <select value={form.bondTarget || ""} onChange={e => setForm(pc.uid, { bondTarget: e.target.value })} style={{ ...iStyle, width: "100%", fontSize: 11, padding: "5px 6px" }}>
-                          <option value="">（対象を選択）</option>
-                          {(gs.pcs || []).filter(x => x.uid !== pc.uid).map(x => <option key={x.uid} value={x.uid}>{x.charName}への敬意</option>)}
-                        </select>
-                      </div>
-                    )}
+                    {form.enhance === "bond" && (() => {
+                      const tgt = (gs.pcs || []).find(x => x.uid === form.bondTarget);
+                      const word = (form.bondWord || "").trim() || "敬意";
+                      return (
+                        <div style={{ marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
+                          <div style={{ fontSize: 9, color: C.textFaint }}>特別な絆の対象（既存の特別な絆は上書きされます）</div>
+                          <select value={form.bondTarget || ""} onChange={e => setForm(pc.uid, { bondTarget: e.target.value })} style={{ ...iStyle, width: "100%", fontSize: 11, padding: "5px 6px" }}>
+                            <option value="">（対象を選択）</option>
+                            {(gs.pcs || []).filter(x => x.uid !== pc.uid).map(x => <option key={x.uid} value={x.uid}>{x.charName}</option>)}
+                          </select>
+                          <div style={{ fontSize: 9, color: C.textFaint }}>絆の言葉（自由記述・既定: 敬意）</div>
+                          <input value={form.bondWord || ""} onChange={e => setForm(pc.uid, { bondWord: e.target.value })} placeholder="例: 敬意、憧れ、対抗心 …" style={{ ...iStyle, width: "100%", fontSize: 11, padding: "5px 6px" }} />
+                          <div style={{ fontSize: 10, color: C.gold, textAlign: "center" }}>《{tgt?.charName || "○○"}への{word}》</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <button
                     disabled={form.enhance === "bond" && !form.bondTarget}
@@ -4856,10 +4905,11 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
 }
 
 // ─── SessionEndView ───────────────────────────────────────────────
-export function SessionEndView({ gs, upd, isGm, user }) {
+export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
   const isVictory = gs.battle?.result === "pc_win";
   const pcs = gs.pcs || [];
   const [showGrowth, setShowGrowth] = useState(false);
+  const [ending, setEnding] = useState(false);
 
   const ac  = isVictory ? C.gold    : C.red;
   const ab  = isVictory ? C.goldDim : C.redBorder;
@@ -5067,20 +5117,24 @@ export function SessionEndView({ gs, upd, isGm, user }) {
           {/* 終了ボタン / 待機テキスト */}
           {isGm ? (
             <button
+              disabled={ending}
               onClick={() => {
-                if (window.confirm("セッションを終了しますか？ルームが閉じられます。")) {
-                  upd(p => ({ ...p, sessionPhase: "ended", minions: [], log: ["📖 セッション終了。", ...p.log] }));
+                if (ending) return;
+                if (window.confirm("セッションを終了しますか？\nセッションログ(.txt)を保存し、ルームデータを削除します。この操作は元に戻せません。")) {
+                  setEnding(true);
+                  exportLog(); // ログだけ出力
+                  if (roomCode) dbRemove(dbRef(db, `rooms/${roomCode}`)).catch(console.error); // ルームデータ削除
                 }
               }}
               style={{
                 padding: "11px 30px", background: abg,
                 border: `1px solid ${ab}`, borderRadius: 6,
-                color: ac, fontSize: 13, cursor: "pointer", letterSpacing: 2,
-                boxShadow: `0 0 14px ${ac}22`,
+                color: ac, fontSize: 13, cursor: ending ? "default" : "pointer", letterSpacing: 2,
+                boxShadow: `0 0 14px ${ac}22`, opacity: ending ? 0.6 : 1,
                 animation: `endFadeUp 0.5s ${1.0 + pcs.length * 0.13}s both`,
               }}
             >
-              セッション終了
+              {ending ? "終了処理中…" : "ログを保存してセッション終了"}
             </button>
           ) : (
             <div style={{ fontSize: 10, color: C.textDim, animation: `endFadeUp 0.5s ${1.0 + pcs.length * 0.13}s both` }}>
@@ -5226,7 +5280,7 @@ function CharDetailModal({ pc, onClose }) {
           {pc.specialBond && (
             <Section label="特別な絆">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ padding: "3px 10px", background: "rgba(255,213,79,0.14)", border: `1px solid ${C.goldDim}`, borderRadius: 10, fontSize: 11, color: C.gold }}>《{pc.specialBond.target}への敬意》</span>
+                <span style={{ padding: "3px 10px", background: "rgba(255,213,79,0.14)", border: `1px solid ${C.goldDim}`, borderRadius: 10, fontSize: 11, color: C.gold }}>《{pc.specialBond.target}への{pc.specialBond.word || "敬意"}》</span>
                 <span style={{ fontSize: 10, color: C.textDim }}>親密度 <span style={{ color: C.gold, fontWeight: "bold" }}>{pc.specialBond.intimacy ?? 1}</span> / 10</span>
               </div>
             </Section>

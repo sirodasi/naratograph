@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
-import { BackstoryScreen, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
+import { BackstoryScreen, EpilogueView, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
@@ -1182,6 +1182,12 @@ function SessionApp({ roomCode, user }) {
     );
   }
 
+  if (gs.sessionPhase === "epilogue") {
+    return (
+      <EpilogueView gs={gs} upd={upd} isGm={mode === "gm"} onProceed={() => upd(p => ({ ...p, sessionPhase: "end", log: ["✦ 終幕。セッションの幕が下りる。", ...p.log] }))} />
+    );
+  }
+
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Noto Serif JP', serif" }}>
       <style>{`
@@ -1280,7 +1286,7 @@ function SessionApp({ roomCode, user }) {
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
         {gs.sessionPhase === "end" ? (
-          <SessionEndView gs={gs} upd={upd} isGm={mode === "gm"} user={user} />
+          <SessionEndView gs={gs} upd={upd} isGm={mode === "gm"} user={user} roomCode={roomCode} />
         ) : gs.sessionPhase === "battle_bonus" ? (
           <BonusPhaseView
             gs={gs} upd={upd} user={user} isGm={mode === "gm"}
@@ -1515,7 +1521,7 @@ export default function App() {
   if (user === undefined)   return <LoadingScreen message="接続中…" />;
   if (!user || !roomCode)   return <LobbyRoot />;
   if (roomPhase === null)   return <LoadingScreen message="部屋情報を取得中…" />;
-  if (roomPhase === "error") return <LoadingScreen message="部屋が見つかりません。URLを確認してください。" color="#e07060" />;
+  if (roomPhase === "error") return <LoadingScreen message="ルームが見つかりません。セッション終了済みか、URLをご確認ください。" color="#e07060" />;
   if (roomPhase === "prep") return <LobbyRoot />;
 
   return <SessionApp roomCode={roomCode} user={user} />;
