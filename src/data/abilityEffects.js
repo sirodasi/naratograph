@@ -92,9 +92,9 @@ export const ABILITY_EFFECTS = {
   // 核融合（霊烏路空・サポート）：同スポットの他PCがやる気獲得時に+1（＋は+2）。対象PCを選んで付与。
   "核融合を操る程度の能力":   { freq: null, auto: true, kind: "boost_other_yaruki", params: { amount: 1 }, note: "同スポットの他PCのやる気獲得時に発動" },
   "核融合を操る程度の能力＋": { freq: null, auto: true, kind: "boost_other_yaruki", params: { amount: 2 }, note: "同上（+2）" },
-  // 財産を消費させる（依神女苑・サポート）：他者のアイテムを消費して自分が使用。アイテム効果の流用が複雑なためGM対応。
-  "財産を消費させる程度の能力":   { note: "他者のアイテム1つを消費して自分が所持していたものとして特殊効果を適用（GM対応）" },
-  "財産を消費させる程度の能力＋": { note: "同上（回数制限なし）（GM対応）" },
+  // 財産を消費させる（依神女苑）：他者のアイテム1つを消費し、その効果を自分に適用（ITEM_DATA.use を流用）。
+  "財産を消費させる程度の能力":   { freq: "day", auto: true, kind: "consume_others_item" },
+  "財産を消費させる程度の能力＋": { freq: null,  auto: true, kind: "consume_others_item", note: "回数制限なし" },
 
   // ── サポート（ダイス振り直し系・文脈依存。探索の行為判定結果画面で対応） ──
   // 運命を操る：出目を全て裏返す（1↔6,2↔5,3↔4）。探索結果画面に振り直しUIあり（ScenePanel）。

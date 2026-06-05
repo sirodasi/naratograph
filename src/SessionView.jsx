@@ -5076,6 +5076,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityReadMind, setAbilityReadMind] = useState(null); // 心を読む：絆取得対象選択 { name, freq }
   const [abilityReiBoost, setAbilityReiBoost] = useState(null); // あらゆるものの背中：霊力増加対象選択 { name, freq, amount, selected[] }
   const [abilityBoundary, setAbilityBoundary] = useState(null); // 境界：移動先選択 { name, freq, consume, mustBase }
+  const [abilityFortune, setAbilityFortune] = useState(null); // 財産を消費させる：対象/アイテム選択 { name, freq, targetUid }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5378,6 +5379,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       // アイテム交換できる対象キャラを選ぶ（複数選択）
       const cur = gs.itemSwapTargets || [];
       setAbilityReiBoost({ name, freq, amount: 0, selected: cur, target: "itemSwap" });
+      return;
+    }
+    if (meta?.auto && meta.kind === "consume_others_item") {
+      // 財産を消費させる：他者のアイテム1つを消費し、その効果を自分に適用（対象→アイテムの2段ピッカー）
+      setAbilityFortune({ name, freq, targetUid: null });
       return;
     }
     if (meta?.auto && meta.kind === "boundary_move") {
@@ -5741,6 +5747,28 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           return x;
         }),
         log: [`🔵 ${pc.charName} が能力《${rm.name}》を発動：《${bond}》を取得（${targetName} の応援欄をチェック）`, ...p.log],
+      };
+    });
+  };
+
+  // consume_others_item（財産を消費させる）：対象のアイテムを1つ消費し、その効果を自分(pc)に適用
+  const confirmFortune = (targetUid, item) => {
+    const ft = abilityFortune;
+    setAbilityFortune(null);
+    if (!ft || !ITEM_DATA[item]) return;
+    upd(p => {
+      // 十分な数を持たせたクローンに use を適用し、結果の resources/flags のみ自分に適用（自分の所持アイテムは不変）
+      const clone = { ...pc, items: { ...pc.items, [item]: 3 }, flags: { ...pc.flags } };
+      const after = ITEM_DATA[item].use(clone, p);
+      const targetName = p.pcs.find(x => x.uid === targetUid)?.charName || "対象";
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          if (x.uid === pc.uid) return withAbilityUse({ ...x, resources: after.resources, flags: after.flags }, ft.name, ft.freq);
+          if (x.uid === targetUid) return { ...x, items: { ...(x.items || {}), [item]: Math.max(0, (x.items?.[item] || 0) - 1) } };
+          return x;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${ft.name}》発動：${targetName} の【${item}】を消費し、その効果を自分に適用`, ...p.log],
       };
     });
   };
@@ -6525,6 +6553,41 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               </div>
               <button onClick={confirmReiBoost} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 12 }), marginBottom: 6, width: "100%" }}>決定</button>
               <button onClick={() => setAbilityReiBoost(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilityFortune && (() => {
+        const target = abilityFortune.targetUid ? gs.pcs.find(x => x.uid === abilityFortune.targetUid) : null;
+        const candidates = (gs.pcs || []).filter(x => x.uid !== pc.uid && ITEM_NAMES.some(n => (x.items?.[n] || 0) > 0));
+        const targetItems = target ? ITEM_NAMES.filter(n => (target.items?.[n] || 0) > 0) : [];
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityFortune(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityFortune.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              {!target ? (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>アイテムを消費させる対象を選択</div>
+                  {candidates.length === 0 ? (
+                    <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>アイテムを持つ他キャラがいません</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                      {candidates.map(x => (
+                        <button key={x.uid} onClick={() => setAbilityFortune(f => ({ ...f, targetUid: x.uid }))} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 11 })}>{x.charName}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{target.charName} の消費するアイテムを選択（効果は自分に適用）</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    {targetItems.map(it => (
+                      <button key={it} onClick={() => confirmFortune(target.uid, it)} style={btnFull("rgba(144,202,249,0.12)", "#1565c080", "#90caf9", { fontSize: 11 })}>{it}（{target.items[it]}）— {ITEM_DATA[it]?.desc?.slice(0, 16)}…</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => setAbilityFortune(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );
