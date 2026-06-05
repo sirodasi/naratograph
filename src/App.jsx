@@ -4,6 +4,7 @@ import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "f
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
 import { BackstoryScreen, EpilogueView, SceneStage, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
+import { useIsMobile } from "./useIsMobile";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
@@ -142,19 +143,6 @@ const DEFAULT_GS = {
 const DEFAULT_SCENE = { bg: null, portraits: [] };
 
 // ─── カスタムフック ──────────────────────────────────────────────
-
-// スマホ等の狭い画面を判定（既定: 幅820px以下）。レイアウトのレスポンシブ切替に使う。
-export function useIsMobile(breakpoint = 820) {
-  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= breakpoint);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
-    const handler = () => setIsMobile(mq.matches);
-    handler();
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [breakpoint]);
-  return isMobile;
-}
 
 function useMapBounds(containerRef) {
   const [bounds, setBounds] = useState({ left: 0, top: 0, width: 0, height: 0 });

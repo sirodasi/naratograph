@@ -4,6 +4,7 @@ import { ref, onValue, set, update, get } from "firebase/database";
 import { signInWithPopup, onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
 import ProfilePage, { ScenarioSelector } from "./ScenarioEditor";
 import spriteImg from "./assets/sprite.png";
+import { useIsMobile } from "./useIsMobile";
 import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
 import { C, btn, iStyle } from "./styles/colors";
 
@@ -207,7 +208,7 @@ function Lobby({ user, displayName, onProfile }) {
       </div>
 
       {view === "top" && (
-        <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
           <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.20s both" }}>
             <div style={{ textAlign: "center", padding: "24px 32px" }}>
               <div style={{ fontSize: 22, color: C.red, marginBottom: 10 }}>⚙</div>
@@ -280,6 +281,7 @@ const CUSTOM_INIT = {
 };
 
 function PrepRoom({ roomCode, user, displayName, isGm }) {
+  const isMobile = useIsMobile();
   const [room, setRoom]                   = useState(null);
   const [step, setStep]                   = useState("charSelect");
   const [selectedScenario, setSelectedScenario] = useState(null);
@@ -444,12 +446,12 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
       `}</style>
 
       {/* ヘッダー */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 16, color: C.gold, letterSpacing: 4 }}>幻想ナラトグラフ</span>
           <span style={{ fontSize: 9, color: C.textFaint, letterSpacing: 3 }}>準備フェイズ</span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ padding: "4px 16px", background: "rgba(4,4,12,0.9)", border: `1px solid ${C.goldDim}`, borderRadius: 2, fontSize: 12, color: C.gold, letterSpacing: 5 }}>
             ◆ {roomCode}
           </div>
@@ -460,9 +462,9 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, alignItems: "stretch" }}>
         {/* 左列 */}
-        <div style={{ flex: "0 0 260px" }}>
+        <div style={{ flex: isMobile ? "1 1 auto" : "0 0 260px" }}>
           {isGm && (
             <div style={{ ...S.card, animation: "lbFadeUp 0.4s 0.08s both" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
