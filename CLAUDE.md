@@ -269,7 +269,7 @@ Each character has a base ability `pc.as = { name, type, desc }` and a grown ver
 
 **手下 (minion) subsystem**: `gs.minions = [{ id, ownerUid, ownerName, currentSpot }]`. `spawn_minion` adds one (人形/偶像 at spot, 式神 at base + SC cost). Rendered as a small 「手」 token layer in `MapView` (App.jsx). PCCard shows an owner-only panel to move (spot picker) / log an action / remove each minion. Minion-acts-in-scene re-processing is GM-run.
 
-**Mostly automated now (累計~42 commits)**. Remaining GM-manual (note-only in `ABILITY_EFFECTS`): 境界を操る (dice+move+action), 永遠と須臾 (night-cycle re-run), 財産を消費させる (use another's item), 八雲藍 式神 scene re-process, plus the ＋-only nuances flagged in each entry's `note`. Subsystems still leaning on GM: minion scene-acting, なりすまし bond-choice, 念写 newspaper-table roll (lives in `RightPanel`).
+**118/120 automated (累計~58 commits)**. The only GM-manual ability left is **空を飛ぶ程度の能力** (reroll any 表 right after rolling — would need deferred application across every table roll; not worth a cross-cutting refactor for one ability). Notable infra built: `gs.unluckyPhase` (紫苑 phase-wide fumble), `gs.reiBoostTargets`→`doReiryoku` (隠岐奈), `gs.itemSwapTargets` (千亦), `gs.eternityNight`→`doAdvanceCycle` night re-run + `shortenLimit` (輝夜), `consume_others_item` reusing `ITEM_DATA.use` (女苑), newspaper `windReroll` in RightPanel (文), `pc.untargetable` toggle excluded from target pickers (ぬえ), `pc.offMap`→random placement at `startScene` (菫子), `immortalCost` (妹紅), minion scene (`currentScene.minionId`+`sceneSpot`). Per-entry `note`s flag remaining ＋-only nuances handled by GM.
 
 ### 個性スキル (Personality Skills)
 
