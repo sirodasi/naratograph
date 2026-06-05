@@ -2152,57 +2152,43 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   // 回避判定の確定処理（成功→移動 / 失敗→被弾判定）。PCは結果フェイズの「確定」から、NPCは即時に呼ぶ。
   // fragile=魂の弱い所/人を狂わすの応援（失敗→ファンブル）
   const resolveEvadeApply = (isPc, res, targetValue, combatant, fragile = false) => {
-    {
-      const maxDie = Math.max(...res);
-      const isSuccess = maxDie >= targetValue && !res.every(d => d === 1);
-      const isFumble = res.every(d => d === 1) || (fragile && !isSuccess);
-      const isSpecial = res.includes(6) && !isFumble;
-      const resultNotice = isFumble ? "ファンブル！" : isSpecial ? "スペシャル！" : "";
+    const maxDie = Math.max(...res);
+    const isSuccess = maxDie >= targetValue && !res.every(d => d === 1);
+    const isFumble = res.every(d => d === 1) || (fragile && !isSuccess);
+    const isSpecial = res.includes(6) && !isFumble;
+    const successPhase = isPc ? "pc_evade_move" : "npc_evade_move";
+    const failPhase    = isPc ? "pc_hit_check"  : "npc_hit_check";
+    const baseSuccessLog = `✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")})`;
+    const baseFailLog    = `💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})`;
 
-      if (isSuccess) {
-        upd(p => {
-          let newPcs = p.pcs;
-          let specialLog = "";
-          if (isPc && isSpecial) {
-            const gain = Math.ceil(Math.random() * 6);
-            newPcs = p.pcs.map(x => x.uid !== b.pcCombatant ? x : {
-              ...x, resources: {
-                ...x.resources,
-                霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) },
-                攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) }
-              }
-            });
-            specialLog = ` スペシャル！霊力+${gain}`;
-          }
-          return {
-            ...p,
-            pcs: newPcs,
-            battle: { ...p.battle, phase: isPc ? "pc_evade_move" : "npc_evade_move", evadeRoll: null },
-            log: [`✨ ${combatant.charName || combatant.name} は回避判定に成功！(出目:${res.join(",")})${specialLog}` + (isPc ? " 移動先を選択してください。" : ""), ...p.log]
-          };
+    if (isSuccess) {
+      // PC回避のスペシャル → 探索同様に animateDice で霊力回復（+特別な絆の親密度+1）
+      if (isPc && isSpecial) {
+        animateDice(1, "霊力回復", r => {
+          const gain = r[0];
+          upd(p => {
+            const pcs0 = p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
+            const { pcs: pcs1, logs } = gainIntimacy(pcs0, b.pcCombatant, 1, `${combatant.charName}のスペシャル`);
+            return { ...p, pcs: pcs1, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [...logs, `${baseSuccessLog} スペシャル！霊力+${gain} 移動先を選択してください。`, ...p.log] };
+          });
         });
       } else {
-        upd(p => {
-          let newPcs = p.pcs;
-          let fumbleLog = "";
-          // PC ファンブル → 変調獲得
-          if (isPc && isFumble) {
-            const bsKey = Math.floor(Math.random() * 6) + 1;
-            const bsName = BAD_STATUS_TABLE[bsKey]?.name;
-            if (bsName) {
-              newPcs = p.pcs.map(x => x.uid !== b.pcCombatant ? x : {
-                ...x, badStatus: [...(x.badStatus || []), bsName]
-              });
-              fumbleLog = ` ファンブル！変調《${bsName}》を獲得`;
-            }
-          }
-          return {
-            ...p,
-            pcs: newPcs,
-            battle: { ...p.battle, phase: isPc ? "pc_hit_check" : "npc_hit_check", evadeRoll: null },
-            log: [`💀 ${combatant.charName || combatant.name} は回避に失敗... (出目:${res.join(",")})${fumbleLog}`, ...p.log]
-          };
+        upd(p => ({ ...p, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [`${baseSuccessLog}${isPc ? " 移動先を選択してください。" : ""}`, ...p.log] }));
+      }
+    } else {
+      // PC回避のファンブル → 探索同様に animateDice で変調表（馬鹿は免疫）
+      if (isPc && isFumble) {
+        animateDice(1, "変調決定", r => {
+          const bsName = BAD_STATUS_TABLE[r[0]]?.name;
+          upd(p => {
+            const immune = isBadStatusImmune(combatant, bsName);
+            const newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+            const fumbleLog = !bsName ? "" : immune ? ` 🛡《馬鹿》で変調《${bsName}》を無効化` : ` ファンブル！変調《${bsName}》を獲得`;
+            return { ...p, pcs: newPcs, battle: { ...p.battle, phase: failPhase, evadeRoll: null }, log: [`${baseFailLog}${fumbleLog}`, ...p.log] };
+          });
         });
+      } else {
+        upd(p => ({ ...p, battle: { ...p.battle, phase: failPhase, evadeRoll: null }, log: [baseFailLog, ...p.log] }));
       }
     }
   };
@@ -9130,38 +9116,33 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 };
               }));
             };
-            // 判定確定：振り足し後の最終出目でファンブル/スペシャルを適用し resolved にする
+            // 判定確定：振り足し後の最終出目でファンブル/スペシャルを適用し resolved にする。
+            // 探索同様、ファンブルは変調表、スペシャルは霊力回復を animateDice で振る。
             const confirmQuestRoll = (judgePc) => {
-              upd(p => {
-                const roll = p.currentScene.rolls?.[judgePc.uid];
-                if (!roll) return p;
-                const ev = evalQuest(roll.dice, roll.fragile);
-                let newPcs = p.pcs;
-                const extraLogs = [];
-                if (ev.isFumble) {
-                  const bsKey = Math.floor(Math.random() * 6) + 1;
-                  const bsName = BAD_STATUS_TABLE[bsKey]?.name;
-                  if (bsName) {
-                    const immune = isBadStatusImmune(judgePc, bsName);
-                    newPcs = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, badStatus: immune ? (x.badStatus || []) : [...(x.badStatus || []), bsName] });
-                    extraLogs.push(immune ? `🛡 ${judgePc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${judgePc.charName} は変調《${bsName}》を獲得した`);
-                  }
-                } else if (ev.isSpecial && ev.success) {
-                  const gain = Math.ceil(Math.random() * 6);
-                  newPcs = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
-                  extraLogs.push(`✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`);
-                }
-                // 特別な絆: 対象(judgePc)のスペシャルで親密度+1
-                if (ev.isSpecial && ev.success) {
-                  const r = gainIntimacy(newPcs, judgePc.uid, 1, `${judgePc.charName}のスペシャル`);
-                  newPcs = r.pcs; extraLogs.unshift(...r.logs);
-                }
-                return {
-                  ...p, pcs: newPcs,
-                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgePc.uid]: { ...roll, resolved: true } } },
-                  log: [...extraLogs, `${judgePc.charName} のクエスト判定確定: ${ev.success ? "成功" : "失敗"}${ev.isFumble ? "（ファンブル）" : ev.isSpecial ? "（スペシャル）" : ""}`, ...p.log],
-                };
-              });
+              const roll = gs.currentScene.rolls?.[judgePc.uid];
+              if (!roll) return;
+              const ev = evalQuest(roll.dice, roll.fragile);
+              const resultLabel = `${judgePc.charName} のクエスト判定確定: ${ev.success ? "成功" : "失敗"}${ev.isFumble ? "（ファンブル）" : ev.isSpecial ? "（スペシャル）" : ""}`;
+              const markResolved = (p) => ({ ...p, currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgePc.uid]: { ...(p.currentScene.rolls?.[judgePc.uid] || roll), resolved: true } } } });
+
+              if (ev.isFumble) {
+                animateDice(1, "変調決定", r => upd(p => {
+                  const bsName = BAD_STATUS_TABLE[r[0]]?.name;
+                  const immune = isBadStatusImmune(judgePc, bsName);
+                  const newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+                  const fl = !bsName ? [] : [immune ? `🛡 ${judgePc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${judgePc.charName} は変調《${bsName}》を獲得した`];
+                  return { ...markResolved({ ...p, pcs: newPcs }), log: [...fl, resultLabel, ...p.log] };
+                }));
+              } else if (ev.isSpecial && ev.success) {
+                animateDice(1, "霊力回復", r => upd(p => {
+                  const gain = r[0];
+                  const pcs0 = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
+                  const { pcs: pcs1, logs } = gainIntimacy(pcs0, judgePc.uid, 1, `${judgePc.charName}のスペシャル`);
+                  return { ...markResolved({ ...p, pcs: pcs1 }), log: [...logs, `✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`, resultLabel, ...p.log] };
+                }));
+              } else {
+                upd(p => ({ ...markResolved(p), log: [resultLabel, ...p.log] }));
+              }
             };
             // クエスト判定者 p のロールに対する応援強化（奇跡=出目+1 / 動物=振り直し / 気質=被応援で出目+1）
             const writeRollDice = (judgeUid, newDice, consumeUid, consumeBond, extraPatch, logMsg) => upd(p2 => {
