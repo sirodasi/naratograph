@@ -5337,6 +5337,23 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityBoost({ name, freq, amount: meta.params?.amount || 1 });
       return;
     }
+    if (meta?.auto && meta.kind === "spawn_minion") {
+      // 手下をマップに登場させる（あなたのスポット or 拠点）。式神はSC消費。
+      const pr = meta.params || {};
+      const spot = pr.at === "base" ? (pc.baseSpotId || pc.currentSpot) : pc.currentSpot;
+      const scCost = pr.costSC || (pr.costSCorRei ? 1 : 0);
+      const sc = pc.resources.スペルカード || { cur: 0, max: 99 };
+      const costPatch = scCost ? { resources: { ...pc.resources, スペルカード: { ...sc, cur: Math.max(0, sc.cur - scCost) } } } : {};
+      const minionId = `m_${pc.uid}_${Date.now()}`;
+      sfx.skillActivate();
+      upd(p => ({
+        ...p,
+        pcs: p.pcs.map(x => x.uid !== pc.uid ? x : withAbilityUse({ ...x, ...costPatch }, name, freq)),
+        minions: [...(p.minions || []), { id: minionId, ownerUid: pc.uid, ownerName: pc.charName, currentSpot: spot }],
+        log: [`🔵 ${pc.charName} が能力《${name}》を発動：手下を[${getSpot(spot)?.name}]に登場${scCost ? `（SC-${scCost}）` : ""}`, ...p.log],
+      }));
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();

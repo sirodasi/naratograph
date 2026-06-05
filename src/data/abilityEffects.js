@@ -37,6 +37,14 @@ export const ABILITY_EFFECTS = {
   "比類なき脚力を持つ程度の能力":   { freq: null, auto: true, kind: "gain_yaruki", params: { amount: 2 } }, // （導入フェイズ開始時）やる気+2
   "比類なき脚力を持つ程度の能力＋": { freq: null, auto: true, kind: "gain_yaruki", params: { amount: 2 }, note: "加えて夜の終了時にやる気減少を受けない（App.jsxで処理）" }, // やる気+2＋夜のやる気減少免除
 
+  // ── 手下（minion）システム：マップに手下を登場させ、所有者が移動/アクションさせる ──
+  "人形を操る程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "登場後、手下にアクションを行わせる（手下パネルで操作）" }, // アリス
+  "人形を操る程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "登場後、手下にアクションか移動を行わせる" },
+  "偶像を作り出す程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "あなたのシーンで手下が代わりに移動とアクション（手下パネルで操作）" }, // 埴安神袿姫
+  "偶像を作り出す程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "spot" }, note: "同上＋1日1度シーン終了直前にアクション消費なしで使用可（タイミングはGM）" },
+  "式神を操る程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSC: 1 }, note: "SC1消費。手下がいなければ拠点に登場し、シーンを手下で再処理（再処理はGM/シーン再開）" }, // 八雲藍
+  "式神を操る程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSCorRei: true }, note: "SC1点か霊力5点消費。同上" },
+
   "あらゆる薬を作る程度の能力":   { freq: null, auto: true, kind: "cure_bad_status" }, // 八意永琳：同スポットのキャラの変調1つを除去
   "あらゆる薬を作る程度の能力＋": { freq: null, auto: true, kind: "cure_bad_status", params: { grantTag: "絶好調" } }, // 八意永琳＋：除去＋絶好調タグ
   "水難事故を引き起こす程度の能力":   { freq: null, auto: true, kind: "party_move" }, // 村紗：同スポットのキャラと共に好きなスポットへ移動

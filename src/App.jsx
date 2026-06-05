@@ -429,6 +429,35 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
         });
       })()}
 
+      {/* 手下（minion）レイヤー: 所有者の手下をスポット近くに小トークンで表示 */}
+      {(() => {
+        const minions = gs.minions || [];
+        const bySpot = {};
+        minions.forEach(m => { (bySpot[m.currentSpot] = bySpot[m.currentSpot] || []).push(m); });
+        return minions.map(m => {
+          const spot = SPOTS.find(s => s.id === m.currentSpot);
+          if (!spot) return null;
+          const px = (spot.x / 100) * mapBounds.width;
+          const py = (spot.y / 100) * mapBounds.height;
+          const mates = bySpot[m.currentSpot] || [];
+          const idx = mates.findIndex(x => x.id === m.id);
+          const offsetX = (idx - (mates.length - 1) / 2) * 18;
+          return (
+            <div key={m.id} title={`${m.ownerName} の手下`} style={{
+              position: "absolute", left: px + offsetX, top: py + baseSize / 2 + 2,
+              transform: "translate(-50%, 0)", zIndex: 21, pointerEvents: "none",
+              transition: "left 0.52s cubic-bezier(0.4,0,0.2,1), top 0.52s cubic-bezier(0.4,0,0.2,1)",
+            }}>
+              <div style={{
+                width: 16, height: 16, borderRadius: "50%", background: "#1a0f1f",
+                border: "1.5px solid #ce93d8", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 9, color: "#ce93d8", boxShadow: "0 1px 3px rgba(0,0,0,0.8)",
+              }}>手</div>
+            </div>
+          );
+        });
+      })()}
+
       <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
         {gs.sessionPhase === "explore" ? (
           <div style={{ padding: "4px 14px", background: "rgba(10,12,20,0.92)", border: `1px solid ${CYCLE_COLORS[cycleIdx]}40`, borderRadius: 14, fontSize: 12, color: CYCLE_COLORS[cycleIdx] }}>
