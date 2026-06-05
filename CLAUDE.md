@@ -48,7 +48,7 @@ Lobby → PrepRoom → Intro → Explore → Battle → (Bonus) → Epilogue →
 4. **Explore**: Map movement, resource management, quest/clue discovery
 5. **Battle**: Turn-based danmaku (bullet pattern) mini-game
 6. **Bonus** (optional, config-gated): Extra actions if solving before the time limit
-7. **Epilogue** (`sessionPhase: "epilogue"`, `EpilogueView`): after the **final** battle (any outcome, `isFinal`), a GM-authored 終幕 narration (`gs.epilogueText`, default `scenarioData.ending`) shown to all before the end screen. `finishBattle` routes `isFinal ? "epilogue" : "explore"`.
+7. **Epilogue** (`sessionPhase: "epilogue"`, `EpilogueView`): after the **final** battle (any outcome, `isFinal`), a 終幕 depiction shown to all before the end screen. Uses the **same scene-mode UI as explore's 描写** — `SceneStage` (bg + 立ち絵 + text) + GM-side `SceneEditor` (both exported from `SessionView.jsx`, also used by `MapView`/`RightPanel`); data flows through `sceneData` (`rooms/{roomCode}/scene`) + `gs.sceneText`. `finishBattle` routes `isFinal ? "epilogue" : "explore"`.
 8. **End** (`SessionEndView`): result + 成長 ceremony; the GM's end button exports the log (.txt) and **deletes the Firebase room** (`remove(rooms/{roomCode})`) — clients then hit `roomPhase: "error"`.
 
 Phase is tracked as `gs.sessionPhase` and transitions are explicit with confirmation modals.
