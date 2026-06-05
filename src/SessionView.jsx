@@ -9309,6 +9309,21 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
     });
   };
 
+  // 風を操る程度の能力（射命丸文）: 新聞表を巻き戻して振り直す（base=やる気1消費）
+  const windHolder = (gs.pcs || []).find(x => { const n = getActiveAbility(x)?.name; return n === "風を操る程度の能力" || n === "風を操る程度の能力＋"; });
+  const windReroll = () => {
+    if (!windHolder) return;
+    const isPlus = getActiveAbility(windHolder)?.name === "風を操る程度の能力＋";
+    upd(p => ({
+      ...p,
+      newspaper: null,
+      pcs: isPlus ? p.pcs : p.pcs.map(x => x.uid === windHolder.uid ? { ...x, resources: { ...x.resources, やる気: { ...(x.resources.やる気 || { cur: 0, max: 99 }), cur: Math.max(0, (x.resources.やる気?.cur || 0) - 1) } } } : x),
+      log: [`🌀 ${windHolder.charName} の《風を操る程度の能力${isPlus ? "＋" : ""}》: 新聞表を振り直す${isPlus ? "" : "（やる気-1）"}`, ...p.log],
+    }));
+    setPaperModal(null);
+    setTimeout(handleNewspaper, 100);
+  };
+
   const startScene = () => {
     if (!sceneSelect) return;
     const targetPc = gs.pcs.find(p => p.uid === sceneSelect);
@@ -9975,6 +9990,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       </div>
                     )}
 
+                    {/* 風を操る（文）: 新聞表を振り直す（やる気消費はbaseのみ） */}
+                    {!paperModal.applied && windHolder && (windHolder.uid === user?.uid || isGm) && (getActiveAbility(windHolder)?.name === "風を操る程度の能力＋" || (windHolder.resources?.やる気?.cur || 0) >= 1) && (
+                      <button onClick={windReroll} style={{ ...btnFull("rgba(129,199,132,0.14)", C.greenBorder, C.green), marginTop: 8 }}>🌀 風: 新聞表を振り直す（{windHolder.charName}）</button>
+                    )}
                     {isGm && !paperModal.applied && isZoro && <button onClick={applyZoro} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue), marginTop: 12 }}>適用する</button>}
                     {isGm && !paperModal.applied && needsSpot && <button onClick={rollTargetSpot} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 対象スポットを決定する</button>}
                     {isGm && !paperModal.applied && is25 && <button onClick={apply25} style={{ ...btnFull(C.goldBg, C.goldDim, C.gold), marginTop: 12 }}>🎲 手がかりを配置する</button>}
