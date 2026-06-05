@@ -10790,17 +10790,18 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                   <div style={{ fontSize: 9, color: C.textFaint, textAlign: "center" }}>使用済み ({interventionUsed === "support" ? "援護" : "かばう"})</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {/* 援護射撃: 味方(PC)のショット直前のみ。かばう: 敵(NPC)のショット直後のみ。 */}
                     <button
                       onClick={() => handleSupportFire(user.uid)}
-                      disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
+                      disabled={!["pc_shot_intro","pc_shot_roll"].includes(b.phase)}
                       style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 9, padding: "4px"}}
-                    >💥 援護射撃</button>
+                    >💥 援護射撃<span style={{ fontSize: 7, color: C.textFaint, marginLeft: 3 }}>味方ショット前</span></button>
 
                     <button
-                      onClick={() => handleCover(user.uid, b.phase === "npc_shot_after" ? b.pcCombatant : b.npcCombatant)}
-                      disabled={b.phase !== "npc_shot_after" && b.phase !== "pc_shot_after"}
+                      onClick={() => handleCover(user.uid, b.pcCombatant)}
+                      disabled={b.phase !== "npc_shot_after"}
                       style={{...btnFull(C.greenBg, C.greenBorder, C.green), fontSize: 9, padding: "4px"}}
-                    >🛡️ かばう</button>
+                    >🛡️ かばう<span style={{ fontSize: 7, color: C.textFaint, marginLeft: 3 }}>敵ショット後</span></button>
                   </div>
                 )}
               </div>
@@ -10819,9 +10820,10 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
                         <div style={{ fontSize: 8, color: C.textFaint }}>使用済み ({used === "support" ? "援護" : "かばう"})</div>
                       ) : (
                         <div style={{ display: "flex", gap: 4 }}>
+                          {/* NPC観戦者: 援護=味方(NPC)ショット直前のみ。かばう=敵(PC)ショット直後のみ。 */}
                           <button
                             onClick={() => handleSupportFire(n.id)}
-                            disabled={!["pc_shot_intro","npc_shot_intro","pc_shot_roll","npc_shot_roll"].includes(b.phase)}
+                            disabled={!["npc_shot_intro","npc_shot_roll"].includes(b.phase)}
                             style={{...btnFull(C.redBg, C.redBorder, C.red), fontSize: 8, padding: "3px", flex: 1}}
                           >💥 援護</button>
                           <button
