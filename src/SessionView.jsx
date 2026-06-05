@@ -5065,6 +5065,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [minionMove, setMinionMove] = useState(null); // 手下移動：移動する手下のid（null=非選択）
   const [abilitySearchClue, setAbilitySearchClue] = useState(null); // 探し物：手がかり配置スポット選択 { name, freq }
   const [abilityReadMind, setAbilityReadMind] = useState(null); // 心を読む：絆取得対象選択 { name, freq }
+  const [abilityReiBoost, setAbilityReiBoost] = useState(null); // あらゆるものの背中：霊力増加対象選択 { name, freq, amount, selected[] }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5355,6 +5356,12 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (meta?.auto && meta.kind === "read_mind") {
       // 誰かがあなたへの絆を取得した時：その相手への絆を取得（対象ピッカー）
       setAbilityReadMind({ name, freq });
+      return;
+    }
+    if (meta?.auto && meta.kind === "select_rei_boost") {
+      // 霊力増加+α の対象キャラを選ぶ（複数選択）
+      const cur = (gs.reiBoostTargets?.uids) || [];
+      setAbilityReiBoost({ name, freq, amount: meta.params?.amount || 1, selected: cur });
       return;
     }
     if (meta?.auto && meta.kind === "search_place_clue") {
@@ -5707,6 +5714,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         log: [`🔵 ${pc.charName} が能力《${rm.name}》を発動：《${bond}》を取得（${targetName} の応援欄をチェック）`, ...p.log],
       };
     });
+  };
+
+  // select_rei_boost（あらゆるものの背中）：選んだキャラを霊力増加対象に設定
+  const confirmReiBoost = () => {
+    const rb = abilityReiBoost;
+    setAbilityReiBoost(null);
+    if (!rb) return;
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid === pc.uid ? withAbilityUse({ ...x }, rb.name, rb.freq) : x),
+      reiBoostTargets: { uids: rb.selected, amount: rb.amount },
+      log: [`🔵 ${pc.charName} が能力《${rb.name}》を発動：${rb.selected.map(u => p.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・") || "（なし）"} の霊力増加を+${rb.amount}に設定`, ...p.log],
+    }));
   };
 
   // boost_other_yaruki（核融合）：同スポットの他PCのやる気を amount だけ増やす
@@ -6438,6 +6458,24 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           </SpellCard>
         </div>
       )}
+      {abilityReiBoost && (() => {
+        const toggle = (uid) => setAbilityReiBoost(m => ({ ...m, selected: m.selected.includes(uid) ? m.selected.filter(u => u !== uid) : [...m.selected, uid] }));
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityReiBoost(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityReiBoost.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>霊力増加を+{abilityReiBoost.amount}する対象キャラを選択（複数可）</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+                {(gs.pcs || []).map(x => {
+                  const on = abilityReiBoost.selected.includes(x.uid);
+                  return <button key={x.uid} onClick={() => toggle(x.uid)} style={btnFull(on ? "rgba(144,202,249,0.25)" : "rgba(255,255,255,0.04)", on ? "#1565c0" : C.border, on ? "#90caf9" : C.textDim, { fontSize: 10, padding: "4px 8px" })}>{on ? "✓ " : ""}{x.charName}</button>;
+                })}
+              </div>
+              <button onClick={confirmReiBoost} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 12 }), marginBottom: 6, width: "100%" }}>決定</button>
+              <button onClick={() => setAbilityReiBoost(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
       {abilityReadMind && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityReadMind(null)}>
           <SpellCard color="#ce93d8" title={`✦ ${abilityReadMind.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>

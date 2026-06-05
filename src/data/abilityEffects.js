@@ -138,6 +138,9 @@ export const ABILITY_EFFECTS = {
   // 心を読む（古明地さとり）：誰かがさとりへの絆を取得した時、その相手への絆を取得（相手のさとり絆をチェック）。
   "心を読む程度の能力":   { freq: null, auto: true, kind: "read_mind" },
   "心を読む程度の能力＋": { freq: null, auto: true, kind: "read_mind", note: "相手が持つ任意の絆1つを取得する選択も可（その選択はGM）" },
+  // あらゆるものの背中に扉を作る（摩多羅隠岐奈・オート）：選んだキャラの霊力増加+1/+2（gs.reiBoostTargets、doReiryokuで反映）。
+  "あらゆるものの背中に扉を作る程度の能力":   { freq: null, auto: true, reactive: true, kind: "select_rei_boost", params: { amount: 1 }, note: "選んだキャラの霊力増加を+1（対象選択）" },
+  "あらゆるものの背中に扉を作る程度の能力＋": { freq: null, auto: true, reactive: true, kind: "select_rei_boost", params: { amount: 2 }, note: "選んだキャラの霊力増加を+2（対象選択）" },
 
   "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ：他キャラの使用済み応援欄を1つ解除
   "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ＋（トリガー条件が広いだけで効果は同一）

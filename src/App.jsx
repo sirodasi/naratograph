@@ -886,6 +886,8 @@ function SessionApp({ roomCode, user }) {
 
         let gain = spot.rei || 0;
         if (spot.reiD6) gain = Math.floor(Math.random() * 6) + 1;
+        // あらゆるものの背中に扉を作る程度の能力（隠岐奈）: 選ばれたキャラは霊力増加+1/+2
+        if ((p.reiBoostTargets?.uids || []).includes(pc.uid)) gain += (p.reiBoostTargets.amount || 1);
         if (gain <= 0) return pc;
 
         const curRei  = pc.resources.霊力?.cur || 0;
