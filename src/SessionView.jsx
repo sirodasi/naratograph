@@ -5060,6 +5060,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityDestroy, setAbilityDestroy] = useState(null); // 破壊 { name, freq, targetUid, category }
   const [abilityReturn, setAbilityReturn] = useState(null); // 密と疎：帰還先変更 { name, freq, params, selected[], destSpot }
   const [abilityScenePick, setAbilityScenePick] = useState(null); // 吉弔：追加シーン対象選択 { name, freq }
+  const [abilityBoost, setAbilityBoost] = useState(null); // 核融合：同スポット他PCのやる気+ { name, freq, amount }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5309,6 +5310,33 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityScenePick({ name, freq });
       return;
     }
+    if (meta?.auto && meta.kind === "reactive_gain") {
+      // 発火時に押す手動トリガー：やる気/霊力を獲得（reiDice なら D6 を振る）
+      const pr = meta.params || {};
+      const applyGains = (reiGain) => {
+        const yr = pc.resources.やる気 || { cur: 0, max: 99 };
+        const rr = pc.resources.霊力 || { cur: 0, max: 20 };
+        const newYaruki = Math.min(yr.max, yr.cur + (pr.yaruki || 0));
+        const newRei = Math.min(rr.max, rr.cur + reiGain);
+        const parts = [];
+        if (pr.yaruki) parts.push(`やる気+${pr.yaruki}`);
+        if (reiGain) parts.push(`霊力+${reiGain}`);
+        commit(withAbilityUse({ ...pc, resources: { ...pc.resources, やる気: { ...yr, cur: newYaruki }, 霊力: { ...rr, cur: newRei }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(newRei / 5) } } }, name, freq),
+          `🔵 ${pc.charName} が能力《${name}》を発動：${parts.join("・") || "獲得"}`);
+      };
+      if (pr.reiDice) {
+        animateDice(1, `${name}（霊力獲得）`, res => applyGains(res[0]));
+      } else {
+        sfx.skillActivate();
+        applyGains(pr.rei || 0);
+      }
+      return;
+    }
+    if (meta?.auto && meta.kind === "boost_other_yaruki") {
+      // 同スポットの他PCのやる気獲得に+α（対象選択ピッカー）
+      setAbilityBoost({ name, freq, amount: meta.params?.amount || 1 });
+      return;
+    }
 
     // 手動フォールバック：発動ログのみ（効果はGMが処理）
     sfx.skillActivate();
@@ -5544,6 +5572,29 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     });
   };
 
+  // boost_other_yaruki（核融合）：同スポットの他PCのやる気を amount だけ増やす
+  const confirmBoost = (targetUid) => {
+    const bs = abilityBoost;
+    setAbilityBoost(null);
+    if (!bs) return;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, bs.name, bs.freq).abilityUse;
+      const targetName = p.pcs.find(x => x.uid === targetUid)?.charName || "対象";
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          let nx = x.uid === pc.uid ? { ...x, abilityUse: selfBase } : x;
+          if (x.uid === targetUid) {
+            const yr = x.resources.やる気 || { cur: 0, max: 99 };
+            nx = { ...nx, resources: { ...nx.resources, やる気: { ...yr, cur: Math.min(yr.max, yr.cur + bs.amount) } } };
+          }
+          return nx;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${bs.name}》を発動：${targetName} のやる気+${bs.amount}`, ...p.log],
+      };
+    });
+  };
+
   const adjustResource = (key, delta) => {
     const r = resources[key] || { cur: 0, max: 1 };
     const newCur = Math.max(0, Math.min(r.cur + delta, r.max));
@@ -5775,7 +5826,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
-              {activeAbility.type !== "オート" && !isCustomChar && (
+              {(activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && (
                 abilityUsedUp(activeAbility)
                   ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
                   : <button onClick={() => setAbilityModal(activeAbility)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
@@ -6187,6 +6238,26 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           </SpellCard>
         </div>
       )}
+      {abilityBoost && (() => {
+        const sameSpot = (gs.pcs || []).filter(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot);
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityBoost(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityBoost.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>やる気を+{abilityBoost.amount}する同スポットのPCを選択</div>
+              {sameSpot.length === 0 ? (
+                <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: "6px 0" }}>同スポットに他のPCがいません</div>
+              ) : (
+                <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                  {sameSpot.map(x => (
+                    <button key={x.uid} onClick={() => confirmBoost(x.uid)} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 11 })}>{x.charName}</button>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setAbilityBoost(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
       {detailModal && <CharDetailModal pc={pc} onClose={() => setDetailModal(false)} />}
     </div>
   );

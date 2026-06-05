@@ -59,6 +59,20 @@ export const ABILITY_EFFECTS = {
   "水を操る程度の能力":   { freq: "day", auto: true, kind: "spend_item_gain_random", params: { randomCount: 2 } }, // 河城にとり：アイテム1つ失ってランダム2つ
   "水を操る程度の能力＋": { freq: "day", auto: true, kind: "spend_item_gain_random", params: { randomCount: 2, allowChoice: true } }, // にとり＋：ランダム2 or 好き1
 
+  // ── リアクティブ（発火時に押す手動トリガー。reactive:true でオート型にもボタンを出す） ──
+  // 死体を持ち去る（火焔猫燐・オート）：残り人数減少時にやる気+1（＋は霊力D6も）。1シーン1回。
+  "死体を持ち去る程度の能力":   { freq: "scene", auto: true, reactive: true, kind: "reactive_gain", params: { yaruki: 1 }, note: "残り人数減少時に発動" },
+  "死体を持ち去る程度の能力＋": { freq: "scene", auto: true, reactive: true, kind: "reactive_gain", params: { yaruki: 1, reiDice: true }, note: "誰かの残り人数減少時に発動" },
+  // 何でも吸収（饕餮尤魔・サポート）：選ばれた処理を受けず霊力D6（＋は6固定）。
+  "何でも吸収する程度の能力":   { freq: null, auto: true, kind: "reactive_gain", params: { reiDice: true }, note: "ランダム/任意選択の対象になった時（処理回避はGM）" },
+  "何でも吸収する程度の能力＋": { freq: null, auto: true, kind: "reactive_gain", params: { rei: 6 }, note: "同上（霊力6固定）" },
+  // 核融合（霊烏路空・サポート）：同スポットの他PCがやる気獲得時に+1（＋は+2）。対象PCを選んで付与。
+  "核融合を操る程度の能力":   { freq: null, auto: true, kind: "boost_other_yaruki", params: { amount: 1 }, note: "同スポットの他PCのやる気獲得時に発動" },
+  "核融合を操る程度の能力＋": { freq: null, auto: true, kind: "boost_other_yaruki", params: { amount: 2 }, note: "同上（+2）" },
+  // 財産を消費させる（依神女苑・サポート）：他者のアイテムを消費して自分が使用。アイテム効果の流用が複雑なためGM対応。
+  "財産を消費させる程度の能力":   { note: "他者のアイテム1つを消費して自分が所持していたものとして特殊効果を適用（GM対応）" },
+  "財産を消費させる程度の能力＋": { note: "同上（回数制限なし）（GM対応）" },
+
   // ── サポート（ダイス振り直し系・文脈依存。探索の行為判定結果画面で対応） ──
   // 運命を操る：出目を全て裏返す（1↔6,2↔5,3↔4）。探索結果画面に振り直しUIあり（ScenePanel）。
   // ＋（好きな数だけ裏返す）は選択UI未実装のためGM対応。発動ボタンは他文脈用の手動フォールバック。
