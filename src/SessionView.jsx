@@ -5223,6 +5223,15 @@ function CharDetailModal({ pc, onClose }) {
             </Section>
           )}
 
+          {pc.specialBond && (
+            <Section label="特別な絆">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ padding: "3px 10px", background: "rgba(255,213,79,0.14)", border: `1px solid ${C.goldDim}`, borderRadius: 10, fontSize: 11, color: C.gold }}>《{pc.specialBond.target}への敬意》</span>
+                <span style={{ fontSize: 10, color: C.textDim }}>親密度 <span style={{ color: C.gold, fontWeight: "bold" }}>{pc.specialBond.intimacy ?? 1}</span> / 10</span>
+              </div>
+            </Section>
+          )}
+
           {bonds.length > 0 && (
             <Section label="絆">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
