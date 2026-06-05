@@ -143,6 +143,19 @@ const DEFAULT_SCENE = { bg: null, portraits: [] };
 
 // ─── カスタムフック ──────────────────────────────────────────────
 
+// スマホ等の狭い画面を判定（既定: 幅820px以下）。レイアウトのレスポンシブ切替に使う。
+export function useIsMobile(breakpoint = 820) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = () => setIsMobile(mq.matches);
+    handler();
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 function useMapBounds(containerRef) {
   const [bounds, setBounds] = useState({ left: 0, top: 0, width: 0, height: 0 });
 
@@ -475,6 +488,8 @@ function SessionApp({ roomCode, user }) {
   const [phaseFlash, setPhaseFlash]           = useState(null);
   const [connected, setConnected]   = useState(true);
   const [presence, setPresence]     = useState({});
+  const isMobile = useIsMobile();           // スマホ等の狭い画面か
+  const [panelOpen, setPanelOpen] = useState(false); // モバイル: 右パネル（ドロワー）の開閉
   const [pendingReroll, setPendingReroll] = useState(null); // 空を飛ぶ: 表ロール後の振り直しプロンプト { results, count, label, holderUid, rerolled }
   const pendingRerollCb = useRef(null); // 振り直し確定時に呼ぶ cb
   const timerRef      = useRef(null);
@@ -1289,16 +1304,34 @@ function SessionApp({ roomCode, user }) {
         )}
       </div>
 
-      <RightPanel
-        gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync}
-        isGm={mode === "gm"} user={user} room={room} animateDice={animateDice}
-        diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling}
-        CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER} getSpot={getSpot}
-        doNewspaper={doNewspaper} doAdvanceCycle={doAdvanceCycle}
-        doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
-        pendingAction={pendingAction} setPendingAction={setPendingAction}
-        SPOTS={SPOTS} presence={presence}
-      />
+      {(() => {
+        const panelEl = (
+          <RightPanel
+            gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneDataAndSync}
+            isGm={mode === "gm"} user={user} room={room} animateDice={animateDice}
+            diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling}
+            CYCLES={CYCLES} CYCLE_COLORS={CYCLE_COLORS} NEWSPAPER={NEWSPAPER} getSpot={getSpot}
+            doNewspaper={doNewspaper} doAdvanceCycle={doAdvanceCycle}
+            doReiryoku={doReiryoku} doTransitionToExplore={doTransitionToExplore}
+            pendingAction={pendingAction} setPendingAction={setPendingAction}
+            SPOTS={SPOTS} presence={presence}
+            width={isMobile ? "100%" : 300}
+          />
+        );
+        if (!isMobile) return panelEl;
+        // モバイル: 右パネルを右からのドロワーにする（フローティングボタンで開閉）
+        return (
+          <>
+            {panelOpen && <div onClick={() => setPanelOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 90, animation: "backdropIn 0.15s ease" }} />}
+            <div style={{ position: "fixed", top: 0, right: 0, height: "100%", width: "min(90vw, 360px)", zIndex: 95, transform: panelOpen ? "translateX(0)" : "translateX(100%)", transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)", boxShadow: panelOpen ? "-8px 0 30px rgba(0,0,0,0.6)" : "none" }}>
+              {panelEl}
+            </div>
+            <button onClick={() => setPanelOpen(o => !o)} aria-label="パネル開閉" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 96, width: 52, height: 52, borderRadius: "50%", background: "rgba(20,24,40,0.96)", border: "1px solid #3a4560", color: "#c8b89a", fontSize: 21, cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {panelOpen ? "✕" : "☰"}
+            </button>
+          </>
+        );
+      })()}
 
       {/* 接続状態インジケータ（切断時のみ表示） */}
       {!connected && (
