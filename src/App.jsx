@@ -1062,6 +1062,7 @@ function SessionApp({ roomCode, user }) {
         actedPcs: [],
         currentScene: null,
         minions: [], // 手下は探索フェイズ専用。決戦移行で退場
+        unluckyPhase: null, // 自分も含めて不運（フェイズ限定）も解除
         log: [...logAdd, "⚔️ 決戦フェイズへ移行します。",...p.log],
       }
     });

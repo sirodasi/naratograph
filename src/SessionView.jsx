@@ -5064,6 +5064,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilityBoost, setAbilityBoost] = useState(null); // 核融合：同スポット他PCのやる気+ { name, freq, amount }
   const [minionMove, setMinionMove] = useState(null); // 手下移動：移動する手下のid（null=非選択）
   const [abilitySearchClue, setAbilitySearchClue] = useState(null); // 探し物：手がかり配置スポット選択 { name, freq }
+  const [abilityReadMind, setAbilityReadMind] = useState(null); // 心を読む：絆取得対象選択 { name, freq }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5338,6 +5339,22 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (meta?.auto && meta.kind === "boost_other_yaruki") {
       // 同スポットの他PCのやる気獲得に+α（対象選択ピッカー）
       setAbilityBoost({ name, freq, amount: meta.params?.amount || 1 });
+      return;
+    }
+    if (meta?.auto && meta.kind === "set_unlucky_phase") {
+      // このフェイズ中、全員が出目すべて2以下でファンブル（gs.unluckyPhase）
+      sfx.skillActivate();
+      upd(p => ({
+        ...p,
+        pcs: p.pcs.map(x => x.uid === pc.uid ? withAbilityUse({ ...x }, name, freq) : x),
+        unluckyPhase: true,
+        log: [`🔵 ${pc.charName} が能力《${name}》を発動：このフェイズ中、全員の判定が出目2以下でファンブルになる`, ...p.log],
+      }));
+      return;
+    }
+    if (meta?.auto && meta.kind === "read_mind") {
+      // 誰かがあなたへの絆を取得した時：その相手への絆を取得（対象ピッカー）
+      setAbilityReadMind({ name, freq });
       return;
     }
     if (meta?.auto && meta.kind === "search_place_clue") {
@@ -5664,6 +5681,32 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       clues: Array.from(new Set([...(p.clues || []), spotId])),
       log: [`🔵 ${pc.charName} の《探し物を探し当てる程度の能力》：[${getSpot(spotId)?.name}] へ手がかりを配置`, ...p.log],
     }));
+  };
+
+  // read_mind（心を読む）：対象への絆を取得し、対象が持つ「pcへの絆」をチェック済みにする
+  const confirmReadMind = (targetUid) => {
+    const rm = abilityReadMind;
+    setAbilityReadMind(null);
+    if (!rm) return;
+    upd(p => {
+      const selfBase = withAbilityUse({ ...pc }, rm.name, rm.freq).abilityUse;
+      const target = p.pcs.find(x => x.uid === targetUid);
+      const targetName = target?.charName || "対象";
+      const bond = `${targetName}への絆`;
+      const myBond = `${pc.charName}への絆`;
+      return {
+        ...p,
+        pcs: p.pcs.map(x => {
+          if (x.uid === pc.uid) {
+            const bonds = (x.bonds || []).includes(bond) ? x.bonds : [...(x.bonds || []), bond];
+            return { ...x, abilityUse: selfBase, bonds, bondUsed: { ...(x.bondUsed || {}), [bond]: false } };
+          }
+          if (x.uid === targetUid) return { ...x, bondUsed: { ...(x.bondUsed || {}), [myBond]: true } }; // さとりへの絆をチェック
+          return x;
+        }),
+        log: [`🔵 ${pc.charName} が能力《${rm.name}》を発動：《${bond}》を取得（${targetName} の応援欄をチェック）`, ...p.log],
+      };
+    });
   };
 
   // boost_other_yaruki（核融合）：同スポットの他PCのやる気を amount だけ増やす
@@ -6392,6 +6435,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               ))}
             </div>
             <button onClick={() => setAbilitySearchClue(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+          </SpellCard>
+        </div>
+      )}
+      {abilityReadMind && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityReadMind(null)}>
+          <SpellCard color="#ce93d8" title={`✦ ${abilityReadMind.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>あなたへの絆を取得したキャラを選択（その相手への絆を取得）</div>
+            <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+              {(gs.pcs || []).filter(x => x.uid !== pc.uid).map(x => (
+                <button key={x.uid} onClick={() => confirmReadMind(x.uid)} style={btnFull("rgba(206,147,216,0.1)", "#ce93d850", "#ce93d8", { fontSize: 11 })}>{x.charName}</button>
+              ))}
+            </div>
+            <button onClick={() => setAbilityReadMind(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
           </SpellCard>
         </div>
       )}
@@ -7957,7 +8013,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
               uchideName === "打ち出の小槌を扱う程度の能力" ? dice.every(d => d <= 2)
               : uchideName === "打ち出の小槌を扱う程度の能力＋" ? (dice.every(d => d <= 2) && dice.filter(d => d === 1).length * 2 >= dice.length)
               : false);
-            const baseFumble   = (sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1))) || uchideFumble;
+            // 自分も含めて不運（紫苑）: このフェイズ中、出目すべて2以下でファンブル
+            const unluckyFumble = gs.unluckyPhase && sc.actionDice?.length > 0 && sc.actionDice.every(d => d <= 2);
+            const baseFumble   = (sc.actionDice?.length > 0 && (flipCond ? sc.actionDice.every(d => d === 6) : sc.actionDice.every(d => d === 1))) || uchideFumble || unluckyFumble;
             // 魂の弱い所/人を狂わす による応援（fragile）: 失敗するとファンブルになる
             const wouldSucceed = sc.isAutoSuccess || (maxDie >= (sc.selectedEvent?.target || 0));
             const fragileFumble = !!sc.fragileCheer && !wouldSucceed && (sc.actionDice?.length > 0);
@@ -8455,7 +8513,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             // クエスト判定の評価（dice配列から成功/ファンブル/スペシャルを算出）。fragile=失敗→ファンブル
             const evalQuest = (diceArr, fragile) => {
               const max = Math.max(...diceArr);
-              let isFumble = diceArr.every(d => d === 1);
+              let isFumble = diceArr.every(d => d === 1) || (gs.unluckyPhase && diceArr.length > 0 && diceArr.every(d => d <= 2)); // 自分も含めて不運
               const success = max >= 4 && !isFumble;
               const isSpecial = diceArr.some(d => d === 6) && !isFumble;
               if (fragile && !success && !isFumble) isFumble = true;

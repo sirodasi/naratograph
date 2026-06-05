@@ -132,6 +132,13 @@ export const ABILITY_EFFECTS = {
   "動物を導く程度の能力＋": { passive: true, note: "応援で選んだ出目を振り直す（制限なし・探索は結果画面で自動対応・絆消費）" },
 
   // ── サポート（黒い応援欄＝bondUsed===true を操作） ──
+  // 自分も含めて不運にする（依神紫苑）：このフェイズ中、全員が出目すべて2以下でファンブル。
+  "自分も含めて不運にする程度の能力":   { freq: "session", auto: true, kind: "set_unlucky_phase" },
+  "自分も含めて不運にする程度の能力＋": { freq: null,      auto: true, kind: "set_unlucky_phase" },
+  // 心を読む（古明地さとり）：誰かがさとりへの絆を取得した時、その相手への絆を取得（相手のさとり絆をチェック）。
+  "心を読む程度の能力":   { freq: null, auto: true, kind: "read_mind" },
+  "心を読む程度の能力＋": { freq: null, auto: true, kind: "read_mind", note: "相手が持つ任意の絆1つを取得する選択も可（その選択はGM）" },
+
   "感情を操る程度の能力":   { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ：他キャラの使用済み応援欄を1つ解除
   "感情を操る程度の能力＋": { freq: null, auto: true, kind: "refresh_other_cheer_slot" }, // 秦こころ＋（トリガー条件が広いだけで効果は同一）
   // 密と疎（伊吹萃香）：帰還先を変更（自分＋選んだPCを任意スポットへ帰還）。＋は夜のやる気減少もスキップ。
