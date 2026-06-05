@@ -45,6 +45,13 @@ export const ABILITY_EFFECTS = {
   "式神を操る程度の能力":   { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSC: 1 }, note: "SC1消費。手下がいなければ拠点に登場し、シーンを手下で再処理（再処理はGM/シーン再開）" }, // 八雲藍
   "式神を操る程度の能力＋": { freq: null, auto: true, kind: "spawn_minion", params: { at: "base", costSCorRei: true }, note: "SC1点か霊力5点消費。同上" },
 
+  // なりすまし（二ツ岩マミゾウ）：任意キャラに化ける（pc.disguisedAs）。絆取得時の選択はGM。
+  "化けさせる程度の能力":   { freq: null, auto: true, kind: "disguise", note: "選んだキャラとしても扱う。絆取得時の選択はGM。任意のタイミングで解除可" },
+  "化けさせる程度の能力＋": { freq: null, auto: true, kind: "disguise", note: "同上＋1日1度シーン終了直前にアクション消費なしで使用可（GM）" },
+  // 念写（姫海棠はたて）：霊力を消費して文々。新聞表を振る（表ロールはGM）。
+  "念写をする程度の能力":   { freq: null, auto: true, kind: "consume_rei_newspaper", params: { reiDice: true }, note: "霊力D6消費後、GMが文々。新聞表を振る" },
+  "念写をする程度の能力＋": { freq: null, auto: true, kind: "consume_rei_newspaper", params: { rei: 1 }, note: "霊力1消費後、GMが文々。新聞表を振る" },
+
   "あらゆる薬を作る程度の能力":   { freq: null, auto: true, kind: "cure_bad_status" }, // 八意永琳：同スポットのキャラの変調1つを除去
   "あらゆる薬を作る程度の能力＋": { freq: null, auto: true, kind: "cure_bad_status", params: { grantTag: "絶好調" } }, // 八意永琳＋：除去＋絶好調タグ
   "水難事故を引き起こす程度の能力":   { freq: null, auto: true, kind: "party_move" }, // 村紗：同スポットのキャラと共に好きなスポットへ移動

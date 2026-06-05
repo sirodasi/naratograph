@@ -5338,6 +5338,33 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityBoost({ name, freq, amount: meta.params?.amount || 1 });
       return;
     }
+    if (meta?.auto && meta.kind === "disguise") {
+      // なりすまし：化ける（解除トグル）。化ける相手はプロンプトで指定。
+      if (pc.disguisedAs) {
+        sfx.skillActivate();
+        commit({ ...pc, disguisedAs: null }, `🔵 ${pc.charName} が《${name}》の変身を解除した`);
+        return;
+      }
+      const target = window.prompt("化けるキャラクター名を入力してください");
+      if (!target || !target.trim()) return;
+      sfx.skillActivate();
+      commit(withAbilityUse({ ...pc, disguisedAs: target.trim() }, name, freq),
+        `🔵 ${pc.charName} が能力《${name}》を発動：${target.trim()} に化けた（絆取得時の選択はGM）`);
+      return;
+    }
+    if (meta?.auto && meta.kind === "consume_rei_newspaper") {
+      // 念写：霊力を消費して文々。新聞表を振る（表ロールはGM）
+      const pr = meta.params || {};
+      const doConsume = (amt) => {
+        const r = pc.resources.霊力 || { cur: 0, max: 20 };
+        const nextCur = Math.max(0, r.cur - amt);
+        commit(withAbilityUse({ ...pc, resources: { ...pc.resources, 霊力: { ...r, cur: nextCur }, 攻撃力: { ...pc.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } }, name, freq),
+          `🔵 ${pc.charName} が能力《${name}》を発動：霊力-${amt} → GMが文々。新聞表を振ってください`);
+      };
+      if (pr.reiDice) animateDice(1, `${name}（霊力消費）`, res => doConsume(res[0]));
+      else { sfx.skillActivate(); doConsume(pr.rei || 1); }
+      return;
+    }
     if (meta?.auto && meta.kind === "spawn_minion") {
       // 手下をマップに登場させる（あなたのスポット or 拠点）。式神はSC消費。
       const pr = meta.params || {};
@@ -5844,6 +5871,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
+              {pc.disguisedAs && <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>🦝 変身中：{pc.disguisedAs} として扱う</div>}
               {(activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && (
                 abilityUsedUp(activeAbility)
                   ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
