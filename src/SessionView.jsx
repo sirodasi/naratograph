@@ -5381,6 +5381,12 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       setAbilityReiBoost({ name, freq, amount: 0, selected: cur, target: "itemSwap" });
       return;
     }
+    if (meta?.auto && meta.kind === "toggle_untargetable") {
+      // 正体を判らなくする：自分を特殊効果の対象に選べなくする（トグル）
+      sfx.skillActivate();
+      commit({ ...pc, untargetable: !pc.untargetable }, `🔵 ${pc.charName} が能力《${name}》を発動：対象に${pc.untargetable ? "選べるように戻した" : "選べなくした"}`);
+      return;
+    }
     if (meta?.auto && meta.kind === "set_eternity_night") {
       // 永遠と須臾：この夜サイクルの終了で帰還/やる気減少を行わず夜をもう一度（base=リミット-1）
       sfx.skillActivate();
@@ -6072,6 +6078,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
               {pc.disguisedAs && <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>🦝 変身中：{pc.disguisedAs} として扱う</div>}
+              {pc.untargetable && <div style={{ fontSize: 9, color: "#90caf9", marginBottom: 4 }}>👁 対象外：特殊効果の対象に選ばれない</div>}
               {(activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && (
                 abilityUsedUp(activeAbility)
                   ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
@@ -6448,7 +6455,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 <div>
                   <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>破壊する対象キャラを選択</div>
                   <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
-                    {(gs.pcs || []).map(x => (
+                    {(gs.pcs || []).filter(x => !x.untargetable).map(x => (
                       <button key={x.uid} onClick={() => setAbilityDestroy(d => ({ ...d, targetUid: x.uid }))} style={btnFull("rgba(224,112,96,0.1)", C.redBorder, C.red, { fontSize: 11 })}>{x.charName}</button>
                     ))}
                   </div>
@@ -6519,7 +6526,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         </div>
       )}
       {abilityBoost && (() => {
-        const sameSpot = (gs.pcs || []).filter(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot);
+        const sameSpot = (gs.pcs || []).filter(x => x.uid !== pc.uid && x.currentSpot === pc.currentSpot && !x.untargetable);
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityBoost(null)}>
             <SpellCard color="#90caf9" title={`✦ ${abilityBoost.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
@@ -6571,7 +6578,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       })()}
       {abilityFortune && (() => {
         const target = abilityFortune.targetUid ? gs.pcs.find(x => x.uid === abilityFortune.targetUid) : null;
-        const candidates = (gs.pcs || []).filter(x => x.uid !== pc.uid && ITEM_NAMES.some(n => (x.items?.[n] || 0) > 0));
+        const candidates = (gs.pcs || []).filter(x => x.uid !== pc.uid && ITEM_NAMES.some(n => (x.items?.[n] || 0) > 0) && !x.untargetable);
         const targetItems = target ? ITEM_NAMES.filter(n => (target.items?.[n] || 0) > 0) : [];
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityFortune(null)}>
