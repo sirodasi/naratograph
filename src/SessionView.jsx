@@ -177,6 +177,28 @@ export const BAD_STATUS_TABLE = {
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
 // 人を狂わす程度の能力の「絆なし応援」を表す擬似絆ラベル（bondUsed ではなく kuruwasuUsed[対象] を消費）
 const KURUWASU_BOND = "（絆なし応援）";
+// 特別な絆の応援を表す擬似絆ラベル（成長で獲得した specialBond を使う応援）
+const SPECIAL_BOND_CHEER = "（特別な絆応援）";
+
+// 特別な絆の親密度: targetUid を対象に持つ特別な絆の保持者全員の親密度を amount 増やす（初期1・最大10）。
+// 増加（対象のスペシャル/交流）のたびに応援欄(used)をリフレッシュする。
+// 戻り値 { pcs, logs }（変化があった保持者のログ）。
+function gainIntimacy(pcs, targetUid, amount, reason) {
+  if (!targetUid || amount <= 0) return { pcs, logs: [] };
+  const logs = [];
+  const next = (pcs || []).map(pc => {
+    if (pc.specialBond && pc.specialBond.targetUid === targetUid && pc.uid !== targetUid) {
+      const cur = pc.specialBond.intimacy ?? 1;
+      const ni = Math.min(10, cur + amount);
+      if (ni !== cur || pc.specialBond.used) {
+        logs.push(`💞 ${pc.charName} の《${pc.specialBond.target}への${pc.specialBond.word || "敬意"}》親密度 ${cur}→${ni}${reason ? `（${reason}）` : ""}`);
+      }
+      return { ...pc, specialBond: { ...pc.specialBond, intimacy: ni, used: false } };
+    }
+    return pc;
+  });
+  return { pcs: next, logs };
+}
 
 // 変調免疫チェック（馬鹿スキル用）
 export function isBadStatusImmune(pc, bsName) {
@@ -7017,12 +7039,19 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         }
         return base;
       });
-      const p2 = extraUpdates.pc ? { ...p, pcs: newPcs } : p;
+      // 交流（他者への絆の新規獲得）を検出 → 特別な絆の親密度 +1D6（acting pc を対象に持つ保持者）
+      const acquiredKouryu = extraUpdates.pc?.bonds && extraUpdates.pc.bonds.some(b => !(pc.bonds || []).includes(b) && !b.includes("自身への絆"));
+      let finalPcs = newPcs, intimacyLogs = [];
+      if (acquiredKouryu) {
+        const r = gainIntimacy(newPcs, pc.uid, Math.ceil(Math.random() * 6), `${pc.charName}の交流`);
+        finalPcs = r.pcs; intimacyLogs = r.logs;
+      }
+      const p2 = (extraUpdates.pc || acquiredKouryu) ? { ...p, pcs: finalPcs } : p;
       const p3 = extraUpdates.gs ? { ...p2, ...extraUpdates.gs } : p2;
-      return { 
-        ...p3, 
-        currentScene: { ...p3.currentScene, currentActionIndex: (p3.currentScene.currentActionIndex || 0) + 1 }, 
-        log:[...logs.reverse(), ...p3.log] 
+      return {
+        ...p3,
+        currentScene: { ...p3.currentScene, currentActionIndex: (p3.currentScene.currentActionIndex || 0) + 1 },
+        log:[...intimacyLogs, ...logs.reverse(), ...p3.log]
       };
     });
   };
@@ -8514,7 +8543,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   upd(p => {
                     const newBs  = pc.badStatus.filter(x => x !== bs);
                     const newPcs = p.pcs.map(x => x.uid === pc.uid ? { ...x, badStatus: newBs } : x);
-                    return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log:[`${pc.charName} は変調《${bs}》を解除した`, ...p.log] };
+                    const { pcs: pcs2, logs } = gainIntimacy(newPcs, pc.uid, 1, `${pc.charName}のスペシャル`);
+                    return { ...p, pcs: pcs2, currentScene: { ...p.currentScene, phase: "explore_result", specialResolved: true }, log:[...logs, `${pc.charName} は変調《${bs}》を解除した`, ...p.log] };
                   });
                 }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text, { marginBottom: 4 })}>《{bs}》を解除</button>
               ))}
@@ -8764,7 +8794,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           const gain    = (pc.badStatus || []).includes("スランプ") ? 0 : res[0];
                           const nextCur = Math.min(pc.resources.霊力.max, (pc.resources.霊力.cur || 0) + gain);
                           const newPcs  = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: nextCur }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } });
-                          return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, specialResolved: true }, log:[`${pc.charName} は霊力を ${gain} 点回復した`, ...p.log] };
+                          // 特別な絆: 対象(pc)のスペシャルで親密度+1
+                          const { pcs: pcs2, logs } = gainIntimacy(newPcs, pc.uid, 1, `${pc.charName}のスペシャル`);
+                          return { ...p, pcs: pcs2, currentScene: { ...p.currentScene, specialResolved: true }, log:[...logs, `${pc.charName} は霊力を ${gain} 点回復した`, ...p.log] };
                         });
                       })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>霊力回復 (1D6)</button>
                       {(pc.badStatus || []).length > 0 && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>変調解除</button>}
@@ -9076,6 +9108,11 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   const gain = Math.ceil(Math.random() * 6);
                   newPcs = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
                   extraLogs.push(`✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`);
+                }
+                // 特別な絆: 対象(judgePc)のスペシャルで親密度+1
+                if (ev.isSpecial && ev.success) {
+                  const r = gainIntimacy(newPcs, judgePc.uid, 1, `${judgePc.charName}のスペシャル`);
+                  newPcs = r.pcs; extraLogs.unshift(...r.logs);
                 }
                 return {
                   ...p, pcs: newPcs,
