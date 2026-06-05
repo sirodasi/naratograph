@@ -492,6 +492,8 @@ function SessionApp({ roomCode, user }) {
   const [phaseFlash, setPhaseFlash]           = useState(null);
   const [connected, setConnected]   = useState(true);
   const [presence, setPresence]     = useState({});
+  const [pendingReroll, setPendingReroll] = useState(null); // 空を飛ぶ: 表ロール後の振り直しプロンプト { results, count, label, holderUid, rerolled }
+  const pendingRerollCb = useRef(null); // 振り直し確定時に呼ぶ cb
   const timerRef      = useRef(null);
   const prevCycleRef  = useRef({ day: null, cycleIdx: null });
   const prevQuestsRef = useRef(null);
@@ -655,6 +657,23 @@ function SessionApp({ roomCode, user }) {
   const scenePath = `rooms/${roomCode}/scene`;
 
   const rollD6 = () => Math.floor(Math.random() * 6) + 1;
+
+  // 空を飛ぶ（博麗霊夢）: 振り直せる「表」ロールかどうか（アイテム/変調/ペナルティ/ハプニング/手がかりイベント表）
+  const isRerollableTable = (label) => {
+    if (!label) return false;
+    return label.includes("アイテム獲得") || label.includes("アイテム交換") || label.includes("ボーナスアイテム")
+      || label === "変調決定" || label === "ペナルティ表" || label === "ハプニング表" || label === "手がかりイベント表";
+  };
+  // 振り直しを使える（自分の操作PCが空を飛ぶ保持者・本日未使用）か
+  const soraRerollHolder = () => {
+    const myPc = (gs.pcs || []).find(p => p.uid === user.uid);
+    if (!myPc) return null;
+    const ab = getActiveAbility(myPc)?.name;
+    if (ab !== "空を飛ぶ程度の能力" && ab !== "空を飛ぶ程度の能力＋") return null;
+    if (myPc.soraFlewDay === gs.day) return null; // 本日使用済み
+    return myPc;
+  };
+
   const animateDice = (count, label, cb) => {
     if (timerRef.current) clearInterval(timerRef.current);
     upd(p => ({ ...p, dice: { rolling: true, results: [], label } }));
@@ -673,9 +692,51 @@ function SessionApp({ roomCode, user }) {
           dice: { rolling: false, results: res, label },
           diceHistory: [entry, ...(p.diceHistory || [])].slice(0, 50),
         }));
-        if (cb) cb(res);
+        // 空を飛ぶ: 表ロール直後なら cb を保留し、振り直しプロンプトを出す
+        const holder = isRerollableTable(label) ? soraRerollHolder() : null;
+        if (holder) {
+          pendingRerollCb.current = cb || null;
+          setPendingReroll({ results: res, count, label, holderUid: holder.uid, rerolled: false });
+        } else if (cb) {
+          cb(res);
+        }
       }
     }, 80);
+  };
+
+  // 空を飛ぶ: 振り直しを実行（保持者を本日使用済みにし、同数のダイスをアニメ付きで振り直す）
+  const doSoraReroll = () => {
+    const pr = pendingReroll;
+    if (!pr || pr.rerolled) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => x.uid === pr.holderUid ? { ...x, soraFlewDay: p.day } : x),
+      dice: { rolling: true, results: [], label: pr.label },
+      log: [`🕊 ${p.pcs.find(x => x.uid === pr.holderUid)?.charName} の《空を飛ぶ程度の能力》で「${pr.label}」を振り直した`, ...p.log],
+    }));
+    let f = 0;
+    timerRef.current = setInterval(() => {
+      f++;
+      const mid = Array(pr.count).fill(0).map(rollD6);
+      upd(p => ({ ...p, dice: { ...p.dice, results: mid } }));
+      if (f >= 14) {
+        clearInterval(timerRef.current);
+        const res = Array(pr.count).fill(0).map(rollD6);
+        const entry = { label: pr.label, results: res, max: Math.max(...res), t: Date.now() };
+        upd(p => ({ ...p, dice: { rolling: false, results: res, label: pr.label }, diceHistory: [entry, ...(p.diceHistory || [])].slice(0, 50) }));
+        setPendingReroll(prev => prev ? { ...prev, results: res, rerolled: true } : null);
+      }
+    }, 80);
+  };
+
+  // 空を飛ぶ: 現在の結果で確定（保留していた cb を呼ぶ）
+  const confirmReroll = () => {
+    const pr = pendingReroll;
+    const cb = pendingRerollCb.current;
+    setPendingReroll(null);
+    pendingRerollCb.current = null;
+    if (cb && pr) cb(pr.results);
   };
 
   useEffect(() => {
@@ -1316,6 +1377,32 @@ function SessionApp({ roomCode, user }) {
             <div style={{ fontSize: 26, fontWeight: "bold", color: phaseFlash.color, letterSpacing: 6, textShadow: `0 0 22px ${phaseFlash.color}aa` }}>{phaseFlash.title}</div>
             <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${phaseFlash.color}88, transparent)`, margin: "10px 0 6px" }} />
             <div style={{ fontSize: 9, color: "rgba(200,184,154,0.55)", letterSpacing: 6 }}>{phaseFlash.subtitle}</div>
+          </div>
+        </div>
+      )}
+
+      {/* 空を飛ぶ: 表ロール後の振り直しプロンプト（操作中の保持者にのみ表示） */}
+      {pendingReroll && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", zIndex: 170, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }}>
+          <div style={{ background: "#0c1020", border: "2px solid #7fb0e0", borderRadius: 8, padding: "20px 24px", maxWidth: 360, width: "90%", textAlign: "center", boxShadow: "0 0 40px rgba(127,176,224,0.35)", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }}>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: "#7fb0e0", marginBottom: 6 }}>🕊 空を飛ぶ程度の能力</div>
+            <div style={{ fontSize: 12, color: "#cfe2f5", marginBottom: 10 }}>「{pendingReroll.label}」の結果</div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 14 }}>
+              {pendingReroll.results.map((d, i) => (
+                <div key={i} style={{ width: 44, height: 44, border: "2px solid #1e3a5a", borderRadius: 6, background: "rgba(14,20,36,0.95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#60c0f0", fontWeight: "bold" }}>{d}</div>
+              ))}
+            </div>
+            {!pendingReroll.rerolled ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button onClick={doSoraReroll} style={{ padding: "9px", cursor: "pointer", borderRadius: 4, background: "rgba(127,176,224,0.18)", border: "1px solid #7fb0e0", color: "#cfe2f5", fontSize: 12, fontFamily: "'Noto Serif JP', serif" }}>🕊 振り直す（1日1回・全ダイス）</button>
+                <button onClick={confirmReroll} style={{ padding: "9px", cursor: "pointer", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid #2a3a50", color: "#9fb0c0", fontSize: 12, fontFamily: "'Noto Serif JP', serif" }}>この結果で確定する</button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontSize: 9, color: "#7fb0e0", marginBottom: 2 }}>振り直し済み</div>
+                <button onClick={confirmReroll} style={{ padding: "9px", cursor: "pointer", borderRadius: 4, background: "rgba(127,176,224,0.18)", border: "1px solid #7fb0e0", color: "#cfe2f5", fontSize: 12, fontFamily: "'Noto Serif JP', serif" }}>この結果で確定する</button>
+              </div>
+            )}
           </div>
         </div>
       )}
