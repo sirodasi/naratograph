@@ -639,6 +639,11 @@ function SessionApp({ roomCode, user }) {
   // ルーム離脱時に BGM を停止
   useEffect(() => () => { bgm.setTrack(""); }, []);
 
+  // モバイル: 自分のシーンが始まったら右パネル（ドロワー）を自動で開く
+  useEffect(() => {
+    if (isMobile && gs.currentScene?.pcUid === user?.uid) setPanelOpen(true);
+  }, [gs.currentScene?.pcUid, isMobile, user?.uid]);
+
   const gsPath    = `rooms/${roomCode}/state`;
   const scenePath = `rooms/${roomCode}/scene`;
 
@@ -1268,6 +1273,10 @@ function SessionApp({ roomCode, user }) {
           0%, 100% { opacity: 1; }
           50%      { opacity: 0.3; }
         }
+        @keyframes panelAlertGlow {
+          0%, 100% { box-shadow: 0 4px 16px rgba(0,0,0,0.55), 0 0 0 0 rgba(200,160,64,0.5); }
+          50%      { box-shadow: 0 4px 16px rgba(0,0,0,0.55), 0 0 0 7px rgba(200,160,64,0); }
+        }
       `}</style>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -1308,13 +1317,15 @@ function SessionApp({ roomCode, user }) {
         );
         if (!isMobile) return panelEl;
         // モバイル: 右パネルを右からのドロワーにする（フローティングボタンで開閉）
+        const myTurn = gs.currentScene?.pcUid === user?.uid; // 自分のシーン中は手番アラート
+        const alert = myTurn && !panelOpen;
         return (
           <>
             {panelOpen && <div onClick={() => setPanelOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 90, animation: "backdropIn 0.15s ease" }} />}
             <div style={{ position: "fixed", top: 0, right: 0, height: "100%", width: "min(90vw, 360px)", zIndex: 95, transform: panelOpen ? "translateX(0)" : "translateX(100%)", transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)", boxShadow: panelOpen ? "-8px 0 30px rgba(0,0,0,0.6)" : "none" }}>
               {panelEl}
             </div>
-            <button onClick={() => setPanelOpen(o => !o)} aria-label="パネル開閉" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 96, width: 52, height: 52, borderRadius: "50%", background: "rgba(20,24,40,0.96)", border: "1px solid #3a4560", color: "#c8b89a", fontSize: 21, cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setPanelOpen(o => !o)} aria-label="パネル開閉" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 96, width: 54, height: 54, borderRadius: "50%", background: "rgba(20,24,40,0.96)", border: `1px solid ${alert ? "#c8a040" : "#3a4560"}`, color: alert ? "#e8d8b0" : "#c8b89a", fontSize: 21, cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", animation: alert ? "panelAlertGlow 1.6s ease-in-out infinite" : "none" }}>
               {panelOpen ? "✕" : "☰"}
             </button>
           </>
