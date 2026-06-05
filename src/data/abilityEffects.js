@@ -141,6 +141,9 @@ export const ABILITY_EFFECTS = {
   // あらゆるものの背中に扉を作る（摩多羅隠岐奈・オート）：選んだキャラの霊力増加+1/+2（gs.reiBoostTargets、doReiryokuで反映）。
   "あらゆるものの背中に扉を作る程度の能力":   { freq: null, auto: true, reactive: true, kind: "select_rei_boost", params: { amount: 1 }, note: "選んだキャラの霊力増加を+1（対象選択）" },
   "あらゆるものの背中に扉を作る程度の能力＋": { freq: null, auto: true, reactive: true, kind: "select_rei_boost", params: { amount: 2 }, note: "選んだキャラの霊力増加を+2（対象選択）" },
+  // 所有権を失わせる（天弓千亦・オート）：選んだキャラがアクション消費でアイテム1つを別のアイテムに交換できる（gs.itemSwapTargets）。
+  "所有権を失わせる程度の能力":   { freq: null, auto: true, reactive: true, kind: "select_item_swap", note: "選んだキャラがアイテム交換可能に（＋の弾幕スキル取得はGM）" },
+  "所有権を失わせる程度の能力＋": { freq: null, auto: true, reactive: true, kind: "select_item_swap", note: "同上＋任意の弾幕スキル取得も可（弾幕スキルはGM）" },
 
   // 超能力を操る（宇佐見菫子）：シーン終了時にコマを取り除き（offMap）、次のシーン開始時にランダム配置。
   // action_done のボタンと startScene で対応（＋は霊力D6も）。

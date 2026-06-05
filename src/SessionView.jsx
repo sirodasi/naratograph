@@ -5370,7 +5370,13 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (meta?.auto && meta.kind === "select_rei_boost") {
       // 霊力増加+α の対象キャラを選ぶ（複数選択）
       const cur = (gs.reiBoostTargets?.uids) || [];
-      setAbilityReiBoost({ name, freq, amount: meta.params?.amount || 1, selected: cur });
+      setAbilityReiBoost({ name, freq, amount: meta.params?.amount || 1, selected: cur, target: "rei" });
+      return;
+    }
+    if (meta?.auto && meta.kind === "select_item_swap") {
+      // アイテム交換できる対象キャラを選ぶ（複数選択）
+      const cur = gs.itemSwapTargets || [];
+      setAbilityReiBoost({ name, freq, amount: 0, selected: cur, target: "itemSwap" });
       return;
     }
     if (meta?.auto && meta.kind === "search_place_clue") {
@@ -5725,16 +5731,17 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     });
   };
 
-  // select_rei_boost（あらゆるものの背中）：選んだキャラを霊力増加対象に設定
+  // select_rei_boost / select_item_swap：選んだキャラを対象に設定（霊力増加 or アイテム交換）
   const confirmReiBoost = () => {
     const rb = abilityReiBoost;
     setAbilityReiBoost(null);
     if (!rb) return;
+    const names = rb.selected.map(u => gs.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・") || "（なし）";
     upd(p => ({
       ...p,
       pcs: p.pcs.map(x => x.uid === pc.uid ? withAbilityUse({ ...x }, rb.name, rb.freq) : x),
-      reiBoostTargets: { uids: rb.selected, amount: rb.amount },
-      log: [`🔵 ${pc.charName} が能力《${rb.name}》を発動：${rb.selected.map(u => p.pcs.find(x => x.uid === u)?.charName).filter(Boolean).join("・") || "（なし）"} の霊力増加を+${rb.amount}に設定`, ...p.log],
+      ...(rb.target === "itemSwap" ? { itemSwapTargets: rb.selected } : { reiBoostTargets: { uids: rb.selected, amount: rb.amount } }),
+      log: [`🔵 ${pc.charName} が能力《${rb.name}》を発動：${names} を${rb.target === "itemSwap" ? "アイテム交換可能に" : `霊力増加+${rb.amount}に`}設定`, ...p.log],
     }));
   };
 
@@ -5999,6 +6006,11 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                   : <button onClick={() => setAbilityModal(activeAbility)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
               )}
             </div>
+          )}
+
+          {/* 所有権を失わせる（千亦）: 対象に選ばれたキャラはアイテム交換（1つ失い1つ獲得）できる */}
+          {(gs.itemSwapTargets || []).includes(pc.uid) && !isCustomChar && ITEM_NAMES.some(n => (pc.items?.[n] || 0) > 0) && (
+            <button onClick={() => setAbilitySpend({ name: "所有権を失わせる（交換）", freq: null, params: { swapOnly: true }, spendItem: null, mode: null })} style={{ ...btnFull("rgba(129,199,132,0.12)", C.greenBorder, C.green, { fontSize: 10 }), marginTop: 6 }}>🔄 アイテム交換（所有権）</button>
           )}
 
           {/* 手下（minion）操作パネル: 自分の手下を移動/アクション/除去 */}
@@ -6318,7 +6330,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                   ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
                       {owned.map(it => (
-                        <button key={it} onClick={() => setAbilitySpend(s => ({ ...s, spendItem: it }))} style={btnFull("rgba(224,112,96,0.1)", C.redBorder, C.red, { fontSize: 11 })}>{it}（{pc.items[it]}）</button>
+                        <button key={it} onClick={() => setAbilitySpend(s => ({ ...s, spendItem: it, ...(s.params?.swapOnly ? { mode: "choice" } : {}) }))} style={btnFull("rgba(224,112,96,0.1)", C.redBorder, C.red, { fontSize: 11 })}>{it}（{pc.items[it]}）</button>
                       ))}
                     </div>
                   )}
@@ -6472,7 +6484,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityReiBoost(null)}>
             <SpellCard color="#90caf9" title={`✦ ${abilityReiBoost.name}`} style={{ maxWidth: 340, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>霊力増加を+{abilityReiBoost.amount}する対象キャラを選択（複数可）</div>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{abilityReiBoost.target === "itemSwap" ? "アイテム交換できる対象キャラを選択（複数可）" : `霊力増加を+${abilityReiBoost.amount}する対象キャラを選択（複数可）`}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
                 {(gs.pcs || []).map(x => {
                   const on = abilityReiBoost.selected.includes(x.uid);
