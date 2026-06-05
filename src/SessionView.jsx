@@ -3411,29 +3411,43 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       && !(cheererPc.bonds || []).includes(bd) && !cheererPc.kuruwasuUsed?.[combatantPc.uid]) return [KURUWASU_BOND];
     return [];
   };
-  // 回避応援（判定後の振り足し）: 結果フェイズで evadeRoll.dice にダイスを1つ追加する
+  // 回避応援（判定後の振り足し）: 結果フェイズで evadeRoll.dice にダイスを追加する（特別な絆は親密度10で2ダイス）
   const renderEvadeCheer = () => {
     const cheererPc = pcs.find(p => p.uid === user.uid);
-    if (!b.evadeRoll) return null;
+    if (!b.evadeRoll || !cheererPc) return null;
     const normal = getEvadeCheerBonds(cheererPc).map(bn => ({ bn, fragile: false }));
     const fragiles = getEvadeFragileCheer(cheererPc).map(bn => ({ bn, fragile: true }));
-    const usable = [...normal, ...fragiles];
+    // 特別な絆: 戦闘者を対象に持ち、応援欄が空で、戦闘参加者であれば応援可
+    const sb = cheererPc.specialBond;
+    const special = (sb && combatantPc && sb.targetUid === combatantPc.uid && cheererPc.uid !== combatantPc.uid && !sb.used
+      && (!b.participantPcUids || b.participantPcUids.includes(cheererPc.uid)))
+      ? [{ bn: SPECIAL_BOND_CHEER, fragile: false }] : [];
+    const usable = [...normal, ...special, ...fragiles];
     if (usable.length === 0) return null;
     return (
       <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
         <div style={{ fontSize: 9, color: C.gold, marginBottom: 6, letterSpacing: 1 }}>💪 応援（ダイスを振り足す）</div>
-        {usable.map(({ bn, fragile }) => (
-          <button key={bn} onClick={() => animateDice(1, "応援（回避振り足し）", res => upd(p => ({
-            ...p,
-            pcs: p.pcs.map(x => x.uid !== cheererPc.uid ? x : (bn === KURUWASU_BOND
-              ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [combatantPc.uid]: true } }
-              : { ...x, bondUsed: { ...x.bondUsed, [bn]: true } })),
-            battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), res[0]], wasCheered: true, ...(fragile ? { fragile: true } : {}) } },
-            log: [`💪 ${cheererPc.charName} が${bn === KURUWASU_BOND ? "絆なしで" : `《${bn}》で`}応援！回避にダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
-          })))} style={{ ...btnFull(fragile ? "rgba(156,39,176,0.16)" : "rgba(200,160,64,0.16)", fragile ? C.purpleBorder : C.goldDim, fragile ? C.purple : C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
-            {fragile ? "🩸" : ""}{bn === KURUWASU_BOND ? "絆なしで応援" : `《${bn}》で応援`}{fragile ? "(失敗=ファンブル)" : ""}
-          </button>
-        ))}
+        {usable.map(({ bn, fragile }) => {
+          const isSpecial = bn === SPECIAL_BOND_CHEER;
+          const diceN = (isSpecial && (cheererPc.specialBond?.intimacy ?? 1) >= 10) ? 2 : 1;
+          const label = bn === KURUWASU_BOND ? "絆なしで応援"
+            : isSpecial ? `《${cheererPc.specialBond.target}への${cheererPc.specialBond.word || "敬意"}》で応援${diceN === 2 ? "(+2)" : ""}`
+            : `《${bn}》で応援`;
+          return (
+            <button key={bn} onClick={() => animateDice(diceN, "応援（回避振り足し）", res => upd(p => ({
+              ...p,
+              pcs: p.pcs.map(x => x.uid !== cheererPc.uid ? x : (bn === KURUWASU_BOND
+                ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [combatantPc.uid]: true } }
+                : isSpecial
+                ? { ...x, specialBond: { ...x.specialBond, used: true } }
+                : { ...x, bondUsed: { ...x.bondUsed, [bn]: true } })),
+              battle: { ...p.battle, evadeRoll: { ...p.battle.evadeRoll, dice: [...(p.battle.evadeRoll?.dice || []), ...res], wasCheered: true, ...(fragile ? { fragile: true } : {}) } },
+              log: [`💪 ${cheererPc.charName} が${label}！回避にダイスを${diceN}個振り足した（出目${res.join(",")}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
+            })))} style={{ ...btnFull(isSpecial ? "rgba(255,213,79,0.18)" : fragile ? "rgba(156,39,176,0.16)" : "rgba(200,160,64,0.16)", isSpecial ? C.goldDim : fragile ? C.purpleBorder : C.goldDim, isSpecial ? C.gold : fragile ? C.purple : C.gold, { fontSize: 10, padding: "6px 10px" }), marginBottom: 4, width: "100%" }}>
+              {fragile ? "🩸" : isSpecial ? "💞" : ""}{label}{fragile ? "(失敗=ファンブル)" : ""}
+            </button>
+          );
+        })}
       </div>
     );
   };
@@ -7954,12 +7968,20 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
     return [KURUWASU_BOND];
   };
 
+  // 特別な絆（成長）による応援: judgePc を対象に持ち、応援欄(used)が空なら応援できる（親密度10で2ダイス）
+  const getSpecialBondCheer = (cheerer, judgePc) => {
+    const sb = cheerer.specialBond;
+    if (!sb || sb.targetUid !== judgePc.uid || cheerer.uid === judgePc.uid || sb.used) return [];
+    return [SPECIAL_BOND_CHEER];
+  };
+
   // judgePc の行為判定に対する応援UI。onCheer(cheererUid, bondName, fragile) を渡す。
   const renderCheerSection = (judgePc, onCheer) => {
     const cheers = [];
     (gs.pcs || []).forEach(cheerer => {
       if (cheerer.currentSpot !== judgePc.currentSpot) return;  // 同スポット
       getCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: false }));
+      getSpecialBondCheer(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: false }));
       getFragileCheerBonds(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: true }));
       getKuruwasuCheer(cheerer, judgePc).forEach(bondName => cheers.push({ cheerer, bondName, fragile: true }));
     });
@@ -7968,37 +7990,51 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       <div style={{ marginBottom: 8, padding: 8, background: "rgba(100,181,246,0.08)", border: `1px solid ${C.blueBorder}`, borderRadius: 4 }}>
         <div style={{ fontSize: 9, color: C.blue, marginBottom: 4 }}>💪 応援（絆1つ＝判定ダイス+1）</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {cheers.map(({ cheerer, bondName, fragile }, i) => (
-            <button key={i} onClick={() => onCheer(cheerer.uid, bondName, fragile)}
-              style={btnFull(fragile ? "rgba(156,39,176,0.15)" : "rgba(100,181,246,0.15)", fragile ? C.purpleBorder : C.blueBorder, fragile ? C.purple : C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>
-              {fragile ? "🩸" : ""}{cheerer.uid === judgePc.uid ? `《${bondName}》` : `${cheerer.charName}：《${bondName}》`}{fragile ? "(失敗=ファンブル)" : ""}
-            </button>
-          ))}
+          {cheers.map(({ cheerer, bondName, fragile }, i) => {
+            const isSpecial = bondName === SPECIAL_BOND_CHEER;
+            const label = isSpecial ? `《${cheerer.specialBond.target}への${cheerer.specialBond.word || "敬意"}》${(cheerer.specialBond.intimacy ?? 1) >= 10 ? "(+2)" : ""}` : `《${bondName}》`;
+            return (
+              <button key={i} onClick={() => onCheer(cheerer.uid, bondName, fragile)}
+                style={btnFull(isSpecial ? "rgba(255,213,79,0.16)" : fragile ? "rgba(156,39,176,0.15)" : "rgba(100,181,246,0.15)", isSpecial ? C.goldDim : fragile ? C.purpleBorder : C.blueBorder, isSpecial ? C.gold : fragile ? C.purple : C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>
+                {fragile ? "🩸" : isSpecial ? "💞" : ""}{cheerer.uid === judgePc.uid ? label : `${cheerer.charName}：${label}`}{fragile ? "(失敗=ファンブル)" : ""}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
   };
 
-  // 応援者の絆消費フラグ（絆なし応援は kuruwasuUsed[対象]、通常は bondUsed[絆名]）を返す
+  // 応援者の絆消費フラグ（絆なし応援は kuruwasuUsed[対象]、特別な絆は specialBond.used、通常は bondUsed[絆名]）を返す
   const cheerConsumePatch = (x, bondName) =>
     bondName === KURUWASU_BOND
       ? { kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [pc.uid]: true } }
+      : bondName === SPECIAL_BOND_CHEER
+      ? { specialBond: { ...x.specialBond, used: true } }
       : { bondUsed: { ...x.bondUsed, [bondName]: true } };
 
-  // 応援を1回適用（判定後）：ダイスを1つ振り足して結果のダイス配列に追加する。
-  // diceField で振り足し先を指定（explore=actionDice / quest は judgeUid 別に呼び出し側で処理）。fragile=失敗時ファンブル
+  // 特別な絆の応援ラベル（ログ用）
+  const cheerLabel = (cheerer, bondName) =>
+    bondName === KURUWASU_BOND ? "絆なしで"
+    : bondName === SPECIAL_BOND_CHEER ? `《${cheerer?.specialBond?.target}への${cheerer?.specialBond?.word || "敬意"}》で`
+    : `《${bondName}》で`;
+
+  // 応援を1回適用（判定後）：ダイスを振り足して結果のダイス配列に追加する。
+  // 特別な絆は親密度10で2ダイス。fragile=失敗時ファンブル
   const applyCheer = (cheererUid, bondName, fragile = false) => {
-    const cheererName = gs.pcs.find(x => x.uid === cheererUid)?.charName;
-    animateDice(1, "応援（振り足し）", res => upd(p => ({
+    const cheerer = gs.pcs.find(x => x.uid === cheererUid);
+    const cheererName = cheerer?.charName;
+    const diceN = (bondName === SPECIAL_BOND_CHEER && (cheerer?.specialBond?.intimacy ?? 1) >= 10) ? 2 : 1;
+    animateDice(diceN, "応援（振り足し）", res => upd(p => ({
       ...p,
       pcs: p.pcs.map(x => x.uid !== cheererUid ? x : { ...x, ...cheerConsumePatch(x, bondName) }),
       currentScene: {
         ...p.currentScene,
-        actionDice: [...(p.currentScene.actionDice || []), res[0]],
+        actionDice: [...(p.currentScene.actionDice || []), ...res],
         wasCheered: true,
         ...(fragile ? { fragileCheer: true } : {}),
       },
-      log: [`💪 ${cheererName} が${bondName === KURUWASU_BOND ? "絆なしで" : `《${bondName}》で`}応援！ダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
+      log: [`💪 ${cheererName} が${cheerLabel(cheerer, bondName)}応援！ダイスを${diceN}個振り足した（出目${res.join(",")}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
     })));
   };
 
@@ -9073,18 +9109,24 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             };
             // 応援（判定後の振り足し）：対象 judgeUid のロールにダイスを1つ追加
             const applyCheerQuest = (cheererUid, bondName, judgeUid, fragile) => {
-              const cheererName = gs.pcs.find(x => x.uid === cheererUid)?.charName;
-              animateDice(1, "応援（振り足し）", res => upd(p => {
+              const cheerer = gs.pcs.find(x => x.uid === cheererUid);
+              const cheererName = cheerer?.charName;
+              const isKuruwasu = bondName === KURUWASU_BOND;
+              const isSpecial = bondName === SPECIAL_BOND_CHEER;
+              const diceN = (isSpecial && (cheerer?.specialBond?.intimacy ?? 1) >= 10) ? 2 : 1;
+              animateDice(diceN, "応援（振り足し）", res => upd(p => {
                 const roll = p.currentScene.rolls?.[judgeUid];
                 if (!roll) return p;
-                const isKuruwasu = bondName === KURUWASU_BOND;
+                const consume = isKuruwasu
+                  ? { kuruwasuUsed: { ...(cheerer?.kuruwasuUsed || {}), [judgeUid]: true } }
+                  : isSpecial
+                  ? { specialBond: { ...cheerer?.specialBond, used: true } }
+                  : { bondUsed: { ...(cheerer?.bondUsed || {}), [bondName]: true } };
                 return {
                   ...p,
-                  pcs: p.pcs.map(x => x.uid !== cheererUid ? x : (isKuruwasu
-                    ? { ...x, kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [judgeUid]: true } }
-                    : { ...x, bondUsed: { ...x.bondUsed, [bondName]: true } })),
-                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgeUid]: { ...roll, dice: [...roll.dice, res[0]], fragile: roll.fragile || fragile, wasCheered: true } } },
-                  log: [`💪 ${cheererName} が${isKuruwasu ? "絆なしで" : `《${bondName}》で`}応援！クエスト判定にダイスを振り足した（出目${res[0]}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
+                  pcs: p.pcs.map(x => x.uid !== cheererUid ? x : { ...x, ...consume }),
+                  currentScene: { ...p.currentScene, rolls: { ...p.currentScene.rolls, [judgeUid]: { ...roll, dice: [...roll.dice, ...res], fragile: roll.fragile || fragile, wasCheered: true } } },
+                  log: [`💪 ${cheererName} が${isKuruwasu ? "絆なしで" : isSpecial ? `《${cheerer?.specialBond?.target}への${cheerer?.specialBond?.word || "敬意"}》で` : `《${bondName}》で`}応援！クエスト判定にダイスを${diceN}個振り足した（出目${res.join(",")}）${fragile ? "（失敗でファンブル）" : ""}`, ...p.log],
                 };
               }));
             };
