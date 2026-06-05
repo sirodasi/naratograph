@@ -5075,6 +5075,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const [abilitySearchClue, setAbilitySearchClue] = useState(null); // 探し物：手がかり配置スポット選択 { name, freq }
   const [abilityReadMind, setAbilityReadMind] = useState(null); // 心を読む：絆取得対象選択 { name, freq }
   const [abilityReiBoost, setAbilityReiBoost] = useState(null); // あらゆるものの背中：霊力増加対象選択 { name, freq, amount, selected[] }
+  const [abilityBoundary, setAbilityBoundary] = useState(null); // 境界：移動先選択 { name, freq, consume, mustBase }
   const [expanded, setExpanded]     = useState(false);
   const [gmEdit, setGmEdit]         = useState(false);
   const [detailModal, setDetailModal] = useState(false);
@@ -5377,6 +5378,19 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
       // アイテム交換できる対象キャラを選ぶ（複数選択）
       const cur = gs.itemSwapTargets || [];
       setAbilityReiBoost({ name, freq, amount: 0, selected: cur, target: "itemSwap" });
+      return;
+    }
+    if (meta?.auto && meta.kind === "boundary_move") {
+      // 境界: ダイス1つ→（base:偶数でやる気-1）→任意/拠点移動＋アクション
+      const isPlus = meta.params?.plus;
+      animateDice(1, `${name}（境界）`, res => {
+        const even = res[0] % 2 === 0;
+        const curYaruki = pc.resources.やる気?.cur || 0;
+        const consume = (!isPlus && even) ? 1 : 0;
+        const afterYaruki = curYaruki - consume;
+        const mustBase = isPlus ? (even && curYaruki === 1) : (afterYaruki === 1);
+        setAbilityBoundary({ name, freq, consume, mustBase });
+      });
       return;
     }
     if (meta?.auto && meta.kind === "search_place_clue") {
@@ -5729,6 +5743,24 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         log: [`🔵 ${pc.charName} が能力《${rm.name}》を発動：《${bond}》を取得（${targetName} の応援欄をチェック）`, ...p.log],
       };
     });
+  };
+
+  // boundary_move（境界）：選んだスポットへ移動し、シーン中ならアクションフェイズへ（やる気消費）
+  const confirmBoundary = (spotId) => {
+    const bd = abilityBoundary;
+    setAbilityBoundary(null);
+    if (!bd) return;
+    upd(p => ({
+      ...p,
+      pcs: p.pcs.map(x => {
+        if (x.uid !== pc.uid) return x;
+        let nx = withAbilityUse({ ...x, currentSpot: spotId }, bd.name, bd.freq);
+        if (bd.consume) { const yr = nx.resources.やる気 || { cur: 0, max: 99 }; nx = { ...nx, resources: { ...nx.resources, やる気: { ...yr, cur: Math.max(0, yr.cur - bd.consume) } } }; }
+        return nx;
+      }),
+      currentScene: p.currentScene?.pcUid === pc.uid ? { ...p.currentScene, phase: "action" } : p.currentScene,
+      log: [`🔵 ${pc.charName} が能力《${bd.name}》発動：[${getSpot(spotId)?.name}] へ移動${bd.consume ? `（やる気-${bd.consume}）` : ""}＋アクション`, ...p.log],
+    }));
   };
 
   // select_rei_boost / select_item_swap：選んだキャラを対象に設定（霊力増加 or アイテム交換）
@@ -6493,6 +6525,24 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               </div>
               <button onClick={confirmReiBoost} style={{ ...btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 12 }), marginBottom: 6, width: "100%" }}>決定</button>
               <button onClick={() => setAbilityReiBoost(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
+            </SpellCard>
+          </div>
+        );
+      })()}
+      {abilityBoundary && (() => {
+        const dests = abilityBoundary.mustBase
+          ? (SPOTS || []).filter(s => s.id === (pc.baseSpotId || "11"))
+          : (SPOTS || []).filter(s => s.id !== "dream");
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease" }} onClick={() => setAbilityBoundary(null)}>
+            <SpellCard color="#90caf9" title={`✦ ${abilityBoundary.name}`} style={{ maxWidth: 360, width: "90%", animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8 }}>{abilityBoundary.mustBase ? "拠点へ移動してアクション" : "移動先のスポットを選択（その後アクション）"}{abilityBoundary.consume ? "（やる気-1）" : ""}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 10, maxHeight: 220, overflowY: "auto" }}>
+                {dests.map(s => (
+                  <button key={s.id} onClick={() => confirmBoundary(s.id)} style={btnFull("rgba(144,202,249,0.1)", "#1565c080", "#90caf9", { fontSize: 10, padding: "5px 6px" })}>{s.name}</button>
+                ))}
+              </div>
+              <button onClick={() => setAbilityBoundary(null)} style={{ width: "100%", padding: "8px", cursor: "pointer", borderRadius: 2, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.textFaint, fontSize: 12 }}>キャンセル</button>
             </SpellCard>
           </div>
         );
