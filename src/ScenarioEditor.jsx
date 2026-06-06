@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, update, push, remove } from "firebase/database";
+import { ref, onValue, set, update, push, remove, get } from "firebase/database";
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
 import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
@@ -1110,6 +1110,7 @@ function ProfilePage({ onClose }) {
 
   useEffect(()=> {
     setNewName(user?.displayName||"");
+    if(user) get(ref(db,`users/${user.uid}/displayName`)).then(snap=>{ if(snap.exists()&&snap.val()) setNewName(snap.val()); }).catch(()=> {});
   },[user]);
 
   // 自分が建てた部屋を取得
@@ -1145,20 +1146,19 @@ function ProfilePage({ onClose }) {
   const saveName = async()=> {
     const u = auth.currentUser; // 最新のユーザーを取得（キャプチャ済み user の失効対策）
     if(!newName.trim()||!u||nameSaving)return;
+    const trimmed = newName.trim();
     setNameSaving(true);
     try {
-      // updateProfile がハングしてもUIが固まらないよう8秒でタイムアウトさせる
-      await Promise.race([
-        updateProfile(u,{displayName:newName.trim()}),
-        new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),8000)),
-      ]);
+      // RTDB に保存（確実）。updateProfile（Authプロフィール）は端末によりハング/失敗するため best-effort
+      await set(ref(db,`users/${u.uid}/displayName`), trimmed);
+      updateProfile(u,{displayName:trimmed}).catch(()=> {});
       setNameSaved(true);
       setTimeout(() => setNameSaved(false),2500);
     } catch(e) {
       console.error("表示名の保存に失敗", e);
       alert("表示名の保存に失敗しました。通信状況を確認して、もう一度お試しください。");
     } finally {
-      setNameSaving(false); // 成功/失敗/タイムアウトに関わらず必ず解除
+      setNameSaving(false); // 成功/失敗に関わらず必ず解除
     }
   };
 

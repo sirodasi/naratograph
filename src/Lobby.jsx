@@ -120,15 +120,12 @@ function UsernameSetup({ user, onDone }) {
   const save = async () => {
     const u = auth.currentUser || user;
     if (!name.trim() || saving) return;
+    const trimmed = name.trim();
     setSaving(true);
-    try {
-      // updateProfile がハングしても先に進めるよう8秒でタイムアウト
-      await Promise.race([
-        updateProfile(u, { displayName: name.trim() }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
-      ]);
-    } catch (e) { console.error("表示名の保存に失敗", e); }
-    onDone(name.trim()); // 保存失敗時もローカル名で続行
+    // RTDB に保存（確実）。updateProfile は best-effort（端末によりハング/失敗するため待たない）
+    try { await set(ref(db, `users/${u.uid}/displayName`), trimmed); } catch (e) { console.error(e); }
+    updateProfile(u, { displayName: trimmed }).catch(() => {});
+    onDone(trimmed);
   };
 
   return (
@@ -835,7 +832,12 @@ export default function LobbyRoot() {
 
     const unsub = onAuthStateChanged(auth, u => {
       setUser(u || null);
-      if (u) setDisplayName(u.displayName || null);
+      if (!u) return;
+      setDisplayName(u.displayName || null); // 暫定（Authプロフィール）
+      // RTDB の表示名を優先（updateProfile が失敗する端末でも確実に保存・反映するため）
+      get(ref(db, `users/${u.uid}/displayName`)).then(snap => {
+        if (snap.exists() && snap.val()) setDisplayName(snap.val());
+      }).catch(() => {});
     });
     return () => unsub();
   }, []);
@@ -862,7 +864,7 @@ export default function LobbyRoot() {
   if (!displayName) return (
     <UsernameSetup
       user={user}
-      onDone={name => { setDisplayName(name); updateProfile(user, { displayName: name }).catch(() => {}); }}
+      onDone={name => { setDisplayName(name); set(ref(db, `users/${user.uid}/displayName`), name).catch(() => {}); }}
     />
   );
 
