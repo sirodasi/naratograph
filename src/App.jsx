@@ -157,7 +157,10 @@ function stripUndefined(v) {
 
 // ─── カスタムフック ──────────────────────────────────────────────
 
-function useMapBounds(containerRef) {
+// active を依存に取り、描写モードの ON/OFF で地図 div が再マウントされた際に再計測する。
+// （ref オブジェクトは不変なので effect は再実行されず、ResizeObserver が古い detached ノードを
+//   監視し続けて bounds が 0 のままになる＝描写モード終了後にスポットが消える不具合を防ぐ）
+function useMapBounds(containerRef, active = true) {
   const [bounds, setBounds] = useState({ left: 0, top: 0, width: 0, height: 0 });
 
   useEffect(() => {
@@ -166,14 +169,16 @@ function useMapBounds(containerRef) {
 
     const calc = () => {
       const scale = Math.min(el.clientWidth / MAP_NATURAL_W, el.clientHeight / MAP_NATURAL_H);
-      setBounds({ left: 0, top: 0, width: MAP_NATURAL_W * scale, height: MAP_NATURAL_H * scale });
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        setBounds({ left: 0, top: 0, width: MAP_NATURAL_W * scale, height: MAP_NATURAL_H * scale });
+      }
     };
 
     calc();
     const ro = new ResizeObserver(calc);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [containerRef]);
+  }, [containerRef, active]);
 
   return bounds;
 }
@@ -186,7 +191,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const [hov, setHov] = useState(null);
 
   const mapRef   = useRef(null);
-  const mapBounds = useMapBounds(mapRef);
+  const mapBounds = useMapBounds(mapRef, !gs.sceneMode); // 描写モード解除で地図再表示時に再計測
 
   const scale    = mapBounds.width > 0 ? mapBounds.width / MAP_NATURAL_W : 0.5;
   const baseSize = Math.round(22 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
