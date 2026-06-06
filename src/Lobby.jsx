@@ -14,6 +14,11 @@ export const SPRITE_COLS = 10;
 
 export { CHARACTERS, PERSONALITY_SKILLS };
 
+// GM（部屋の作成）を許可するアカウント（Google認証済みメール・小文字）。
+// 現状は内部利用のためここで制限。外部公開時は Firebase セキュリティルールでの強制も推奨。
+export const ALLOWED_GM_EMAILS = ["sora1225n@gmail.com"];
+export const isAllowedGm = (user) => !!user?.email && ALLOWED_GM_EMAILS.includes(user.email.toLowerCase());
+
 // ─── ロビー共通コンポーネント ─────────────────────────────────────
 
 function Divider({ color = C.textFaint, style = {} }) {
@@ -162,6 +167,7 @@ function Lobby({ user, displayName, onProfile }) {
   const [copied, setCopied]   = useState(false);
 
   const createRoom = async () => {
+    if (!isAllowedGm(user)) { setErr("このアカウントには部屋の作成（GM）権限がありません。"); return; }
     setLoading(true);
     setErr("");
     const code = Math.random().toString(36).slice(2, 7).toUpperCase();
@@ -213,12 +219,15 @@ function Lobby({ user, displayName, onProfile }) {
 
       {view === "top" && (
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
-          <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.20s both" }}>
-            <div style={{ textAlign: "center", padding: "24px 32px" }}>
-              <div style={{ fontSize: 22, color: C.red, marginBottom: 10 }}>⚙</div>
-              <div style={{ fontSize: 12, color: C.red, letterSpacing: 2 }}>GMとして部屋を作る</div>
-            </div>
-          </LobbyCard>
+          {/* 部屋作成（GM）は許可アカウントのみ表示 */}
+          {isAllowedGm(user) && (
+            <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.20s both" }}>
+              <div style={{ textAlign: "center", padding: "24px 32px" }}>
+                <div style={{ fontSize: 22, color: C.red, marginBottom: 10 }}>⚙</div>
+                <div style={{ fontSize: 12, color: C.red, letterSpacing: 2 }}>GMとして部屋を作る</div>
+              </div>
+            </LobbyCard>
+          )}
           <LobbyCard color={C.blue} onClick={() => setView("join")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.32s both" }}>
             <div style={{ textAlign: "center", padding: "24px 32px" }}>
               <div style={{ fontSize: 22, color: C.blue, marginBottom: 10 }}>◆</div>
