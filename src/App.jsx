@@ -184,7 +184,7 @@ function useMapBounds(containerRef, active = true) {
 }
 
 // ─── MapView（GM/PL共通）────────────────────────────────────────
-function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
+function MapView({ gs, sceneData, isGm, upd, onSpotClick, user, setSceneData }) {
   const cycleIdx  = gs.cycleIdx || 0;
   const isNight   = cycleIdx === 3;
   const isEvening = cycleIdx === 2;
@@ -211,7 +211,7 @@ function MapView({ gs, sceneData, isGm, upd, onSpotClick, user }) {
   const blockedSpots = getBlockedSpots(gs.scenarioData, gs);
 
   if (gs.sceneMode) {
-    return <SceneStage sceneData={sceneData} sceneText={gs.sceneText} />;
+    return <SceneStage sceneData={sceneData} sceneText={gs.sceneText} editable={isGm && !!setSceneData} onChange={portraits => setSceneData && setSceneData(d => ({ ...d, portraits }))} />;
   }
 
   const mapFilter = isNight   ? "brightness(0.45) sepia(0) saturate(0.5)"
@@ -1316,7 +1316,7 @@ function SessionApp({ roomCode, user }) {
             />
           </div>
         ) : (
-          <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} />
+          <MapView gs={gs} sceneData={sceneData} isGm={mode === "gm"} upd={upd} onSpotClick={handleSpotClick} user={user} setSceneData={setSceneDataAndSync} />
         )}
       </div>
 

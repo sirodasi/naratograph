@@ -291,23 +291,116 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
 }
 
 // ─── SceneStage（描写の表示）: 背景＋立ち絵＋テキスト。探索の描写モードと終幕で共用 ──
-export function SceneStage({ sceneData, sceneText }) {
+// editable=true（GM）のとき、立ち絵をドラッグで自由配置、選択時にサイズ/反転/重なり順/削除ができる。
+// 立ち絵データ: { img, name, x, y, h, flip }（x,y=下端中央の%、h=高さ%。未設定はレガシー下部均等配置）
+export function SceneStage({ sceneData, sceneText, editable = false, onChange }) {
+  const stageRef = useRef(null);
+  const [sel, setSel] = useState(null);     // 選択中の立ち絵index（編集時）
+  const [localP, setLocalP] = useState(null); // ドラッグ中のローカル立ち絵配列（Firebase書込はドラッグ終了時のみ）
+  const dragRef = useRef(null);
+  const base = sceneData?.portraits || [];
+  const portraits = localP ?? base;
+  const n = portraits.length;
+
+  // レガシー（x未設定）の既定配置: 下部に均等配置（テキスト枠の上に立つ）
+  const posOf = (p, i) => ({
+    x: p.x ?? (n > 1 ? 50 + (i - (n - 1) / 2) * Math.min(24, 86 / n) : 50),
+    y: p.y ?? 90,
+    h: p.h ?? 60,
+    flip: !!p.flip,
+  });
+
+  const commit = (next) => onChange?.(next);
+  const adjust = (i, patch) => commit(portraits.map((p, j) => j === i ? { ...p, ...patch } : p));
+  const reorder = (i, dir) => { // 重なり順（配列の後ろ=手前）
+    const j = i + dir;
+    if (j < 0 || j >= n) return;
+    const arr = [...portraits];[arr[i], arr[j]] = [arr[j], arr[i]];
+    commit(arr); setSel(j);
+  };
+  const removeAt = (i) => { commit(portraits.filter((_, j) => j !== i)); setSel(null); };
+
+  const startDrag = (i, e) => {
+    if (!editable) return;
+    e.preventDefault(); e.stopPropagation();
+    setSel(i);
+    // 掴んだ位置とアンカー(x,y)のズレを記録し、ドラッグ中に維持する
+    const r = stageRef.current?.getBoundingClientRect();
+    let ox = 0, oy = 0;
+    if (r) {
+      const cur = posOf(portraits[i], i);
+      ox = ((e.clientX - r.left) / r.width) * 100 - cur.x;
+      oy = ((e.clientY - r.top) / r.height) * 100 - cur.y;
+    }
+    dragRef.current = { i, ox, oy };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ }
+  };
+  const onMove = (e) => {
+    if (!dragRef.current || !stageRef.current) return;
+    const r = stageRef.current.getBoundingClientRect();
+    const x = Math.max(3, Math.min(97, ((e.clientX - r.left) / r.width) * 100 - dragRef.current.ox));
+    const y = Math.max(12, Math.min(100, ((e.clientY - r.top) / r.height) * 100 - dragRef.current.oy));
+    const i = dragRef.current.i;
+    setLocalP(cur => (cur ?? base).map((p, j) => j === i ? { ...p, x, y } : p));
+  };
+  const endDrag = () => {
+    if (dragRef.current && localP) commit(localP);
+    dragRef.current = null; setLocalP(null);
+  };
+
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#040608" }}>
+    <div ref={stageRef}
+      onPointerMove={editable ? onMove : undefined}
+      onPointerUp={editable ? endDrag : undefined}
+      onPointerLeave={editable ? endDrag : undefined}
+      onPointerDown={editable ? () => setSel(null) : undefined}
+      style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#040608", touchAction: editable ? "none" : "auto" }}>
       {sceneData?.bg && (
-        <img src={sceneData.bg} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+        <img src={sceneData.bg} alt="" draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
       )}
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)" }} />
-      <div style={{ position: "absolute", bottom: 110, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 16, alignItems: "flex-end" }}>
-        {(sceneData?.portraits || []).map((p, i) => (
-          p.img && <img key={i} src={p.img} alt={p.name || ""} style={{ height: 320, objectFit: "contain", filter: "drop-shadow(0 4px 24px rgba(0,0,0,0.8))" }} />
-        ))}
-      </div>
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)", pointerEvents: "none" }} />
+      {portraits.map((p, i) => {
+        if (!p.img) return null;
+        const { x, y, h, flip } = posOf(p, i);
+        return (
+          <img key={i} src={p.img} alt={p.name || ""} draggable={false}
+            onPointerDown={editable ? e => startDrag(i, e) : undefined}
+            style={{
+              position: "absolute", left: `${x}%`, top: `${y}%`, height: `${h}%`,
+              transform: `translate(-50%,-100%) scaleX(${flip ? -1 : 1})`, objectFit: "contain",
+              filter: "drop-shadow(0 4px 24px rgba(0,0,0,0.8))",
+              cursor: editable ? (dragRef.current ? "grabbing" : "grab") : "default",
+              outline: editable && sel === i ? "2px dashed #c8a040" : "none", outlineOffset: 2,
+              transition: dragRef.current ? "none" : "left 0.12s, top 0.12s, height 0.12s",
+              userSelect: "none", WebkitUserSelect: "none",
+            }} />
+        );
+      })}
       {sceneText && (
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px" }}>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px", pointerEvents: "none" }}>
           <div style={{ fontSize: 14, color: "#c8b89a", lineHeight: 2.1, fontFamily: "'Noto Serif JP', serif", whiteSpace: "pre-wrap" }}>{sceneText}</div>
         </div>
       )}
+      {/* 編集ツールバー（選択中の立ち絵） */}
+      {editable && sel != null && portraits[sel]?.img && (() => {
+        const cur = posOf(portraits[sel], sel);
+        const Btn = ({ onClick, children, title }) => (
+          <button title={title} onPointerDown={e => e.stopPropagation()} onClick={onClick}
+            style={{ minWidth: 30, height: 30, padding: "0 7px", background: "rgba(20,24,40,0.95)", border: "1px solid #3a4560", borderRadius: 5, color: "#cfe2f5", fontSize: 13, cursor: "pointer", lineHeight: 1 }}>{children}</button>
+        );
+        return (
+          <div onPointerDown={e => e.stopPropagation()} style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5, alignItems: "center", background: "rgba(6,8,16,0.9)", border: "1px solid #2a3550", borderRadius: 8, padding: "5px 7px", zIndex: 20, flexWrap: "wrap", maxWidth: "94%" }}>
+            <span style={{ fontSize: 9, color: "#8aa0c0", marginRight: 2 }}>{portraits[sel].name || `立ち絵${sel + 1}`}</span>
+            <Btn title="小さく" onClick={() => adjust(sel, { h: Math.max(15, Math.round((cur.h - 6) * 10) / 10) })}>－</Btn>
+            <span style={{ fontSize: 9, color: "#6a7a90", minWidth: 26, textAlign: "center" }}>{Math.round(cur.h)}%</span>
+            <Btn title="大きく" onClick={() => adjust(sel, { h: Math.min(100, Math.round((cur.h + 6) * 10) / 10) })}>＋</Btn>
+            <Btn title="左右反転" onClick={() => adjust(sel, { flip: !cur.flip })}>⇄</Btn>
+            <Btn title="背面へ" onClick={() => reorder(sel, -1)}>▽</Btn>
+            <Btn title="前面へ" onClick={() => reorder(sel, +1)}>△</Btn>
+            <Btn title="削除" onClick={() => removeAt(sel)}>✕</Btn>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -355,6 +448,7 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
       )}
 
       <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
+      <div style={{ fontSize: 8, color: "#7a8aa0", marginBottom: 4, lineHeight: 1.5 }}>💡 画面上で立ち絵をドラッグして配置、タップで選択→サイズ(−/＋)・反転(⇄)・重なり順(△▽)・削除ができます。</div>
       {(sceneData.portraits || []).map((p, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
           <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
@@ -380,7 +474,7 @@ export function EpilogueView({ gs, upd, isGm, sceneData, setSceneData, onProceed
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#040608", fontFamily: "'Noto Serif JP', serif" }}>
-      <SceneStage sceneData={sceneData} sceneText={gs.sceneText} />
+      <SceneStage sceneData={sceneData} sceneText={gs.sceneText} editable={isGm} onChange={portraits => setSceneData(d => ({ ...d, portraits }))} />
       <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", fontSize: 13, color: "#d8c0a0", letterSpacing: 10, textShadow: "0 2px 8px #000", zIndex: 5 }}>◆ 終 幕 ◆</div>
       {isGm ? (
         <div style={{ position: "absolute", top: 0, right: 0, height: "100%", width: 300, boxSizing: "border-box", background: "rgba(6,8,16,0.93)", borderLeft: "1px solid #1e2535", padding: 14, overflowY: "auto", zIndex: 10 }}>
