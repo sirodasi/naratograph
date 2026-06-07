@@ -645,14 +645,26 @@ function SessionApp({ roomCode, user }) {
     return () => window.removeEventListener("pointerdown", unlock);
   }, []);
 
+  // ── BGM: GMが事前に設定したプリセット（users/{gmUid}/bgm）を購読 ──────────
+  const [gmBgm, setGmBgm] = useState(null);
+  useEffect(() => {
+    const gmUid = room?.gmUid;
+    if (!gmUid) return;
+    const unsub = onValue(ref(db, `users/${gmUid}/bgm`), snap => setGmBgm(snap.exists() ? snap.val() : null));
+    return () => unsub();
+  }, [room?.gmUid]);
+
   // ── BGM: フェーズに応じてトラックを切り替え ────────────────────────────
+  // セッション中の gs.bgm を優先し、未設定ならGMのプロフィールプリセット（事前設定）を再生
   useEffect(() => {
     const b = gs.bgm || {};
-    const url = gs.battle?.active ? (b.battle || "")
-      : gs.sessionPhase === "end" ? (b.end || "")
-      : (b.explore || "");  // intro / explore など通常時
+    const pre = gmBgm || {};
+    const pick = k => b[k] || pre[k] || "";
+    const url = gs.battle?.active ? pick("battle")
+      : gs.sessionPhase === "end" ? pick("end")
+      : pick("explore");  // intro / explore など通常時
     bgm.setTrack(url);
-  }, [gs.bgm, gs.battle?.active, gs.sessionPhase]);
+  }, [gs.bgm, gmBgm, gs.battle?.active, gs.sessionPhase]);
 
   // ルーム離脱時に BGM を停止
   useEffect(() => () => { bgm.setTrack(""); }, []);

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { db, auth, googleProvider } from "./firebase";
 import { ref, onValue, set, update, get } from "firebase/database";
 import { signInWithPopup, onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
-import ProfilePage, { ScenarioSelector } from "./ScenarioEditor";
+import ProfilePage, { ScenarioSelector, BgmPresetEditor } from "./ScenarioEditor";
 import spriteImg from "./assets/sprite.png";
 import { useIsMobile } from "./useIsMobile";
 import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
@@ -524,6 +524,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 <input type="checkbox" checked={room.config?.useLastResort || false} onChange={() => toggleExtraRule("useLastResort")} />
                 喰らいボム（回避失敗時にSCを消費して追加判定）
               </label>
+            </div>
+          )}
+
+          {isGm && (
+            <div style={{ ...S.card, animation: "lbFadeUp 0.4s 0.26s both" }}>
+              <div style={S.h2}>🎵 BGM（事前設定）</div>
+              <BgmPresetEditor uid={user.uid} />
             </div>
           )}
 

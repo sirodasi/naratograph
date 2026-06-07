@@ -10063,7 +10063,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       </div>
                     ))}
                     <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.6, marginTop: 4 }}>
-                      ※ 直接再生可能な音声ファイルのURLを指定してください。著作権・利用規約はGMの責任で確認を。
+                      ※ 直接再生可能な音声ファイルのURLを指定してください。空欄の場合はプロフィール/準備フェイズで事前設定したBGMが再生されます。著作権・利用規約はGMの責任で確認を。
                     </div>
                   </div>
                 )}

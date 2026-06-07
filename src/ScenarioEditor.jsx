@@ -1096,6 +1096,36 @@ function ScenarioList({ onSelect, onEdit, selectedId }) {
   );
 }
 
+// ── BGMプリセット編集（GMが事前に設定。users/{uid}/bgm。プロフィール・準備フェイズで共用）──
+export function BgmPresetEditor({ uid }) {
+  const [bgm, setBgm] = useState({ explore: "", battle: "", end: "" });
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (!uid) return;
+    get(ref(db, `users/${uid}/bgm`)).then(snap => { if (snap.exists()) setBgm({ explore: "", battle: "", end: "", ...snap.val() }); }).catch(() => {});
+  }, [uid]);
+  const save = async () => {
+    try {
+      await set(ref(db, `users/${uid}/bgm`), { explore: bgm.explore || "", battle: bgm.battle || "", end: bgm.end || "" });
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } catch (e) { console.error(e); }
+  };
+  return (
+    <div>
+      <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.6, marginBottom: 8 }}>
+        各フェーズで自動再生するBGM（直接再生できる音声ファイルのURL: mp3/ogg 等）。セッション中に個別設定が無ければこれが流れます。著作権・利用規約はGMの責任で確認してください。
+      </div>
+      {[["explore", "探索 / 導入"], ["battle", "弾幕ごっこ / 決戦"], ["end", "終了 / 終幕"]].map(([k, label]) => (
+        <div key={k} style={{ marginBottom: 7 }}>
+          <div style={{ fontSize: 9, color: C.textDim, marginBottom: 2 }}>{label}</div>
+          <input value={bgm[k] || ""} onChange={e => setBgm(b => ({ ...b, [k]: e.target.value }))} placeholder="https://…（mp3/ogg）" style={{ ...iBase, width: "100%", boxSizing: "border-box", fontSize: 11 }} />
+        </div>
+      ))}
+      <button onClick={save} style={btn(saved ? C.greenBg : C.goldBg, saved ? C.greenBorder : C.goldDim, saved ? C.green : C.gold, { padding: "6px 18px", marginTop: 2 })}>{saved ? "✓ 保存しました" : "💾 BGMプリセットを保存"}</button>
+    </div>
+  );
+}
+
 // ── Profile Page ──────────────────────────────────────
 function ProfilePage({ onClose }) {
   const [view, setView] = useState("account"); // account | scenarios | rooms
@@ -1231,6 +1261,12 @@ function ProfilePage({ onClose }) {
               </button>
             </div>
             <div style={{fontSize:9,color:C.textFaint,marginTop:6}}>この名前はセッション中にGM・PLに表示されます</div>
+          </div>
+
+          {/* BGMプリセット（事前設定） */}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:16,marginBottom:12}}>
+            <div style={{fontSize:12,color:C.gold,marginBottom:12}}>🎵 BGMプリセット（事前設定）</div>
+            <BgmPresetEditor uid={user?.uid} />
           </div>
         </div>
       )}
