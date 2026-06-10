@@ -4,6 +4,7 @@ import { ref, onValue, set, update, push, remove, get } from "firebase/database"
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
 import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
+import { ACHIEVEMENTS } from "./data/achievements";
 
 // キャラクター名一覧（選択不可設定用・循環import回避のため独立定義）
 const CHAR_NAMES = ["博麗霊夢", "霧雨魔理沙", "チルノ", "紅美鈴", "パチュリー・ノーレッジ", "十六夜咲夜", "レミリア・スカーレット", "フランドール・スカーレット", "アリス・マーガトロイド", "魂魄妖夢", "西行寺幽々子", "八雲藍", "八雲紫", "伊吹萃香", "鈴仙・優曇華院・イナバ", "八意永琳", "蓬莱山輝夜", "藤原妹紅", "射命丸文", "風見幽香", "小野塚小町", "河城にとり", "東風谷早苗", "八坂神奈子", "洩矢諏訪子", "比那名居天子", "星熊勇儀", "古明地さとり", "火焔猫燐", "霊烏路空", "古明地こいし", "ナズーリン", "多々良小傘", "村紗水蜜", "聖白蓮", "封獣ぬえ", "姫海棠はたて", "霍青娥", "物部布都", "豊聡耳神子", "二ツ岩マミゾウ", "秦こころ", "鬼人正邪", "少名針妙丸", "宇佐見菫子", "茨木華扇", "ドレミー・スイート", "クラウンピース", "高麗野あうん", "摩多羅隠岐奈", "依神女苑", "依神紫苑", "庭渡久侘歌", "吉弔八千慧", "埴安神袿姫", "驪駒早鬼", "管牧典", "天弓千亦", "饕餮尤魔", "日白残無"];
@@ -1139,6 +1140,7 @@ function ProfilePage({ onClose }) {
   const [nameSaving, setNameSaving] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
   const [grownChars, setGrownChars] = useState({}); // { instanceId: { charId, charName, ds, tags, enhancementsUsed, specialBond, ... } }
+  const [achievements, setAchievements] = useState({}); // { [id]: { at } }
   const user = auth.currentUser;
 
   useEffect(()=> {
@@ -1168,6 +1170,14 @@ function ProfilePage({ onClose }) {
     if(!user)return;
     const r = ref(db,`grownChars/${user.uid}`);
     const unsub = onValue(r,snap => { setGrownChars(snap.exists() ? snap.val() : {}); });
+    return() => unsub();
+  },[user]);
+
+  // 自分の実績を取得
+  useEffect(()=> {
+    if(!user)return;
+    const r = ref(db,`users/${user.uid}/achievements`);
+    const unsub = onValue(r,snap => { setAchievements(snap.exists() ? snap.val() : {}); });
     return() => unsub();
   },[user]);
 
@@ -1218,7 +1228,7 @@ function ProfilePage({ onClose }) {
     />
   );
 
-  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"]];
+  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"],["achievements","実績"]];
   const ENH_LABEL = { spell:"追加スペカ取得", ability:"能力スキル＋", bond:"特別な絆" };
 
   return(
@@ -1371,6 +1381,41 @@ function ProfilePage({ onClose }) {
           })}
         </div>
       )}
+
+      {/* ── 実績 ── */}
+      {view==="achievements"&&(()=>{
+        const unlockedCount = ACHIEVEMENTS.filter(a=>achievements[a.id]).length;
+        const sessionAch = ACHIEVEMENTS.filter(a=>a.type==="session");
+        const lifeAch = ACHIEVEMENTS.filter(a=>a.type==="lifetime");
+        const Row = ({a})=>{
+          const got = !!achievements[a.id];
+          const date = got&&achievements[a.id].at ? new Date(achievements[a.id].at).toLocaleDateString("ja-JP") : null;
+          return (
+            <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",marginBottom:6,background:got?(a.bad?"rgba(224,112,96,0.07)":"rgba(255,213,79,0.06)"):"rgba(255,255,255,0.015)",border:`1px solid ${got?(a.bad?C.redBorder:C.goldDim):C.border}`,borderRadius:5,opacity:got?1:0.55}}>
+              <div style={{fontSize:18,flexShrink:0,filter:got?"none":"grayscale(1)"}}>{got?(a.bad?"💀":"🏅"):"🔒"}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,color:got?(a.bad?C.red:C.gold):C.textDim}}>{a.name}{date&&<span style={{fontSize:8,color:C.textFaint,marginLeft:6}}>{date}</span>}</div>
+                <div style={{fontSize:9,color:C.textFaint,marginTop:2}}>{a.desc}</div>
+              </div>
+            </div>
+          );
+        };
+        return (
+          <div style={{maxWidth:560}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+              <div style={{fontSize:12,color:C.text}}>実績</div>
+              <div style={{fontSize:11,color:C.gold}}>{unlockedCount} / {ACHIEVEMENTS.length} 解除</div>
+            </div>
+            <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,marginBottom:14,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${Math.round(unlockedCount/ACHIEVEMENTS.length*100)}%`,background:`linear-gradient(90deg,${C.goldDim},${C.gold})`}}/>
+            </div>
+            <div style={{fontSize:10,color:C.textFaint,letterSpacing:2,borderBottom:`1px solid ${C.border}`,paddingBottom:3,marginBottom:8}}>セッション実績</div>
+            {sessionAch.map(a=><Row key={a.id} a={a}/>)}
+            <div style={{fontSize:10,color:C.textFaint,letterSpacing:2,borderBottom:`1px solid ${C.border}`,paddingBottom:3,margin:"14px 0 8px"}}>通算実績</div>
+            {lifeAch.map(a=><Row key={a.id} a={a}/>)}
+          </div>
+        );
+      })()}
     </div>
   );
 }

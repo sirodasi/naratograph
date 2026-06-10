@@ -10,6 +10,7 @@ import { getSpellCardEffect } from "./data/spellCardEffects";
 import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
+import { ACHIEVEMENTS, buildAchContext, aggregateLifetime, getAchievement } from "./data/achievements";
 import { db, storage } from "./firebase";
 import { ref as dbRef, set as dbSet, get as dbGet, remove as dbRemove } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -5257,6 +5258,52 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
   const pcs = gs.pcs || [];
   const [showGrowth, setShowGrowth] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [achResult, setAchResult] = useState(null); // 実績記録の結果 { newly:[id], unlocked:[id] }
+  const [achProcessing, setAchProcessing] = useState(false);
+
+  // 実績を確定・記録する（自分のPC分。成長を済ませてから押す想定）
+  const myPc = pcs.find(p => p.uid === user?.uid);
+  const processAchievements = async () => {
+    if (!myPc || achProcessing) return;
+    setAchProcessing(true);
+    try {
+      const uid = user.uid;
+      const [statsSnap, achSnap, procSnap, grownSnap] = await Promise.all([
+        dbGet(dbRef(db, `users/${uid}/stats`)),
+        dbGet(dbRef(db, `users/${uid}/achievements`)),
+        dbGet(dbRef(db, `users/${uid}/achProcessed/${roomCode}`)),
+        dbGet(dbRef(db, `grownChars/${uid}`)),
+      ]);
+      const unlocked = achSnap.exists() ? achSnap.val() : {};
+      const grown = grownSnap.exists() ? grownSnap.val() : {};
+      // 成長キャラから派生する通算値（強化達成数の最大・親密度10）
+      const maxEnh = Math.max(0, ...Object.values(grown).map(g => (g.enhancementsUsed || []).length));
+      const intimacy10 = Object.values(grown).some(g => (g.specialBond?.intimacy || 0) >= 10);
+      // 通算集計（このルームは1回だけ）
+      let life = statsSnap.exists() ? statsSnap.val() : {};
+      const already = procSnap.exists();
+      if (!already) life = aggregateLifetime(life, myPc, gs);
+      life.maxEnh = Math.max(life.maxEnh || 0, maxEnh);
+      if (intimacy10) life.intimacy10 = true;
+      // 判定
+      const ctx = buildAchContext(myPc, gs, life);
+      const satisfied = ACHIEVEMENTS.filter(a => { try { return a.check(ctx); } catch { return false; } }).map(a => a.id);
+      const newly = satisfied.filter(id => !unlocked[id]);
+      // 永続化
+      const nextUnlocked = { ...unlocked };
+      newly.forEach(id => { nextUnlocked[id] = { at: Date.now() }; });
+      await dbSet(dbRef(db, `users/${uid}/stats`), life);
+      await dbSet(dbRef(db, `users/${uid}/achievements`), nextUnlocked);
+      if (!already) await dbSet(dbRef(db, `users/${uid}/achProcessed/${roomCode}`), Date.now());
+      if (newly.length) { sfx.victory?.(); }
+      setAchResult({ newly, unlocked: satisfied });
+    } catch (e) {
+      console.error("実績の記録に失敗", e);
+      alert("実績の記録に失敗しました。通信状況を確認してください。");
+    } finally {
+      setAchProcessing(false);
+    }
+  };
 
   const ac  = isVictory ? C.gold    : C.red;
   const ab  = isVictory ? C.goldDim : C.redBorder;
@@ -5447,6 +5494,16 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
             </button>
           </div>
 
+          {/* 実績の記録（PLのみ・成長を済ませてから） */}
+          {myPc && (
+            <div style={{ marginBottom: 10 }}>
+              <button onClick={processAchievements} disabled={achProcessing} style={{ padding: "9px 24px", background: "rgba(121,134,203,0.16)", border: "1px solid #7986cb", borderRadius: 6, color: "#9fa8da", fontSize: 12, cursor: achProcessing ? "default" : "pointer", letterSpacing: 2 }}>
+                {achProcessing ? "記録中…" : "🏆 実績を記録する"}
+              </button>
+              <div style={{ fontSize: 8, color: C.textFaint, marginTop: 4 }}>成長を済ませてから押してください</div>
+            </div>
+          )}
+
           {/* ログ書き出し（全員） */}
           <div style={{ marginBottom: 14, animation: `endFadeUp 0.5s ${0.95 + pcs.length * 0.13}s both` }}>
             <button
@@ -5492,6 +5549,30 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
       </div>
 
       {showGrowth && <GrowthCeremony gs={gs} upd={upd} user={user} isGm={isGm} onClose={() => setShowGrowth(false)} />}
+
+      {/* 実績の記録結果 */}
+      {achResult && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", animation: "backdropIn 0.15s ease", padding: 16 }} onClick={() => setAchResult(null)}>
+          <div style={{ background: "linear-gradient(180deg,#0d1122,#07090f)", border: `2px solid ${C.goldDim}`, borderRadius: 10, padding: "22px", maxWidth: 420, width: "100%", maxHeight: "82vh", overflowY: "auto", boxShadow: `0 0 40px ${C.gold}33`, animation: "modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: "center", fontSize: 15, color: C.gold, letterSpacing: 2, marginBottom: 4 }}>🏆 実績</div>
+            {achResult.newly.length > 0 ? (
+              <>
+                <div style={{ textAlign: "center", fontSize: 10, color: C.green, marginBottom: 10 }}>新たに {achResult.newly.length} 件 解除！</div>
+                {achResult.newly.map(id => { const a = getAchievement(id); if (!a) return null; return (
+                  <div key={id} style={{ marginBottom: 8, padding: 10, background: a.bad ? "rgba(224,112,96,0.08)" : "rgba(255,213,79,0.08)", border: `1px solid ${a.bad ? C.redBorder : C.goldDim}`, borderRadius: 6, animation: "endFadeUp 0.4s both" }}>
+                    <div style={{ fontSize: 12, color: a.bad ? C.red : C.gold }}>{a.bad ? "💀" : "🏅"} {a.name}</div>
+                    <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>{a.desc}</div>
+                  </div>
+                ); })}
+              </>
+            ) : (
+              <div style={{ textAlign: "center", fontSize: 10, color: C.textDim, padding: "12px 0" }}>新たに解除された実績はありませんでした。</div>
+            )}
+            <div style={{ textAlign: "center", fontSize: 9, color: C.textFaint, marginTop: 6 }}>解除済み合計 {achResult.unlocked.length} / {ACHIEVEMENTS.length} 件（プロフィールで確認できます）</div>
+            <button onClick={() => setAchResult(null)} style={{ width: "100%", marginTop: 12, padding: "9px", cursor: "pointer", borderRadius: 4, background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, fontSize: 12, fontFamily: "'Noto Serif JP', serif" }}>閉じる</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
