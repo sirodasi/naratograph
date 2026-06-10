@@ -10,7 +10,7 @@ import { getSpellCardEffect } from "./data/spellCardEffects";
 import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
-import { ACHIEVEMENTS, buildAchContext, aggregateLifetime, getAchievement } from "./data/achievements";
+import { ACHIEVEMENTS, buildAchContext, aggregateLifetime, getAchievement, bumpAch, achAddTo } from "./data/achievements";
 import { db, storage } from "./firebase";
 import { ref as dbRef, set as dbSet, get as dbGet, remove as dbRemove } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -1455,6 +1455,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const declareSpell = (spellCard, isPcAttacker, customCount = null) => {
     const attackerId = isPcAttacker ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPcAttacker ? b.npcCombatant : b.pcCombatant;
+    // 実績: 決戦でのPCスペルカード宣言を計測（ログを伴わない単発更新＝アンドゥ対象外）
+    if (isPcAttacker && (b.isFinal ?? (b.type === "mass" && !b.questId))) {
+      upd(p => ({ ...p, pcs: bumpAch(p.pcs, attackerId, a => ({ ...a, spells: (a.spells || 0) + 1 })) }));
+    }
     const attPos = b.positions?.[attackerId] || 1;
     const defPos = b.positions?.[defenderId] || 1;
     const attackerGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
@@ -2423,7 +2427,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           upd(p => {
             const pcs0 = p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
             const { pcs: pcs1, logs } = gainIntimacy(pcs0, b.pcCombatant, 1, `${combatant.charName}のスペシャル`);
-            return { ...p, pcs: pcs1, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [...logs, `${baseSuccessLog} スペシャル！霊力+${gain} 移動先を選択してください。`, ...p.log] };
+            const pcs2 = bumpAch(pcs1, b.pcCombatant, a => ({ ...a, specials: (a.specials || 0) + 1 }));
+            return { ...p, pcs: pcs2, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [...logs, `${baseSuccessLog} スペシャル！霊力+${gain} 移動先を選択してください。`, ...p.log] };
           });
         });
       } else {
@@ -2436,7 +2441,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const bsName = BAD_STATUS_TABLE[r[0]]?.name;
           upd(p => {
             const immune = isBadStatusImmune(combatant, bsName);
-            const newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+            let newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+            newPcs = bumpAch(newPcs, b.pcCombatant, a => ({ ...a, fumbles: (a.fumbles || 0) + 1 }));
             const fumbleLog = !bsName ? "" : immune ? ` 🛡《馬鹿》で変調《${bsName}》を無効化` : ` ファンブル！変調《${bsName}》を獲得`;
             return { ...p, pcs: newPcs, battle: { ...p.battle, phase: failPhase, evadeRoll: null }, log: [`${baseFailLog}${fumbleLog}`, ...p.log] };
           });
@@ -2555,7 +2561,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
       return {
         ...p,
-        pcs: finalPcs,
+        pcs: isPc ? bumpAch(finalPcs, combatantId, a => ({ ...a, grazeTotal: (a.grazeTotal || 0) + bulletsCleared, ...((b.isFinal ?? (b.type === "mass" && !b.questId)) ? { graze: (a.graze || 0) + bulletsCleared } : {}) })) : finalPcs,
         battle: {
           ...p.battle,
           participants: {
@@ -2605,7 +2611,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       const [finalPcs, finalNpcs, mirrorLogs] = applyMirrorGraze(p, basePcs, baseNpcs, combatantId, bulletsCleared);
       return {
         ...p,
-        pcs: finalPcs,
+        pcs: isPc ? bumpAch(finalPcs, combatantId, a => ({ ...a, grazeTotal: (a.grazeTotal || 0) + bulletsCleared, ...((p.battle.isFinal ?? (p.battle.type === "mass" && !p.battle.questId)) ? { graze: (a.graze || 0) + bulletsCleared } : {}) })) : finalPcs,
         battle: {
           ...p.battle,
           participants: { ...p.battle.participants, npcs: finalNpcs },
@@ -2669,9 +2675,15 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         }
       };
 
-      const nextEntities = isPc 
+      let nextEntities = isPc
         ? p.pcs.map(pc => pc.uid === targetId ? updatedTarget : pc)
         : p.battle.participants.npcs.map(n => n.id === targetId ? updatedTarget : n);
+
+      // 実績: 決戦で残り人数が減った/0になったPCを記録
+      const isFinalB = p.battle.isFinal ?? (p.battle.type === "mass" && !p.battle.questId);
+      if (isPc && isFinalB) {
+        nextEntities = bumpAch(nextEntities, targetId, a => ({ ...a, livesDropped: true, ...(newLives === 0 ? { livesZero: true } : {}) }));
+      }
 
       const clearedGrid = [0, 0, 0, 0, 0, 0];
 
@@ -5152,6 +5164,11 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
         growthAbilityUnlocked: x.growthAbilityUnlocked || usedSet.has("ability"),
         growthSpellUnlocked: x.growthSpellUnlocked || usedSet.has("spell"),
         specialBond: record.specialBond || x.specialBond || null,
+        // 実績: 縁結び（特別な絆獲得）/ 大器晩成（成長と強化を両方）
+        ach: { ...(x.ach || {}),
+          specialBondGained: (x.ach?.specialBondGained) || enhanceApplied === "bond",
+          growthBoth: (x.ach?.growthBoth) || (!!(chosenDs || newTag) && !!enhanceApplied),
+        },
       }),
       log: [`🌟 ${pc.charName} が成長した：${logs.join(" / ") || "（変更なし）"}`, ...p.log],
     }));
@@ -7376,8 +7393,13 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           if (extraUpdates.pc.bondUsed) base.bondUsed = { ...(base.bondUsed || {}), ...extraUpdates.pc.bondUsed };
           if (extraUpdates.pc.tags) base.tags = extraUpdates.pc.tags;
           if (extraUpdates.pc.flags) base.flags = { ...base.flags, ...extraUpdates.pc.flags };
-          if (extraUpdates.pc.currentSpot) base.currentSpot = extraUpdates.pc.currentSpot;
+          if (extraUpdates.pc.currentSpot) {
+            base.currentSpot = extraUpdates.pc.currentSpot;
+            const ca = base.ach || {};
+            base.ach = { ...ca, moved: true, spots: achAddTo(ca, "spots", extraUpdates.pc.currentSpot) };
+          }
         }
+        if (extraUpdates.achInc) base.ach = extraUpdates.achInc({ ...(base.ach || {}) });
         return base;
       });
       // 交流（他者への絆の新規獲得）を検出 → 特別な絆の親密度 +1D6（acting pc を対象に持つ保持者）
@@ -7976,7 +7998,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
           if (nextSpotId) {
             const newClues = Array.from(new Set([...(gs.clues || []), nextSpotId]));
-            proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues } });
+            proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues }, achInc: a => ({ ...a, clues: (a.clues || 0) + 1 }) });
           } else {
             proceed(["(手がかりの配置先が見つからなかった)"]);
           }
@@ -9159,7 +9181,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           const newPcs  = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: nextCur }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } });
                           // 特別な絆: 対象(pc)のスペシャルで親密度+1
                           const { pcs: pcs2, logs } = gainIntimacy(newPcs, pc.uid, 1, `${pc.charName}のスペシャル`);
-                          return { ...p, pcs: pcs2, currentScene: { ...p.currentScene, specialResolved: true }, log:[...logs, `${pc.charName} は霊力を ${gain} 点回復した`, ...p.log] };
+                          const pcs3 = bumpAch(pcs2, pc.uid, a => ({ ...a, specials: (a.specials || 0) + 1 }));
+                          return { ...p, pcs: pcs3, currentScene: { ...p.currentScene, specialResolved: true }, log:[...logs, `${pc.charName} は霊力を ${gain} 点回復した`, ...p.log] };
                         });
                       })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>霊力回復 (1D6)</button>
                       {(pc.badStatus || []).length > 0 && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>変調解除</button>}
@@ -9175,7 +9198,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       upd(p => {
                         const immune = isBadStatusImmune(pc, bsName);
                         const newBs  = immune ? (pc.badStatus || []) : Array.from(new Set([...(pc.badStatus || []), bsName]));
-                        const newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: !immune && bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
+                        let newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: !immune && bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
+                        newPcs = bumpAch(newPcs, pc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1 }));
                         const log = immune ? `🛡 ${pc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `${pc.charName} は変調《${bsName}》を獲得した`;
                         return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[log, ...p.log] };
                       });
@@ -9470,7 +9494,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                 animateDice(1, "変調決定", r => upd(p => {
                   const bsName = BAD_STATUS_TABLE[r[0]]?.name;
                   const immune = isBadStatusImmune(judgePc, bsName);
-                  const newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+                  let newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
+                  newPcs = bumpAch(newPcs, judgePc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1 }));
                   const fl = !bsName ? [] : [immune ? `🛡 ${judgePc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${judgePc.charName} は変調《${bsName}》を獲得した`];
                   return { ...markResolved({ ...p, pcs: newPcs }), log: [...fl, resultLabel, ...p.log] };
                 }));
@@ -9479,7 +9504,8 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   const gain = r[0];
                   const pcs0 = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
                   const { pcs: pcs1, logs } = gainIntimacy(pcs0, judgePc.uid, 1, `${judgePc.charName}のスペシャル`);
-                  return { ...markResolved({ ...p, pcs: pcs1 }), log: [...logs, `✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`, resultLabel, ...p.log] };
+                  const pcs2 = bumpAch(pcs1, judgePc.uid, a => ({ ...a, specials: (a.specials || 0) + 1 }));
+                  return { ...markResolved({ ...p, pcs: pcs2 }), log: [...logs, `✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`, resultLabel, ...p.log] };
                 }));
               } else {
                 upd(p => ({ ...markResolved(p), log: [resultLabel, ...p.log] }));
@@ -10826,9 +10852,12 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
     ? npcsList.filter(n => n.id !== b.npcCombatant && (n.resources?.残り人数?.cur || 0) > 0)
     : [];
 
+  const isFinalBattle = b.isFinal ?? (b.type === "mass" && !b.questId);
+  const bumpIntervene = (pcs, uid) => bumpAch(pcs, uid, a => ({ ...a, intervene: (a.intervene || 0) + 1, ...(isFinalBattle ? { interveneDecisive: (a.interveneDecisive || 0) + 1 } : {}) }));
   const handleSupportFire = (userUid) => {
     upd(p => ({
       ...p,
+      pcs: bumpIntervene(p.pcs, userUid),
       battle: {
         ...p.battle,
         supportDice: (p.battle.supportDice || 0) + 1,
@@ -10850,6 +10879,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
         }
         return {
           ...p,
+          pcs: bumpIntervene(p.pcs, userUid),
           battle: {
             ...p.battle,
             grids: { ...p.battle.grids, [targetUid]: currentGrid },

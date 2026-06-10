@@ -57,6 +57,15 @@ export const ACHIEVEMENTS = [
 
 export const getAchievement = (id) => ACHIEVEMENTS.find(a => a.id === id);
 
+// pc.ach への記録ヘルパー。pcs 配列の uid のPCの ach を fn で更新した新配列を返す（不変）。
+// fn は現在の ach（コピー）を受け取り、更新後の ach を返す。
+export function bumpAch(pcs, uid, fn) {
+  if (!uid) return pcs;
+  return (pcs || []).map(p => p.uid === uid ? { ...p, ach: fn({ ...(p.ach || {}) }) } : p);
+}
+// 配列フィールドに distinct 追加
+export const achAddTo = (ach, key, val) => { const arr = ach[key] || []; return arr.includes(val) ? arr : [...arr, val]; };
+
 // 当該PCのセッション統計（pc.ach）＋最終gs から、判定用の平坦コンテキストを作る。
 // life は集計後（このセッション分を含む）の通算統計。
 export function buildAchContext(pc, gs, life, allChars) {
@@ -81,7 +90,8 @@ export function buildAchContext(pc, gs, life, allChars) {
     spells: ach.spells || 0,
     clues: ach.clues || 0,
     items: ach.items || 0,
-    dsDecisive: (ach.dsDecisive || []).length,
+    // 弾幕絵巻: 決戦（最終battle）で当該PCが使用した異種弾幕数。gs.battle.usedds から導出（計測不要）
+    dsDecisive: (gs.battle?.usedds?.[pc.uid] || []).length,
     livesDropped: !!ach.livesDropped,
     livesZero: !!ach.livesZero,
     moved: !!ach.moved,
@@ -126,7 +136,8 @@ export function aggregateLifetime(prevLife, pc, gs) {
   life.specials = (life.specials || 0) + (ach.specials || 0);
   life.fumbles = (life.fumbles || 0) + (ach.fumbles || 0);
   life.intervene = (life.intervene || 0) + (ach.intervene || 0);
-  life.ds = uniq([...(life.ds || []), ...(ach.dsAll || [])]);
+  // 弾幕博士: 最終決戦で使った弾幕を通算に追加（簡易・最終battleのみ）
+  life.ds = uniq([...(life.ds || []), ...(gs.battle?.usedds?.[pc.uid] || [])]);
   life.spots = uniq([...(life.spots || []), ...(ach.spots || [])]);
   // 強化達成数（成長キャラのインスタンスから最大値）と親密度10は session 側で記録した値を反映
   if ((ach.enhCount || 0) > (life.maxEnh || 0)) life.maxEnh = ach.enhCount;
