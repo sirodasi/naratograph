@@ -9908,7 +9908,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 }
 
 // ─── RightPanel ───────────────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS, presence = {}, width = 300 }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS, presence = {}, width = 300, undo, undoCount = 0 }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
@@ -10185,6 +10185,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               <div onClick={() => setShowBgm(v => !v)} title="BGM設定" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: bgmMuted ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{bgmMuted ? "🔈" : "🎵"}</div>
               <div onClick={toggleMotion} title={motionReduced ? "演出: 抑制中（クリックで通常に戻す）" : "演出: 通常（クリックで抑制）"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{motionReduced ? "🚫" : "🎬"}</div>
               <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
+              {isGm && (
+                <div onClick={() => { if (undoCount > 0 && undo && window.confirm("直近の操作を1つ取り消しますか？")) undo(); }} title={undoCount > 0 ? `直近の操作を取り消す（${undoCount}件）` : "取り消せる操作はありません"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: undoCount > 0 ? "pointer" : "default", color: undoCount > 0 ? C.gold : "#2a3545", borderBottom: "2px solid transparent", opacity: undoCount > 0 ? 1 : 0.6 }}>↩</div>
+              )}
             </div>
 
             {showBgm && (

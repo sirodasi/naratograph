@@ -498,6 +498,8 @@ function SessionApp({ roomCode, user }) {
   const [panelOpen, setPanelOpen] = useState(false); // モバイル: 右パネル（ドロワー）の開閉
   const [pendingReroll, setPendingReroll] = useState(null); // 空を飛ぶ: 表ロール後の振り直しプロンプト { results, count, label, holderUid, rerolled }
   const pendingRerollCb = useRef(null); // 振り直し確定時に呼ぶ cb
+  const undoStackRef = useRef([]);      // アンドゥ用の直前gsスナップショット（最大20）
+  const [undoCount, setUndoCount] = useState(0); // アンドゥ可能数（ボタン制御用）
   const timerRef      = useRef(null);
   const prevCycleRef  = useRef({ day: null, cycleIdx: null });
   const prevQuestsRef = useRef(null);
@@ -895,10 +897,26 @@ function SessionApp({ roomCode, user }) {
       const next = typeof fn === "function" ? fn(prev) : fn;
       if (!fired) {
         fired = true;
+        // アンドゥ: ログが増えた＝意味のある操作 の直前状態を保存（ダイス演出等のログ無し更新は無視）
+        if ((next?.log?.length || 0) > (prev?.log?.length || 0)) {
+          undoStackRef.current = [...undoStackRef.current.slice(-19), prev];
+          setUndoCount(undoStackRef.current.length);
+        }
         set(ref(db, gsPath), stripUndefined(next)).catch(console.error);
       }
       return next;
     });
+  }, [gsPath]);
+
+  // 直近の操作を1つ取り消す（GMのみ）。直前状態を復元してFirebaseへ反映。
+  const undo = useCallback(() => {
+    const stack = undoStackRef.current;
+    if (!stack.length) return;
+    const prev = stack[stack.length - 1];
+    undoStackRef.current = stack.slice(0, -1);
+    setUndoCount(undoStackRef.current.length);
+    setGs(prev);
+    set(ref(db, gsPath), stripUndefined(prev)).catch(console.error);
   }, [gsPath]);
 
   const setSceneDataAndSync = useCallback((fn) => {
@@ -1344,6 +1362,7 @@ function SessionApp({ roomCode, user }) {
             pendingAction={pendingAction} setPendingAction={setPendingAction}
             SPOTS={SPOTS} presence={presence}
             width={isMobile ? "100%" : 300}
+            undo={undo} undoCount={undoCount}
           />
         );
         if (!isMobile) return panelEl;
