@@ -360,7 +360,7 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
       )}
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.05)0%,rgba(0,0,0,0.65)100%)", pointerEvents: "none" }} />
       {portraits.map((p, i) => {
-        if (!p.img) return null;
+        if (!p.img || p.hidden) return null; // 非表示の立ち絵は描画しない
         const { x, y, h, flip } = posOf(p, i);
         return (
           <img key={i} src={p.img} alt={p.name || ""} draggable={false}
@@ -382,7 +382,7 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
         </div>
       )}
       {/* 編集ツールバー（選択中の立ち絵） */}
-      {editable && sel != null && portraits[sel]?.img && (() => {
+      {editable && sel != null && portraits[sel]?.img && !portraits[sel]?.hidden && (() => {
         const cur = posOf(portraits[sel], sel);
         const Btn = ({ onClick, children, title }) => (
           <button title={title} onPointerDown={e => e.stopPropagation()} onClick={onClick}
@@ -397,6 +397,7 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
             <Btn title="左右反転" onClick={() => adjust(sel, { flip: !cur.flip })}>⇄</Btn>
             <Btn title="背面へ" onClick={() => reorder(sel, -1)}>▽</Btn>
             <Btn title="前面へ" onClick={() => reorder(sel, +1)}>△</Btn>
+            <Btn title="隠す" onClick={() => { adjust(sel, { hidden: true }); setSel(null); }}>🙈</Btn>
             <Btn title="削除" onClick={() => removeAt(sel)}>✕</Btn>
           </div>
         );
@@ -455,16 +456,17 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
         </label>
       )}
 
-      <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大4体）</div>
-      <div style={{ fontSize: 8, color: "#7a8aa0", marginBottom: 4, lineHeight: 1.5 }}>💡 画面上で立ち絵をドラッグして配置、タップで選択→サイズ(−/＋)・反転(⇄)・重なり順(△▽)・削除ができます。</div>
+      <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大8体）</div>
+      <div style={{ fontSize: 8, color: "#7a8aa0", marginBottom: 4, lineHeight: 1.5 }}>💡 画面上で立ち絵をドラッグして配置、タップで選択→サイズ(−/＋)・反転(⇄)・重なり順(△▽)・隠す(🙈)・削除。一覧の👁で表示/非表示を切替できます。</div>
       {(sceneData.portraits || []).map((p, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4, opacity: p.hidden ? 0.5 : 1 }}>
           <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
           <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
+          <button title={p.hidden ? "表示する" : "隠す"} onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x) }))} style={{ width: 22, height: 18, background: p.hidden ? "rgba(255,255,255,0.04)" : "rgba(100,181,246,0.18)", border: `1px solid ${p.hidden ? C.border : C.blueBorder}`, color: p.hidden ? C.textFaint : C.blue, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>{p.hidden ? "🙈" : "👁"}</button>
           <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
         </div>
       ))}
-      {(sceneData.portraits || []).length < 4 && (
+      {(sceneData.portraits || []).length < 8 && (
         <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
           ＋ 立ち絵を追加
           <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })), true)} />
