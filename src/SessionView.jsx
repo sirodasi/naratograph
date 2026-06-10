@@ -407,7 +407,9 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
 
 // ─── SceneEditor（描写の編集・GM用）: モード切替（任意）＋テキスト＋背景＋立ち絵。RightPanel と終幕で共用 ──
 export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle = true }) {
-  const loadImage = (file, maxW, cb) => {
+  // transparent=true: 立ち絵など透過を保持したい画像。webp（小さい）→ 非対応ブラウザはPNGにフォールバック。
+  // false（背景など）: JPEGで圧縮（透過不要・サイズ優先）。
+  const loadImage = (file, maxW, cb, transparent = false) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
@@ -418,7 +420,13 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
         canvas.width  = img.width  * scale;
         canvas.height = img.height * scale;
         canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        cb(canvas.toDataURL("image/jpeg", 0.82));
+        if (transparent) {
+          let url = canvas.toDataURL("image/webp", 0.85);
+          if (!url.startsWith("data:image/webp")) url = canvas.toDataURL("image/png"); // webp非対応はPNG（透過保持）
+          cb(url);
+        } else {
+          cb(canvas.toDataURL("image/jpeg", 0.82));
+        }
       };
       img.src = ev.target.result;
     };
@@ -459,7 +467,7 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
       {(sceneData.portraits || []).length < 4 && (
         <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
           ＋ 立ち絵を追加
-          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })))} />
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })), true)} />
         </label>
       )}
     </div>

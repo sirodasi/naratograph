@@ -306,7 +306,10 @@ function PortraitUpload({ value, onChange }) {
               const canvas = document.createElement("canvas");
               canvas.width = size; canvas.height = size;
               canvas.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
-              onChange(canvas.toDataURL("image/jpeg", 0.82));
+              // 透過を保持: webp（小さい）→ 非対応ブラウザはPNGにフォールバック
+              let url = canvas.toDataURL("image/webp", 0.85);
+              if (!url.startsWith("data:image/webp")) url = canvas.toDataURL("image/png");
+              onChange(url);
             };
             img.src = ev.target.result;
           };
