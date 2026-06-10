@@ -320,9 +320,10 @@ function SceneParticles({ kind }) {
   if (!cfg) return null;
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 5 }}>
+      {/* top（コンテナ高さ基準%）で落下させる。transform% は要素自身基準で動かないため使わない */}
       <style>{`
-        @keyframes fxFall { 0%{transform:translateY(-14%) translateX(0) rotate(0deg);opacity:0} 8%{opacity:.92} 90%{opacity:.92} 100%{transform:translateY(116%) translateX(var(--dx)) rotate(var(--r));opacity:0} }
-        @keyframes fxRain { 0%{transform:translateY(-16%);opacity:0} 12%{opacity:.55} 100%{transform:translateY(116%);opacity:0} }
+        @keyframes fxFall { 0%{top:-8%;transform:translateX(0) rotate(0deg);opacity:0} 8%{opacity:.92} 90%{opacity:.92} 100%{top:108%;transform:translateX(var(--dx)) rotate(var(--r));opacity:0} }
+        @keyframes fxRain { 0%{top:-10%;opacity:0} 12%{opacity:.55} 100%{top:108%;opacity:0} }
       `}</style>
       {parts.map(p => cfg.line ? (
         <span key={p.id} style={{ position: "absolute", left: `${p.left}%`, top: 0, width: 1.5, height: `${p.size}px`, background: cfg.color, animation: `fxRain ${p.dur}s linear ${p.delay}s infinite` }} />
