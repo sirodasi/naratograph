@@ -462,7 +462,7 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
 }
 
 // ─── SceneEditor（描写の編集・GM用）: モード切替（任意）＋テキスト＋背景＋立ち絵。RightPanel と終幕で共用 ──
-export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle = true }) {
+export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle = true, user }) {
   // transparent=true: 立ち絵など透過を保持したい画像。webp（小さい）→ 非対応ブラウザはPNGにフォールバック。
   // false（背景など）: JPEGで圧縮（透過不要・サイズ優先）。
   const loadImage = (file, maxW, cb, transparent = false) => {
@@ -494,6 +494,30 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
   const selectFace = (i, k) => updP(i, x => { const fs = facesOf(x); return { ...x, faces: fs, face: k, img: fs[k] }; });
   const addFace = (i, url) => updP(i, x => ({ ...x, faces: [...facesOf(x), url] }));
   const removeFace = (i, k) => updP(i, x => { let fs = facesOf(x).filter((_, m) => m !== k); if (!fs.length) fs = [x.img]; const nf = Math.min(x.face || 0, fs.length - 1); return { ...x, faces: fs, face: nf, img: fs[nf] }; });
+
+  // シーンプリセット（背景＋立ち絵＋エフェクト＋テキストを users/{uid}/scenePresets に保存して再利用）
+  const [presets, setPresets] = useState({});
+  useEffect(() => {
+    if (!user?.uid) return;
+    dbGet(dbRef(db, `users/${user.uid}/scenePresets`)).then(snap => { if (snap.exists()) setPresets(snap.val()); }).catch(() => {});
+  }, [user?.uid]);
+  const savePreset = async () => {
+    if (!user?.uid) return;
+    const name = window.prompt("シーン名を入力してください", `シーン${Object.keys(presets).length + 1}`);
+    if (!name || !name.trim()) return;
+    const id = `p_${Date.now()}`;
+    const preset = { name: name.trim(), bg: sceneData.bg || null, portraits: sceneData.portraits || [], fx: sceneData.fx || null, text: gs.sceneText || "", createdAt: Date.now() };
+    try { await dbSet(dbRef(db, `users/${user.uid}/scenePresets/${id}`), preset); setPresets(p => ({ ...p, [id]: preset })); } catch (e) { console.error(e); alert("保存に失敗しました（画像が大きすぎる可能性があります）"); }
+  };
+  const loadPreset = (pr) => {
+    setSceneData(() => ({ bg: pr.bg || null, portraits: pr.portraits || [], fx: pr.fx || {} }));
+    upd(p => ({ ...p, sceneText: pr.text || "" }));
+  };
+  const deletePreset = async (id, name) => {
+    if (!user?.uid || !window.confirm(`シーン「${name}」を削除しますか？`)) return;
+    try { await dbRemove(dbRef(db, `users/${user.uid}/scenePresets/${id}`)); setPresets(p => { const n = { ...p }; delete n[id]; return n; }); } catch (e) { console.error(e); }
+  };
+
   return (
     <div>
       {showModeToggle && (
@@ -567,13 +591,28 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
           <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })), true)} />
         </label>
       )}
+
+      {/* シーンプリセット（保存して再利用・事前にシーンを組める） */}
+      {user?.uid && (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>🎬 シーンプリセット</div>
+          <button onClick={savePreset} style={{ width: "100%", padding: "5px", fontSize: 10, cursor: "pointer", borderRadius: 3, background: "rgba(200,160,64,0.14)", border: `1px solid ${C.goldDim}`, color: C.gold }}>💾 現在のシーンを保存</button>
+          {Object.entries(presets).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)).map(([id, pr]) => (
+            <div key={id} style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 4 }}>
+              <button onClick={() => loadPreset(pr)} title="このシーンを読み込む" style={{ flex: 1, padding: "4px 7px", fontSize: 10, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>▶ {pr.name}</button>
+              <button onClick={() => deletePreset(id, pr.name)} style={{ width: 20, height: 22, flexShrink: 0, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
+            </div>
+          ))}
+          <div style={{ fontSize: 7, color: C.textFaint, marginTop: 3, lineHeight: 1.5 }}>※ 背景・立ち絵の画像を含むため、保存数が増えると重くなります。読込で現在のシーンを上書きします。</div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── EpilogueView（終幕）: 決戦後・終了画面の前に挟む描写フェイズ ──────────
 // 探索の描写モードと同じ形（背景＋立ち絵＋テキスト）。GM がシーンを編集し全員に見せてから終了画面へ。
-export function EpilogueView({ gs, upd, isGm, sceneData, setSceneData, onProceed }) {
+export function EpilogueView({ gs, upd, isGm, sceneData, setSceneData, onProceed, user }) {
   const proceeding = useRef(false);
   const proceed = () => { if (!proceeding.current) { proceeding.current = true; onProceed(); } };
 
@@ -584,7 +623,7 @@ export function EpilogueView({ gs, upd, isGm, sceneData, setSceneData, onProceed
       {isGm ? (
         <div style={{ position: "absolute", top: 0, right: 0, height: "100%", width: 300, boxSizing: "border-box", background: "rgba(6,8,16,0.93)", borderLeft: "1px solid #1e2535", padding: 14, overflowY: "auto", zIndex: 10 }}>
           <div style={{ fontSize: 11, color: "#c0a888", letterSpacing: 2, marginBottom: 10, paddingBottom: 5, borderBottom: `1px solid ${C.border}` }}>終幕の描写（背景・立ち絵・テキスト）</div>
-          <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} showModeToggle={false} />
+          <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} showModeToggle={false} user={user} />
           <button onClick={proceed} style={{ width: "100%", marginTop: 16, padding: "11px", background: "rgba(180,140,90,0.16)", border: "1px solid #6a5436", borderRadius: 6, color: "#e0c89a", fontSize: 12, cursor: "pointer", letterSpacing: 2, fontFamily: "'Noto Serif JP', serif", boxShadow: "0 0 12px rgba(180,140,90,0.14)" }}>終了画面へ進む ▶</button>
         </div>
       ) : (
@@ -10346,7 +10385,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {tab === "scene" && isGm && (
                 <div>
                   <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
-                  <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} />
+                  <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} user={user} />
                 </div>
               )}
 

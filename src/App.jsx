@@ -811,7 +811,7 @@ function SessionApp({ roomCode, user }) {
     const unsubScene = onValue(sceneRef, snap => {
       if (snap.exists()) {
         const val = snap.val();
-        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ?? [] });
+        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ?? [], fx: val.fx ?? {} });
       }
     });
 
@@ -1206,7 +1206,7 @@ function SessionApp({ roomCode, user }) {
 
   if (gs.sessionPhase === "epilogue") {
     return (
-      <EpilogueView gs={gs} upd={upd} isGm={mode === "gm"} sceneData={sceneData} setSceneData={setSceneDataAndSync} onProceed={() => upd(p => ({ ...p, sessionPhase: "end", log: ["✦ 終幕。セッションの幕が下りる。", ...p.log] }))} />
+      <EpilogueView gs={gs} upd={upd} isGm={mode === "gm"} sceneData={sceneData} setSceneData={setSceneDataAndSync} user={user} onProceed={() => upd(p => ({ ...p, sessionPhase: "end", log: ["✦ 終幕。セッションの幕が下りる。", ...p.log] }))} />
     );
   }
 
