@@ -10251,7 +10251,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                   <div style={{ marginBottom: 8, padding: 6, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
                     <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>🎲 任意ダイス</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
-                      {[1, 2, 3].map(n => <button key={n} onClick={() => rollFreeDice(n, "nd6")} style={btnSmall ? btnSmall(C.blueBg, C.blueBorder, C.blue) : { padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: C.blueBg, border: `1px solid ${C.blueBorder}`, color: C.blue }}>{n}D6</button>)}
+                      {[1, 2, 3].map(n => <button key={n} onClick={() => rollFreeDice(n, "nd6")} style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: C.blueBg, border: `1px solid ${C.blueBorder}`, color: C.blue }}>{n}D6</button>)}
                       <button onClick={() => rollFreeDice(2, "d66")} style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: C.purpleBg, border: `1px solid ${C.purpleBorder}`, color: C.purple }}>D66</button>
                       <span style={{ width: 1, height: 16, background: C.border }} />
                       <input type="number" min={1} max={12} value={freeDiceN} onChange={e => setFreeDiceN(Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))} style={{ width: 36, padding: "2px 4px", fontSize: 10, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3 }} />
