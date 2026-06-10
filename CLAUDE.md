@@ -340,6 +340,16 @@ Toggled by GM in Lobby; stored at `rooms/{roomCode}/config`:
 | `useRandomPlacement` | Initial danmaku positions are D6-random instead of fixed at cell 5 |
 | `useLastResort` | 喰らいボム: spend 1 SC after failed dodge to roll 2 extra dice |
 
+### 実績 (Achievements)
+
+Steam-style achievements, **per-player (uid)**, two layers. Defined declaratively in [src/data/achievements.js](src/data/achievements.js) (`ACHIEVEMENTS`, each `{ id, name, desc, type: "session"|"lifetime", bad?, check(ctx) }`; `bad:true` = 不名誉枠). ~33 total.
+
+- **Session stats** are tracked per-PC in `pc.ach` (`{ spots[], graze, grazeTotal, specials, fumbles, intervene, interveneDecisive, spells, clues, items, livesDropped, livesZero, moved, specialBondGained, growthBoth }`), woven in at event sites via `bumpAch(pcs, uid, fn)` / `achAddTo` (exported from achievements.js). Because the PC is rebuilt each session, `pc.ach` is naturally session-scoped (no reset needed). `dsDecisive` is **derived** from `gs.battle.usedds[uid]` (final battle) — not tracked.
+- **Lifetime stats** live at `users/{uid}/stats` (`sessions, chars[], bondTargets[], wins, graze, specials, fumbles, intervene, ds[], spots[], maxEnh, intimacy10, losses`); unlocked at `users/{uid}/achievements = { [id]: { at } }`; per-room dedup guard at `users/{uid}/achProcessed/{roomCode}`.
+- **Processing**: `SessionEndView`'s "🏆 実績を記録する" button (player only, after growth) runs `aggregateLifetime(prevLife, pc, gs)` → `buildAchContext(pc, gs, life)` → evaluates every `check(ctx)` → persists new unlocks + shows a result modal. `maxEnh`/`intimacy10` are recomputed from `grownChars/{uid}` at processing time.
+- **UI**: ProfilePage (ScenarioEditor) has an 実績 tab (unlocked/locked list + progress bar; 💀 for `bad`).
+- **Not yet wired**: nothing major; item gains are counted only on the `proceed`-based path (`extraUpdates.pc.items`), and lifetime `ds` only captures final-battle skills (approximate).
+
 ## Conventions
 
 - All UI text and comments are in Japanese
