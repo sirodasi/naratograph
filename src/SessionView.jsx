@@ -10,8 +10,9 @@ import { getSpellCardEffect } from "./data/spellCardEffects";
 import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase } from "./data/abilityEffects";
 import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
-import { db } from "./firebase";
+import { db, storage } from "./firebase";
 import { ref as dbRef, set as dbSet, get as dbGet, remove as dbRemove } from "firebase/database";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // ─── SpellCard フレームコンポーネント ────────────────────────────────
 // 東方のスペルカード風の二重枠＋四隅ダイヤ装飾フレーム
@@ -463,30 +464,42 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
 
 // ─── SceneEditor（描写の編集・GM用）: モード切替（任意）＋テキスト＋背景＋立ち絵。RightPanel と終幕で共用 ──
 export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle = true, user }) {
-  // transparent=true: 立ち絵など透過を保持したい画像。webp（小さい）→ 非対応ブラウザはPNGにフォールバック。
-  // false（背景など）: JPEGで圧縮（透過不要・サイズ優先）。
-  const loadImage = (file, maxW, cb, transparent = false) => {
+  // transparent=true: 立ち絵など透過を保持したい画像（webp→非対応はPNG）。false（背景）: JPEG。
+  // リサイズ後、Firebase Storage にアップロードしてダウンロードURLを返す（RTDB同期を軽量化）。
+  // Storage が使えない場合は data URL にフォールバックして従来通り動作する。
+  const loadImage = async (file, maxW, cb, transparent = false) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        const scale  = Math.min(1, maxW / img.width);
-        const canvas = document.createElement("canvas");
-        canvas.width  = img.width  * scale;
-        canvas.height = img.height * scale;
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        if (transparent) {
-          let url = canvas.toDataURL("image/webp", 0.85);
-          if (!url.startsWith("data:image/webp")) url = canvas.toDataURL("image/png"); // webp非対応はPNG（透過保持）
-          cb(url);
-        } else {
-          cb(canvas.toDataURL("image/jpeg", 0.82));
-        }
+    // リサイズして Blob 化
+    const blob = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+          const scale  = Math.min(1, maxW / img.width);
+          const canvas = document.createElement("canvas");
+          canvas.width  = img.width  * scale;
+          canvas.height = img.height * scale;
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          // transparent は webp（非対応ブラウザは toBlob が image/png で返す＝透過保持）
+          canvas.toBlob(b => resolve(b), transparent ? "image/webp" : "image/jpeg", transparent ? 0.85 : 0.82);
+        };
+        img.onerror = () => resolve(null);
+        img.src = ev.target.result;
       };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+    if (!blob) return;
+    // Storage へアップロード → URL（失敗時は data URL フォールバック）
+    try {
+      const ext = (blob.type && blob.type.split("/")[1]) || (transparent ? "webp" : "jpg");
+      const path = `sceneImages/${user?.uid || "anon"}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      await uploadBytes(storageRef(storage, path), blob);
+      cb(await getDownloadURL(storageRef(storage, path)));
+    } catch (e) {
+      console.error("画像のStorageアップロードに失敗。data URLで保存します。", e);
+      const r = new FileReader(); r.onload = () => cb(r.result); r.readAsDataURL(blob);
+    }
   };
   // 表情（faces）操作。img は常に現在の表情に同期し、表示側は変更不要。
   const updP = (i, fn) => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? fn(x) : x) }));
