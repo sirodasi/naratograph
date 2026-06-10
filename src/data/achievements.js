@@ -26,7 +26,7 @@ export const ACHIEVEMENTS = [
   { id: "shuyaku",   type: "session", name: "主役の星回り", desc: "1セッション中に行為判定でスペシャルを3回出す",  check: c => c.specials >= 3 },
   { id: "kanzen",    type: "session", name: "完全制覇",     desc: "全クエストを解決し、決戦に勝利する",            check: c => c.allQuests && c.won },
   { id: "fukutsu",   type: "session", name: "不屈の闘志",   desc: "【残り人数】が0になった後に立て直して決戦に勝利", check: c => c.livesZero && c.won },
-  { id: "gekisen",   type: "session", name: "激戦を制す",   desc: "決戦が4ラウンド以上続いた末に勝利する",        check: c => c.decisiveRounds >= 4 && c.won },
+  { id: "gekisen",   type: "session", name: "激戦を制す",   desc: "決戦が8ラウンド以上続いた末に勝利する",        check: c => c.decisiveRounds >= 8 && c.won },
   { id: "hachimen",  type: "session", name: "八面六臂",     desc: "1セッションで援護射撃・かばうを合計5回行う",    check: c => c.intervene >= 5 },
   { id: "spellmst",  type: "session", name: "スペルマスター", desc: "1決戦でスペルカードを3回以上宣言する",         check: c => c.spells >= 3 },
   { id: "senri",     type: "session", name: "千里眼",       desc: "1セッションで手がかりを5個以上発見・配置する",  check: c => c.clues >= 5 },
