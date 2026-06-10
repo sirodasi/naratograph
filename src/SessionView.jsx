@@ -9914,6 +9914,19 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [paperModal, setPaperModal] = useState(null);
   const [sceneSelect, setSceneSelect] = useState("");
   const [logSearch, setLogSearch] = useState("");
+  const [freeDiceLast, setFreeDiceLast] = useState(null);   // 任意ダイスの直近結果
+  const [freeDiceN, setFreeDiceN] = useState(1);            // 任意ダイスの個数
+  // 任意ダイス（GM裁定・自作判定用）: nD6 / D66 を振ってログに残す
+  const rollFreeDice = (count, kind) => {
+    const res = Array.from({ length: count }, () => Math.floor(Math.random() * 6) + 1);
+    const who = room?.players?.[user?.uid]?.name || "";
+    let text;
+    if (kind === "d66") { const v = Math.min(res[0], res[1]) * 10 + Math.max(res[0], res[1]); text = `D66 → ${v}（${res.join(",")}）`; }
+    else { const sum = res.reduce((a, b) => a + b, 0); text = `${count}D6 → ${res.join(",")}${count > 1 ? `（合計${sum}）` : ""}`; }
+    setFreeDiceLast(text);
+    upd(p => ({ ...p, log: [`🎲 ${who ? who + "の" : ""}任意ダイス: ${text}`, ...p.log] }));
+    sfx.diceResult(Math.max(...res));
+  };
   const [logFilter, setLogFilter] = useState("all");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showDiceHistory, setShowDiceHistory] = useState(false);
@@ -10217,6 +10230,19 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
               {tab === "progress" && (
                 <div>
+                  {/* 任意ダイス（GM裁定・自作判定用） */}
+                  <div style={{ marginBottom: 8, padding: 6, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
+                    <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>🎲 任意ダイス</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+                      {[1, 2, 3].map(n => <button key={n} onClick={() => rollFreeDice(n, "nd6")} style={btnSmall ? btnSmall(C.blueBg, C.blueBorder, C.blue) : { padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: C.blueBg, border: `1px solid ${C.blueBorder}`, color: C.blue }}>{n}D6</button>)}
+                      <button onClick={() => rollFreeDice(2, "d66")} style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: C.purpleBg, border: `1px solid ${C.purpleBorder}`, color: C.purple }}>D66</button>
+                      <span style={{ width: 1, height: 16, background: C.border }} />
+                      <input type="number" min={1} max={12} value={freeDiceN} onChange={e => setFreeDiceN(Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))} style={{ width: 36, padding: "2px 4px", fontSize: 10, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 3 }} />
+                      <button onClick={() => rollFreeDice(freeDiceN, "nd6")} style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold }}>D6を振る</button>
+                    </div>
+                    {freeDiceLast && <div style={{ fontSize: 10, color: C.text, marginTop: 4 }}>結果: <span style={{ color: C.gold }}>{freeDiceLast}</span></div>}
+                  </div>
+
                   <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>クエスト</div>
                   {(gs.quests ||[]).length === 0 ? (
                     <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 8 }}>なし</div>
