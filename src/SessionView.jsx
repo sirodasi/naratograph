@@ -443,6 +443,13 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
             <span style={{ fontSize: 9, color: "#6a7a90", minWidth: 26, textAlign: "center" }}>{Math.round(cur.h)}%</span>
             <Btn title="大きく" onClick={() => adjust(sel, { h: Math.min(100, Math.round((cur.h + 6) * 10) / 10) })}>＋</Btn>
             <Btn title="左右反転" onClick={() => adjust(sel, { flip: !cur.flip })}>⇄</Btn>
+            {(() => {
+              const sp = portraits[sel];
+              const fs = (sp.faces && sp.faces.length) ? sp.faces : null;
+              if (!fs || fs.length < 2) return null;
+              const next = ((sp.face || 0) + 1) % fs.length;
+              return <Btn title={`表情を切替 (${(sp.face || 0) + 1}/${fs.length})`} onClick={() => adjust(sel, { face: next, img: fs[next] })}>😀</Btn>;
+            })()}
             <Btn title="背面へ" onClick={() => reorder(sel, -1)}>▽</Btn>
             <Btn title="前面へ" onClick={() => reorder(sel, +1)}>△</Btn>
             <Btn title="隠す" onClick={() => { adjust(sel, { hidden: true }); setSel(null); }}>🙈</Btn>
@@ -481,6 +488,12 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
     };
     reader.readAsDataURL(file);
   };
+  // 表情（faces）操作。img は常に現在の表情に同期し、表示側は変更不要。
+  const updP = (i, fn) => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? fn(x) : x) }));
+  const facesOf = p => (p.faces && p.faces.length) ? p.faces : [p.img];
+  const selectFace = (i, k) => updP(i, x => { const fs = facesOf(x); return { ...x, faces: fs, face: k, img: fs[k] }; });
+  const addFace = (i, url) => updP(i, x => ({ ...x, faces: [...facesOf(x), url] }));
+  const removeFace = (i, k) => updP(i, x => { let fs = facesOf(x).filter((_, m) => m !== k); if (!fs.length) fs = [x.img]; const nf = Math.min(x.face || 0, fs.length - 1); return { ...x, faces: fs, face: nf, img: fs[nf] }; });
   return (
     <div>
       {showModeToggle && (
@@ -521,14 +534,33 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
 
       <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大8体）</div>
       <div style={{ fontSize: 8, color: "#7a8aa0", marginBottom: 4, lineHeight: 1.5 }}>💡 画面上で立ち絵をドラッグして配置、タップで選択→サイズ(−/＋)・反転(⇄)・重なり順(△▽)・隠す(🙈)・削除。一覧の👁で表示/非表示を切替できます。</div>
-      {(sceneData.portraits || []).map((p, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4, opacity: p.hidden ? 0.5 : 1 }}>
-          <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
-          <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder="キャラ名" />
-          <button title={p.hidden ? "表示する" : "隠す"} onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x) }))} style={{ width: 22, height: 18, background: p.hidden ? "rgba(255,255,255,0.04)" : "rgba(100,181,246,0.18)", border: `1px solid ${p.hidden ? C.border : C.blueBorder}`, color: p.hidden ? C.textFaint : C.blue, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>{p.hidden ? "🙈" : "👁"}</button>
-          <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
-        </div>
-      ))}
+      {(sceneData.portraits || []).map((p, i) => {
+        const faces = facesOf(p);
+        const curFace = Math.min(p.face || 0, faces.length - 1);
+        return (
+          <div key={i} style={{ marginBottom: 6, opacity: p.hidden ? 0.5 : 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+              <img src={p.img} alt="" style={{ width: 28, height: 48, objectFit: "contain", border: `1px solid ${C.border}`, borderRadius: 2 }} />
+              <input value={p.name || ""} style={{ flex: 1, padding: "3px 5px", fontSize: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, borderRadius: 2 }} onChange={e => updP(i, x => ({ ...x, name: e.target.value }))} placeholder="キャラ名" />
+              <button title={p.hidden ? "表示する" : "隠す"} onClick={() => updP(i, x => ({ ...x, hidden: !x.hidden }))} style={{ width: 22, height: 18, background: p.hidden ? "rgba(255,255,255,0.04)" : "rgba(100,181,246,0.18)", border: `1px solid ${p.hidden ? C.border : C.blueBorder}`, color: p.hidden ? C.textFaint : C.blue, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>{p.hidden ? "🙈" : "👁"}</button>
+              <button onClick={() => setSceneData(d => ({ ...d, portraits: d.portraits.filter((_, j) => j !== i) }))} style={{ width: 18, height: 18, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
+            </div>
+            {/* 表情（複数画像を持たせてワンタップ切替） */}
+            <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", paddingLeft: 33 }}>
+              <span style={{ fontSize: 8, color: C.textFaint, marginRight: 1 }}>表情</span>
+              {faces.map((f, k) => (
+                <div key={k} style={{ position: "relative" }}>
+                  <img src={f} alt="" onClick={() => selectFace(i, k)} title="この表情にする" style={{ width: 22, height: 22, objectFit: "cover", borderRadius: 2, cursor: "pointer", border: `2px solid ${k === curFace ? C.gold : C.border}` }} />
+                  {faces.length > 1 && <button title="この表情を削除" onClick={() => removeFace(i, k)} style={{ position: "absolute", top: -5, right: -5, width: 13, height: 13, fontSize: 8, lineHeight: 1, background: "rgba(8,8,12,0.92)", border: "1px solid #5a1a1a", color: C.red, borderRadius: "50%", cursor: "pointer", padding: 0 }}>×</button>}
+                </div>
+              ))}
+              <label title="表情を追加" style={{ width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${C.border}`, borderRadius: 2, cursor: "pointer", fontSize: 12, color: C.textFaint }}>＋
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => addFace(i, url), true)} />
+              </label>
+            </div>
+          </div>
+        );
+      })}
       {(sceneData.portraits || []).length < 8 && (
         <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
           ＋ 立ち絵を追加
