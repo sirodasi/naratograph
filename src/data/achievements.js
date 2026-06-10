@@ -13,7 +13,9 @@
 //   L_spots, L_maxEnh(あるキャラの強化達成数), L_intimacy10, L_intervene,
 //   L_fumbles, L_losses
 
-export const SPOT_TOTAL = 20; // 探検家のしきい（実スポット数の目安・調整可）
+import { SPOTS, OFFICIAL_DANMAKU_SKILLS } from "./gameData";
+export const SPOT_TOTAL = SPOTS.length;                 // 全スポット数（27）
+export const DS_TOTAL   = OFFICIAL_DANMAKU_SKILLS.length; // 弾幕スキル総数（13）
 
 export const ACHIEVEMENTS = [
   // ── セッション実績（ポジティブ） ──
@@ -37,7 +39,7 @@ export const ACHIEVEMENTS = [
   { id: "karamawari",type: "session", bad: true, name: "空回り",       desc: "1セッションで行為判定のファンブルを3回以上出す", check: c => c.fumbles >= 3 },
   { id: "banji",     type: "session", bad: true, name: "万事休す",     desc: "決戦に敗北する",                              check: c => c.lost },
   { id: "debusho",   type: "session", bad: true, name: "出不精",       desc: "1セッションで一度もスポットを移動しない",      check: c => !c.moved },
-  { id: "sukkara",   type: "session", bad: true, name: "すっからかん", desc: "セッション終了時に【やる気】が0",            check: c => c.yaruki === 0 },
+  { id: "sukkara",   type: "session", bad: true, name: "すっからかん", desc: "セッション終了時に【やる気】が最低値(1)",   check: c => c.yaruki <= 1 },
 
   // ── 通算実績（ポジティブ） ──
   { id: "senkyaku",  type: "lifetime", name: "千客万来",   desc: "通算で15人以上の異なるキャラと絆を結ぶ",        check: c => c.L_bondTargets >= 15 },
@@ -47,8 +49,8 @@ export const ACHIEVEMENTS = [
   { id: "joshou",    type: "lifetime", name: "常勝将軍",   desc: "通算で決戦に10回勝利する",                     check: c => c.L_wins >= 10 },
   { id: "grazek",    type: "lifetime", name: "グレイズ狂", desc: "通算で【グレイズ】を累計300点獲得する",        check: c => c.L_graze >= 300 },
   { id: "kyoun",     type: "lifetime", name: "強運の星",   desc: "通算でスペシャルを50回出す",                   check: c => c.L_specials >= 50 },
-  { id: "hakase",    type: "lifetime", name: "弾幕博士",   desc: "通算で異なる弾幕スキルを20種以上使用する",      check: c => c.L_ds >= 20 },
-  { id: "tanken",    type: "lifetime", name: "探検家",     desc: "通算で全スポットを訪れる",                     check: c => c.L_spots >= SPOT_TOTAL },
+  { id: "hakase",    type: "lifetime", name: "弾幕博士",   desc: "通算で全13種の弾幕スキルを使用する",            check: c => c.L_ds >= DS_TOTAL },
+  { id: "tanken",    type: "lifetime", name: "探検家",     desc: "通算で全27スポットを訪れる",                   check: c => c.L_spots >= SPOT_TOTAL },
   { id: "seicho",    type: "lifetime", name: "成長の鬼",   desc: "1人のキャラで強化3種（追加スペカ・能力＋・特別な絆）を全達成", check: c => c.L_maxEnh >= 3 },
   { id: "bakugyaku", type: "lifetime", name: "莫逆の友",   desc: "特別な絆の親密度を10（最大）まで高める",        check: c => c.L_intimacy10 },
   // ── 通算実績（不名誉枠） ──
