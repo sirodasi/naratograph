@@ -7379,7 +7379,13 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
         const base = { ...x };
         if (extraUpdates.pc) {
           if (extraUpdates.pc.resources) base.resources = { ...base.resources, ...extraUpdates.pc.resources };
-          if (extraUpdates.pc.items) base.items = { ...base.items, ...extraUpdates.pc.items };
+          if (extraUpdates.pc.items) {
+            const sumQty = m => Object.values(m || {}).reduce((s, v) => s + (typeof v === "number" ? v : 1), 0);
+            const oldQty = sumQty(base.items);
+            base.items = { ...base.items, ...extraUpdates.pc.items };
+            const gained = Math.max(0, sumQty(base.items) - oldQty);
+            if (gained > 0) { const ca = base.ach || {}; base.ach = { ...ca, items: (ca.items || 0) + gained }; }
+          }
           if (extraUpdates.pc.badStatus) base.badStatus = extraUpdates.pc.badStatus;
           if (extraUpdates.pc.bonds) {
             // 新規に獲得した絆は応援欄を未使用にする（再獲得=リフレッシュは handleBond 側で処理）
