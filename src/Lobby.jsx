@@ -403,6 +403,12 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
     setStep("ready");
   };
 
+  // 確定済みのキャラ/スキルを選び直す（準備完了を解除してキャラ選択へ戻る）
+  const changeSelection = async (toStep = "charSelect") => {
+    await update(ref(db, `rooms/${roomCode}/players/${user.uid}`), { ready: false });
+    setStep(toStep);
+  };
+
   const addCustom = () => {
     const c = {
       id:            "custom_" + Date.now(),
@@ -677,7 +683,10 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
           {/* PL: スキル選択 */}
           {!isGm && step === "skillSelect" && (
             <div style={S.card}>
-              <div style={S.h2}>③ 個性スキルを選択</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ ...S.h2, marginBottom: 0 }}>③ 個性スキルを選択</div>
+                <button onClick={() => changeSelection("charSelect")} style={{ ...btn("rgba(255,255,255,0.04)", C.border, C.textDim, { padding: "3px 10px", fontSize: 9 }) }}>← キャラ選択へ</button>
+              </div>
               <div style={{ fontSize: 10, color: C.textDim, marginBottom: 14 }}>D66を振って決定するか、一覧から選択してください。</div>
               <div style={{ textAlign: "center", marginBottom: 16 }}>
                 <button onClick={rollSkill} style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "9px 24px" }) }}>🎲 D66を振る</button>
@@ -738,9 +747,13 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 ? <img src={selectedChar.customPortrait} style={{ width: 90, height: 90, objectFit: "contain", margin: "0 auto 10px", display: "block", borderRadius: 6 }} />
                 : <CharSprite spriteRow={selectedChar?.spriteRow ?? -1} spriteCol={selectedChar?.spriteCol ?? -1} size={90} style={{ margin: "0 auto 10px" }} />
               }
-              <div style={{ fontSize: 14, color: C.gold }}>{selectedChar?.name}</div>
+              <div style={{ fontSize: 14, color: C.gold }}>{selectedChar?.name}{selectedGrownId && <span style={{ fontSize: 9, marginLeft: 5, color: C.gold }}>★成長済み</span>}</div>
               {selectedSkillId && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>個性：《{PERSONALITY_SKILLS[selectedSkillId]?.name}》</div>}
-              <div style={{ fontSize: 10, color: C.textFaint, marginTop: 14 }}>GMがセッションを開始するまでお待ちください</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14 }}>
+                <button onClick={() => changeSelection("charSelect")} style={{ ...btn("rgba(255,255,255,0.04)", C.goldDim, C.gold, { padding: "5px 14px", fontSize: 10 }) }}>キャラを変更</button>
+                <button onClick={() => changeSelection("skillSelect")} style={{ ...btn("rgba(255,255,255,0.04)", C.border, C.textDim, { padding: "5px 14px", fontSize: 10 }) }}>個性を変更</button>
+              </div>
+              <div style={{ fontSize: 10, color: C.textFaint, marginTop: 10 }}>GMがセッションを開始するまでお待ちください</div>
             </div>
           )}
 
