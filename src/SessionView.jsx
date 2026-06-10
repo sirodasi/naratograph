@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { CharSprite, CHARACTERS } from "./Lobby";
 import { sfx } from "./audio";
 import { motion } from "./motion";
@@ -290,6 +290,48 @@ export function BackstoryScreen({ gs, isGm, onProceed }) {
   );
 }
 
+// ─── 描写エフェクト（背景パーティクル・色調） ──────────────────────────────
+const FX_PARTICLES = {
+  sakura: { char: "❀", color: "#f7b8d0", size: [10, 22], dur: [6, 12], count: 26, line: false, label: "桜" },
+  snow:   { char: "•", color: "#eaf4ff", size: [5, 12], dur: [7, 15], count: 38, line: false, label: "雪" },
+  petal:  { char: "✦", color: "#fff3c0", size: [8, 16], dur: [8, 16], count: 22, line: false, label: "光粒" },
+  rain:   { char: "",  color: "rgba(170,200,255,0.5)", size: [10, 22], dur: [0.5, 1.1], count: 64, line: true, label: "雨" },
+};
+const FX_TONE = {
+  sunset: { bg: "rgba(255,120,45,0.26)", label: "夕焼け" },
+  night:  { bg: "rgba(26,40,86,0.46)",   label: "夜" },
+  sepia:  { bg: "rgba(120,92,52,0.40)",  label: "セピア" },
+  dark:   { bg: "rgba(0,0,0,0.6)",       label: "暗転" },
+  warm:   { bg: "rgba(255,180,90,0.16)", label: "暖色" },
+};
+
+function SceneParticles({ kind }) {
+  const cfg = FX_PARTICLES[kind];
+  const parts = useMemo(() => {
+    if (!cfg) return [];
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    return Array.from({ length: cfg.count }, (_, i) => ({
+      id: i, left: rnd(0, 100), size: rnd(cfg.size[0], cfg.size[1]),
+      dur: rnd(cfg.dur[0], cfg.dur[1]), delay: -rnd(0, cfg.dur[1]),
+      drift: rnd(-50, 50), rot: rnd(180, 720),
+    }));
+  }, [kind]);
+  if (!cfg) return null;
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 5 }}>
+      <style>{`
+        @keyframes fxFall { 0%{transform:translateY(-14%) translateX(0) rotate(0deg);opacity:0} 8%{opacity:.92} 90%{opacity:.92} 100%{transform:translateY(116%) translateX(var(--dx)) rotate(var(--r));opacity:0} }
+        @keyframes fxRain { 0%{transform:translateY(-16%);opacity:0} 12%{opacity:.55} 100%{transform:translateY(116%);opacity:0} }
+      `}</style>
+      {parts.map(p => cfg.line ? (
+        <span key={p.id} style={{ position: "absolute", left: `${p.left}%`, top: 0, width: 1.5, height: `${p.size}px`, background: cfg.color, animation: `fxRain ${p.dur}s linear ${p.delay}s infinite` }} />
+      ) : (
+        <span key={p.id} style={{ position: "absolute", left: `${p.left}%`, top: 0, fontSize: p.size, color: cfg.color, "--dx": `${p.drift}px`, "--r": `${p.rot}deg`, animation: `fxFall ${p.dur}s linear ${p.delay}s infinite`, textShadow: "0 0 5px rgba(0,0,0,0.35)" }}>{cfg.char}</span>
+      ))}
+    </div>
+  );
+}
+
 // ─── SceneStage（描写の表示）: 背景＋立ち絵＋テキスト。探索の描写モードと終幕で共用 ──
 // editable=true（GM）のとき、立ち絵をドラッグで自由配置、選択時にサイズ/反転/重なり順/削除ができる。
 // 立ち絵データ: { img, name, x, y, h, flip }（x,y=下端中央の%、h=高さ%。未設定はレガシー下部均等配置）
@@ -299,6 +341,7 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
   const [localP, setLocalP] = useState(null); // ドラッグ中のローカル立ち絵配列（Firebase書込はドラッグ終了時のみ）
   const dragRef = useRef(null);
   const base = sceneData?.portraits || [];
+  const fx = sceneData?.fx || {};
   const portraits = localP ?? base;
   const n = portraits.length;
 
@@ -376,8 +419,13 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
             }} />
         );
       })}
+      {/* 色調オーバーレイ＋背景パーティクル（立ち絵の上・テキスト枠の下） */}
+      {fx.tone && FX_TONE[fx.tone] && (
+        <div style={{ position: "absolute", inset: 0, background: FX_TONE[fx.tone].bg, pointerEvents: "none", zIndex: 4 }} />
+      )}
+      {fx.particles && FX_PARTICLES[fx.particles] && <SceneParticles kind={fx.particles} />}
       {sceneText && (
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(6,8,16,0.93)", borderTop: "1px solid #1e2535", padding: "16px 28px", pointerEvents: "none", zIndex: 8 }}>
           <div style={{ fontSize: 14, color: "#c8b89a", lineHeight: 2.1, fontFamily: "'Noto Serif JP', serif", whiteSpace: "pre-wrap" }}>{sceneText}</div>
         </div>
       )}
@@ -455,6 +503,21 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
           <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 1280, url => setSceneData(d => ({ ...d, bg: url })))} />
         </label>
       )}
+
+      {/* 画面エフェクト（背景パーティクル・色調） */}
+      <div style={{ fontSize: 9, color: C.textFaint, marginTop: 8, marginBottom: 3 }}>演出エフェクト</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 4 }}>
+        {[["", "なし"], ...Object.entries(FX_PARTICLES).map(([k, v]) => [k, v.label])].map(([k, label]) => {
+          const on = (sceneData.fx?.particles || "") === k;
+          return <button key={k || "none"} onClick={() => setSceneData(d => ({ ...d, fx: { ...(d.fx || {}), particles: k } }))} style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 10, background: on ? "rgba(121,134,203,0.25)" : "rgba(255,255,255,0.03)", border: `1px solid ${on ? "#7986cb" : C.border}`, color: on ? "#9fa8da" : C.textFaint }}>{label}</button>;
+        })}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 8 }}>
+        {[["", "色調なし"], ...Object.entries(FX_TONE).map(([k, v]) => [k, v.label])].map(([k, label]) => {
+          const on = (sceneData.fx?.tone || "") === k;
+          return <button key={k || "none"} onClick={() => setSceneData(d => ({ ...d, fx: { ...(d.fx || {}), tone: k } }))} style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 10, background: on ? "rgba(200,160,64,0.22)" : "rgba(255,255,255,0.03)", border: `1px solid ${on ? C.goldDim : C.border}`, color: on ? C.gold : C.textFaint }}>{label}</button>;
+        })}
+      </div>
 
       <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>立ち絵（最大8体）</div>
       <div style={{ fontSize: 8, color: "#7a8aa0", marginBottom: 4, lineHeight: 1.5 }}>💡 画面上で立ち絵をドラッグして配置、タップで選択→サイズ(−/＋)・反転(⇄)・重なり順(△▽)・隠す(🙈)・削除。一覧の👁で表示/非表示を切替できます。</div>
