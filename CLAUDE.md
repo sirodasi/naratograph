@@ -78,7 +78,13 @@ const upd = useCallback((fn) => {
 
 Local React state is only used for UI-only concerns (hover, modals, animation frames). Never write game state to local state directly — always go through `upd()`.
 
-Firebase strips empty arrays on write — always guard array reads with `|| []`.
+Firebase strips empty arrays on write — always guard array reads with `|| []`. `upd()` also runs `stripUndefined(next)` before the Firebase write (Firebase throws on `undefined`; empty objects/arrays get stripped on write and read back as `undefined`, which then fails to re-write).
+
+**Undo** (GM): `upd()` snapshots `prev` into `undoStackRef` (cap 20) whenever `next.log.length > prev.log.length` (a meaningful, log-producing action — dice-animation frames don't log so they're skipped); `undo()` restores the last snapshot + writes it. ↩ button in `RightPanel`'s tab bar (`undoCount` gates it).
+
+**Free dice** (任意ダイス): `RightPanel` 進行 tab has a GM-ruling roller (nD6 / D66) that logs the result; not tied to game actions.
+
+**Images → Firebase Storage**: scene images (bg/portraits/expressions, via `SceneEditor.loadImage`) are resized → `toBlob` → **uploaded to `sceneImages/{uid}/...`** (`storage` from firebase.js), storing the **download URL** in `sceneData` (not base64) to keep RTDB sync light. Falls back to a data URL if Storage fails (rules unset/CORS). Requires Storage rules allowing authenticated write + read on `sceneImages/`. (128px char/NPC `PortraitUpload` icons in ScenarioEditor are still data URLs — small.)
 
 **Double-write / log duplication**: Because React batches multiple `setGs` calls, if `upd()` is called twice quickly the second updater receives the first's result as `prev`, causing the same log entry to be appended twice and written to Firebase. Guard against this at the UI level:
 - Clear guard state **before** calling `upd()` (e.g. `setSceneSelect("")` then `upd(...)`)
