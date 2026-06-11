@@ -3942,7 +3942,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         {!isSafe && (() => {
           const defenderId = isPc ? b.pcCombatant : b.npcCombatant;
           const defender   = isPc ? combatantPc : combatantNpc;
-          const canImmortal = hasOfficialSkill(defender, "不死身") && !isDanmakuUsed(defenderId, "不死身");
+          // 不死身は霊力が続く限り何度でも使用可能（once-per-battle ゲートを撤廃。制限は霊力消費のみ）
+          const canImmortal = hasOfficialSkill(defender, "不死身");
           const reiryoku = (defender?.resources?.霊力?.cur || 0);
           // 老いることも死ぬこともない程度の能力（藤原妹紅・オート）: 決戦以外で不死身の霊力消費を3点(＋2点)に軽減
           const immortalCost = (() => {
@@ -3961,20 +3962,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
               <button
                 disabled={!canAfford}
                 onClick={() => {
-                  markDanmakuUsed(defenderId, "不死身");
                   const next = afterDefensePhase(!isPc);
+                  const isFinalB = b.isFinal ?? (b.type === "mass" && !b.questId);
                   if (isPc) {
-                    upd(p => ({ ...p,
-                      pcs: p.pcs.map(x => x.uid !== defenderId ? x : {
+                    upd(p => {
+                      let pcs = p.pcs.map(x => x.uid !== defenderId ? x : {
                         ...x, resources: {
                           ...x.resources,
                           霊力: { ...x.resources.霊力, cur: x.resources.霊力.cur - immortalCost },
                           攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor((x.resources.霊力.cur - immortalCost) / 5) }
                         }
-                      }),
-                      battle: { ...p.battle, phase: next },
-                      log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-${immortalCost}・攻撃力更新）`, ...p.log]
-                    }));
+                      });
+                      // 実績(不死鳥の証明): 決戦での不死身使用回数
+                      if (isFinalB) pcs = bumpAch(pcs, defenderId, a => ({ ...a, immortalUses: (a.immortalUses || 0) + 1 }));
+                      return { ...p, pcs, battle: { ...p.battle, phase: next }, log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-${immortalCost}・攻撃力更新）`, ...p.log] };
+                    });
                   } else {
                     upd(p => ({ ...p,
                       battle: { ...p.battle, phase: next,

@@ -44,6 +44,7 @@ export const ACHIEVEMENTS = [
   // ── 超ニッチ実績（特定状況の達成） ──
   { id: "gyakkyo",   type: "session", name: "逆境の覇者",   desc: "【変調】を3つ以上抱えた状態で決戦に勝利する",    check: c => c.badStatus >= 3 && c.won },
   { id: "shunsatsu", type: "session", name: "瞬殺",         desc: "決戦を3ラウンド以内に勝利する",                check: c => c.won && c.decisiveRounds > 0 && c.decisiveRounds <= 3 },
+  { id: "fushicho",  type: "session", name: "不死鳥の証明", desc: "1決戦で『不死身』を3回以上使って勝利する",      check: c => c.immortalUses >= 3 && c.won },
   { id: "amanojaku", type: "session", bad: true, name: "天邪鬼の悪運", desc: "逆転スキルが有効な状態で全ダイス6の逆転ファンブルを引く", check: c => c.flipFumble },
 
   // ── 通算実績（ポジティブ） ──
@@ -105,6 +106,7 @@ export function buildAchContext(pc, gs, life, allChars) {
     livesOne: !!ach.livesOne,
     livesZero: !!ach.livesZero,
     flipFumble: !!ach.flipFumble,
+    immortalUses: ach.immortalUses || 0,
     moved: !!ach.moved,
     yaruki: pc.resources?.やる気?.cur ?? 0,
     won: isDecisiveWin,
