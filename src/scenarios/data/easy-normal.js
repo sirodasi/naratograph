@@ -62,7 +62,7 @@ export const EASY_NORMAL = [
     ],
     "id": "hare",
     "official": true,
-    "author": "幻想ナラトグラフ",
+    "author": "猫憑ノコ",
     "limit": "3日目の夜",
     "name": "ハレを飾るは幸か不幸か",
     "notes": "",

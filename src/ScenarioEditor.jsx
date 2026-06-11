@@ -390,29 +390,6 @@ function EnemyEditor({ enemy, onChange, showPrimary = false }) {
   );
 }
 
-// エネミーのリスト編集（追加/削除）。集団戦の extraEnemies・決戦の任意候補で共用。
-function EnemyListEditor({ enemies, onChange, addLabel = "＋ 敵を追加", showPrimary = false }) {
-  const list = enemies || [];
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-      {list.map((en, i) => (
-        <div key={i}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
-            <span style={{ fontSize:9, color:C.textFaint }}>#{i+1}</span>
-            <button onClick={() => onChange(list.filter((_, j) => j !== i))}
-              style={{ background:"none", border:"none", color:C.textFaint, cursor:"pointer", fontSize:11 }}>✕ 削除</button>
-          </div>
-          <EnemyEditor enemy={en} showPrimary={showPrimary} onChange={ne => onChange(list.map((x, j) => j === i ? ne : x))}/>
-        </div>
-      ))}
-      <button onClick={() => onChange([...list, EMPTY_ENEMY()])}
-        style={btn(C.redBg, C.redBorder, C.red, { padding:"5px 14px", fontSize:10, alignSelf:"flex-start" })}>
-        {addLabel}
-      </button>
-    </div>
-  );
-}
-
 // ── Quest Editor ─────────────────────────────────────
 function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
   const [open, setOpen] = useState(false);
@@ -668,24 +645,6 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   />
                 </div>
 
-                {/* 集団戦設定（Hard/Lunatic 向け） */}
-                <div style={{ marginTop:8, padding:"8px 10px", background:"rgba(255,255,255,0.02)", border:`1px solid ${C.border}`, borderRadius:4 }}>
-                  <button onClick={() => upd("massBattle", !quest.massBattle)}
-                    style={{ ...btn(quest.massBattle?C.redBg:"rgba(255,255,255,0.02)", quest.massBattle?C.redBorder:C.border, quest.massBattle?C.red:C.textFaint, { padding:"3px 10px", fontSize:10 }) }}>
-                    {quest.massBattle ? "☑" : "☐"} 集団戦にする
-                  </button>
-                  <div style={{ fontSize:8, color:C.textFaint, marginTop:4, lineHeight:1.5 }}>
-                    上のエネミーに加え下記の追加敵が参戦し、解決場所にいる全PCで戦います。全ての敵を撃破でクエスト解決。
-                  </div>
-                  {quest.massBattle && (
-                    <div style={{ marginTop:8 }}>
-                      <Label>追加敵</Label>
-                      <EnemyListEditor enemies={quest.extraEnemies || []} addLabel="＋ 追加敵を足す"
-                        onChange={list => upd("extraEnemies", list)}/>
-                    </div>
-                  )}
-                </div>
-
                 {/* 解決場所 */}
                 <div style={{ marginTop:8 }}>
                   <Label>解決場所</Label>
@@ -695,31 +654,6 @@ function QuestEditor({ quest, onChange, onDelete, index, allQuests }) {
                   </select>
                 </div>
 
-                {/* 演出判定（弾幕ごっこ開始前・Hard/Lunatic 向け） */}
-                <div style={{ marginTop:8, padding:"8px 10px", background:"rgba(255,255,255,0.02)", border:`1px solid ${C.border}`, borderRadius:4 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                    <button onClick={() => upd("preBattleFlavorRoll", quest.preBattleFlavorRoll ? null : { target: 6 })}
-                      style={{ ...btn(
-                        quest.preBattleFlavorRoll ? C.goldBg : "rgba(255,255,255,0.02)",
-                        quest.preBattleFlavorRoll ? C.goldDim : C.border,
-                        quest.preBattleFlavorRoll ? C.gold : C.textFaint,
-                        { padding:"3px 10px", fontSize:10 }
-                      )}}>
-                      {quest.preBattleFlavorRoll ? "☑" : "☐"} 開始前に演出判定を挟む
-                    </button>
-                    {quest.preBattleFlavorRoll && (
-                      <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                        <span style={{ fontSize:9, color:C.textFaint }}>目標値</span>
-                        <input type="number" min="1" max="6" style={{...iBase, width:50}}
-                          value={quest.preBattleFlavorRoll.target ?? 6}
-                          onChange={e => upd("preBattleFlavorRoll", { target: parseInt(e.target.value)||6 })}/>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ fontSize:8, color:C.textFaint, marginTop:4, lineHeight:1.5 }}>
-                    弾幕ごっこ開始前に、スペシャル・ファンブルの発生しない演出専用の行為判定を挟みます。
-                  </div>
-                </div>
               </div>
             );
           })()}
@@ -917,64 +851,6 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               placeholder="GMだけが見るメモ（セッション中には非表示）"/>
           </div>
 
-          {/* 追加ルール（Hard / Lunatic 時のみ表示） */}
-          {(sc.difficulty === "Hard" || sc.difficulty === "Lunatic") && (
-            <div style={{ background:C.card, border:`1px solid ${C.gold}40`, borderRadius:6, padding:14, marginTop:12 }}>
-              <SecTitle>追加ルール（{sc.difficulty}）</SecTitle>
-              <div style={{ fontSize:9, color:C.textFaint, marginBottom:10 }}>
-                通常ルールに含まれない変則裁定。設定したものはセッションのエンジンに自動反映されます。
-              </div>
-
-              {/* 立入禁止スポット */}
-              <Label>立入禁止スポット（探索フェイズ中に訪問不可）</Label>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(98px,1fr))",gap:4,maxHeight:180,overflowY:"auto",marginBottom:10}}>
-                {SPOTS.filter(s => s.id !== "dream").map(s => {
-                  const on = (sc.blockedSpots||[]).includes(s.id);
-                  return (
-                    <div key={s.id} onClick={() => setSc(p => {
-                      const cur = p.blockedSpots||[];
-                      const next = on ? cur.filter(x=>x!==s.id) : [...cur, s.id];
-                      const rebind = {...(p.spotRebind||{})};
-                      if (on) delete rebind[s.id];  // 封鎖解除したらリダイレクトも掃除
-                      return { ...p, blockedSpots: next, spotRebind: rebind };
-                    })} style={{
-                      padding:"3px 5px",borderRadius:4,cursor:"pointer",textAlign:"center",
-                      background:on?"rgba(224,112,96,0.18)":"rgba(255,255,255,0.02)",
-                      border:`1px solid ${on?C.redBorder:C.border}`, opacity:on?1:0.7,
-                    }}>
-                      <div style={{fontSize:8,color:on?C.red:C.textDim,lineHeight:1.3}}>[{s.roll}] {s.name}</div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* 拠点リダイレクト */}
-              {(sc.blockedSpots||[]).length > 0 && (
-                <div>
-                  <Label>拠点リダイレクト（封鎖スポットが拠点のPCの代替拠点）</Label>
-                  {(sc.blockedSpots||[]).map(bid => {
-                    const bs = SPOTS.find(s=>s.id===bid);
-                    return (
-                      <div key={bid} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                        <span style={{ fontSize:10, color:C.textDim, width:120, flexShrink:0 }}>{bs?.name||bid} →</span>
-                        <select style={{...iBase, flex:1}} value={(sc.spotRebind||{})[bid]||""}
-                          onChange={e => setSc(p => {
-                            const rebind = {...(p.spotRebind||{})};
-                            if (e.target.value) rebind[bid] = e.target.value; else delete rebind[bid];
-                            return { ...p, spotRebind: rebind };
-                          })}>
-                          <option value="">（リダイレクトしない）</option>
-                          {SPOTS.filter(s=>s.id!=="dream" && !(sc.blockedSpots||[]).includes(s.id)).map(s =>
-                            <option key={s.id} value={s.id}>[{s.roll}] {s.name}</option>
-                          )}
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* 右列: クエスト */}
@@ -1030,15 +906,6 @@ function ScenarioForm({ initial, onSave, onCancel }) {
               </div>
             )}
 
-            {/* 任意投入候補エネミー（GMが決戦開始時に投入を選べる） */}
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 2 }}>追加候補エネミー（GMが任意投入）</div>
-              <div style={{ fontSize: 9, color: C.textDim, marginBottom: 8 }}>
-                決戦の開始時、GMがここから0体以上を選んで投入できます（例: ゆっくりを引き連れた集団戦）。主敵を全滅させれば、これらが残っていても決戦は終了します。
-              </div>
-              <EnemyListEditor enemies={sc.finalBattleOptionalEnemies || []} addLabel="＋ 候補を追加"
-                onChange={list => setSc(p => ({ ...p, finalBattleOptionalEnemies: list }))} />
-            </div>
           </div>
         </div>
         </div>
