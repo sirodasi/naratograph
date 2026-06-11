@@ -24,8 +24,8 @@ export const ACHIEVEMENTS = [
   { id: "kenkyaku",  type: "session", name: "健脚自慢",     desc: "1セッションで異なるスポットを8箇所以上訪れる",   check: c => c.spots >= 8 },
   { id: "happo",     type: "session", name: "八方美人",     desc: "1セッションで同卓の他PC全員への絆を獲得",       check: c => c.bondsAll },
   { id: "shuyaku",   type: "session", name: "主役の星回り", desc: "1セッション中に行為判定でスペシャルを3回出す",  check: c => c.specials >= 3 },
-  { id: "kanzen",    type: "session", name: "完全制覇",     desc: "全クエストを解決し、決戦に勝利する",            check: c => c.allQuests && c.won },
-  { id: "fukutsu",   type: "session", name: "不屈の闘志",   desc: "【残り人数】が0になった後に立て直して決戦に勝利", check: c => c.livesZero && c.won },
+  { id: "denko",     type: "session", name: "電光石火",     desc: "リミットより3サイクル以上前に全クエストを解決する", check: c => c.allQuests && c.slack >= 3 },
+  { id: "fukutsu",   type: "session", name: "不屈の闘志",   desc: "【残り人数】が1まで減った状態を経て決戦に勝利", check: c => c.livesOne && c.won },
   { id: "gekisen",   type: "session", name: "激戦を制す",   desc: "決戦が8ラウンド以上続いた末に勝利する",        check: c => c.decisiveRounds >= 8 && c.won },
   { id: "hachimen",  type: "session", name: "八面六臂",     desc: "1セッションで援護射撃・かばうを合計5回行う",    check: c => c.intervene >= 5 },
   { id: "spellmst",  type: "session", name: "スペルマスター", desc: "1決戦でスペルカードを3回以上宣言する",         check: c => c.spells >= 3 },
@@ -40,6 +40,11 @@ export const ACHIEVEMENTS = [
   { id: "banji",     type: "session", bad: true, name: "万事休す",     desc: "決戦に敗北する",                              check: c => c.lost },
   { id: "debusho",   type: "session", bad: true, name: "出不精",       desc: "1セッションで一度もスポットを移動しない",      check: c => !c.moved },
   { id: "sukkara",   type: "session", bad: true, name: "すっからかん", desc: "セッション終了時に【やる気】が最低値(1)",   check: c => c.yaruki <= 1 },
+
+  // ── 超ニッチ実績（特定状況の達成） ──
+  { id: "gyakkyo",   type: "session", name: "逆境の覇者",   desc: "【変調】を3つ以上抱えた状態で決戦に勝利する",    check: c => c.badStatus >= 3 && c.won },
+  { id: "shunsatsu", type: "session", name: "瞬殺",         desc: "決戦を3ラウンド以内に勝利する",                check: c => c.won && c.decisiveRounds > 0 && c.decisiveRounds <= 3 },
+  { id: "amanojaku", type: "session", bad: true, name: "天邪鬼の悪運", desc: "逆転スキルが有効な状態で全ダイス6の逆転ファンブルを引く", check: c => c.flipFumble },
 
   // ── 通算実績（ポジティブ） ──
   { id: "senkyaku",  type: "lifetime", name: "千客万来",   desc: "通算で15人以上の異なるキャラと絆を結ぶ",        check: c => c.L_bondTargets >= 15 },
@@ -94,8 +99,12 @@ export function buildAchContext(pc, gs, life, allChars) {
     items: ach.items || 0,
     // 激戦を制す: 決戦（最終battle）の継続ラウンド数
     decisiveRounds: gs.battle?.round || 0,
+    // 電光石火: 決戦移行時にリミットまで残っていたサイクル数（doTransitionToBattle で記録）
+    slack: gs.battleSlack || 0,
     livesDropped: !!ach.livesDropped,
+    livesOne: !!ach.livesOne,
     livesZero: !!ach.livesZero,
+    flipFumble: !!ach.flipFumble,
     moved: !!ach.moved,
     yaruki: pc.resources?.やる気?.cur ?? 0,
     won: isDecisiveWin,

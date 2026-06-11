@@ -1138,6 +1138,8 @@ function SessionApp({ roomCode, user }) {
 
     const currentDay = gs.day;
     const currentCycleIdx = gs.cycleIdx;
+    // 実績(電光石火)用: リミットまで残っているサイクル数（移行＝解決の早さの指標）
+    const battleSlack = Math.max(0, (limitDay - currentDay) * CYCLES.length + (limitCycleIdx - currentCycleIdx));
 
     const scenarioEnemies = gs.scenarioData?.finalBattleEnemies || [];
     const battleEnemies = scenarioEnemies.map((en, idx) =>
@@ -1177,6 +1179,7 @@ function SessionApp({ roomCode, user }) {
             ...p,
             sessionPhase: "battle_bonus",
             bonusStatus,
+            battleSlack,
             initialBattle: initialBattle,
             log: [`解決ボーナス：残り ${bonusActions} サイクル分の追加行動を獲得！`, ...p.log]
           };
@@ -1188,6 +1191,7 @@ function SessionApp({ roomCode, user }) {
         sessionPhase: "battle",
         pcs: nextPcs,
         battle: initialBattle,
+        battleSlack,
         actedPcs: [],
         currentScene: null,
         minions: [], // 手下は探索フェイズ専用。決戦移行で退場

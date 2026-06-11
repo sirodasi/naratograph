@@ -2682,7 +2682,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       // 実績: 決戦で残り人数が減った/0になったPCを記録
       const isFinalB = p.battle.isFinal ?? (p.battle.type === "mass" && !p.battle.questId);
       if (isPc && isFinalB) {
-        nextEntities = bumpAch(nextEntities, targetId, a => ({ ...a, livesDropped: true, ...(newLives === 0 ? { livesZero: true } : {}) }));
+        nextEntities = bumpAch(nextEntities, targetId, a => ({ ...a, livesDropped: true, ...(newLives === 1 ? { livesOne: true } : {}), ...(newLives === 0 ? { livesZero: true } : {}) }));
       }
 
       const clearedGrid = [0, 0, 0, 0, 0, 0];
@@ -9205,7 +9205,9 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                         const immune = isBadStatusImmune(pc, bsName);
                         const newBs  = immune ? (pc.badStatus || []) : Array.from(new Set([...(pc.badStatus || []), bsName]));
                         let newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: !immune && bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
-                        newPcs = bumpAch(newPcs, pc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1 }));
+                        // 実績(天邪鬼の悪運): 逆転(何でもひっくり返す)有効中の全ダイス6ファンブル
+                        const isFlipFumble = flipCond && (sc.actionDice || []).length > 0 && (sc.actionDice || []).every(d => d === 6);
+                        newPcs = bumpAch(newPcs, pc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1, ...(isFlipFumble ? { flipFumble: true } : {}) }));
                         const log = immune ? `🛡 ${pc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `${pc.charName} は変調《${bsName}》を獲得した`;
                         return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[log, ...p.log] };
                       });
