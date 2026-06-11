@@ -7,9 +7,24 @@
 // これにより Hard/Lunatic シナリオは、まずデータ項目で表現を試み、表現しきれない
 // ものだけをコードフックに落とす、という段階的な拡張ができる。
 
-import { getScenarioHooks } from "./registry";
+import { getScenarioHooks, BUILTIN_SPECIAL } from "./registry";
+import { EASY_NORMAL } from "./data/easy-normal";
 
 export { getScenarioHooks, SCENARIO_HOOKS } from "./registry";
+
+// ビルトイン（コード同梱）シナリオ一覧。Easy/Normal（data/easy-normal.js）＋
+// Hard/Lunatic（hard|lunatic/*.js を registry が glob 集約）を id でユニーク化して返す。
+// 選択UI（ScenarioSelector）はこれを「★公式シナリオ」として自作シナリオと併記する。
+export function getBuiltinScenarios() {
+  const seen = new Set();
+  const out = [];
+  for (const sc of [...EASY_NORMAL, ...BUILTIN_SPECIAL]) {
+    if (!sc?.id || seen.has(sc.id)) continue;
+    seen.add(sc.id);
+    out.push({ ...sc, builtin: true });
+  }
+  return out;
+}
 
 // 探索フェイズで訪問できないスポットID一覧を返す。
 // scenarioData.blockedSpots（データ）と、フック blockedSpots(gs)（コード）を統合する。

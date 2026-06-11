@@ -5,6 +5,7 @@ import {
   resolveBaseSpot,
   getPreBattleFlavorRoll,
   getScenarioHooks,
+  getBuiltinScenarios,
   SCENARIO_HOOKS,
 } from '../scenarios';
 
@@ -103,5 +104,18 @@ describe('getScenarioHooks（登録簿）', () => {
     const hooks = { blockedSpots: () => [] };
     SCENARIO_HOOKS['s1'] = hooks;
     expect(getScenarioHooks({ id: 's1' })).toBe(hooks);
+  });
+});
+
+describe('getBuiltinScenarios（ビルトイン集約）', () => {
+  it('配列を返し、全要素が一意なidと builtin:true を持つ', () => {
+    const list = getBuiltinScenarios();
+    expect(Array.isArray(list)).toBe(true);
+    const ids = list.map(s => s.id);
+    expect(new Set(ids).size).toBe(ids.length); // 重複なし
+    expect(list.every(s => s.builtin === true)).toBe(true);
+  });
+  it('_ 始まりのテンプレ（example-hard）は集約に含まれない', () => {
+    expect(getBuiltinScenarios().some(s => s.id === 'example-hard')).toBe(false);
   });
 });
