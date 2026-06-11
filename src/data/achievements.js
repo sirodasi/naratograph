@@ -48,6 +48,7 @@ export const ACHIEVEMENTS = [
   { id: "kyokai",    type: "session", name: "境界跳躍",     desc: "八雲紫が通常移動を一度も行わず、全エリアを踏破する", check: c => c.isMurasaki && c.normalMoves === 0 && c.allAreas },
   { id: "fukochu",   type: "session", name: "不幸中の幸い", desc: "紫苑の不運が効いている間にスペシャルを2回以上出し、その間ファンブルしない", check: c => c.unluckySpecials >= 2 && !c.unluckyFumbled },
   { id: "hanrei",    type: "session", name: "半霊の見切り", desc: "妖夢が喰らいボム宣言後の回避成功から六根清浄斬を発動して勝利する", check: c => c.isYoumu && c.kuraibomuSuccess && c.usedRokkon && c.won },
+  { id: "nezumi",    type: "session", name: "鼠算式探索",   desc: "全クエストを、ナズーリンの探し物で置いた手がかりのみで解決する", check: c => c.isNazrin && c.allQuests && c.cluesSearchOnly },
   { id: "amanojaku", type: "session", bad: true, name: "天邪鬼の悪運", desc: "逆転スキルが有効な状態で全ダイス6の逆転ファンブルを引く", check: c => c.flipFumble },
 
   // ── 通算実績（ポジティブ） ──
@@ -123,6 +124,8 @@ export function buildAchContext(pc, gs, life, allChars) {
     isYoumu: pc.charId === "魂魄妖夢",
     kuraibomuSuccess: !!ach.kuraibomuSuccess,
     usedRokkon: !!ach.usedRokkon,
+    isNazrin: pc.charId === "ナズーリン",
+    cluesSearchOnly: !!gs.searchCluePlaced && !gs.nonSearchCluePlaced,
     yaruki: pc.resources?.やる気?.cur ?? 0,
     won: isDecisiveWin,
     lost: isDecisiveLoss,

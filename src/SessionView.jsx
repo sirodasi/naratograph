@@ -5877,6 +5877,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         }
         return { ...p,
           clues: newClues,
+          nonSearchCluePlaced: true, // 実績(鼠算式探索): 探し物以外の手がかり配置
           pcs: p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, skillActivatedThisSession: (x.skillActivatedThisSession || 0) + 1 }),
           log: [`${pc.charName}《胡乱》: 手がかり${count}つをランダムに再配置した`, ...p.log]
         };
@@ -6148,6 +6149,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
             ...p,
             pcs: p.pcs.map(x => x.uid === pc.uid ? withAbilityUse({ ...x }, name, freq) : x),
             clues: Array.from(new Set([...(p.clues || []), dest.id])),
+            searchCluePlaced: true, // 実績(鼠算式探索): 探し物由来の手がかり
             log: [`🔵 ${pc.charName} が能力《${name}》発動：失敗(出目${res.join(",")})→ランダムに [${dest.name}] へ手がかりを配置`, ...p.log],
           }));
         }
@@ -6455,6 +6457,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     upd(p => ({
       ...p,
       clues: Array.from(new Set([...(p.clues || []), spotId])),
+      searchCluePlaced: true, // 実績(鼠算式探索): 探し物由来の手がかり
       log: [`🔵 ${pc.charName} の《探し物を探し当てる程度の能力》：[${getSpot(spotId)?.name}] へ手がかりを配置`, ...p.log],
     }));
   };
@@ -8015,7 +8018,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           const nextSpotId = getSpotByD66(res[0], res[1], SPOTS);
           if (nextSpotId) {
             const newClues = Array.from(new Set([...(gs.clues || []), nextSpotId]));
-            proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues }, achInc: a => ({ ...a, clues: (a.clues || 0) + 1 }) });
+            proceed([`手がかりを【${getSpot(nextSpotId)?.name}】に配置した`], { gs: { clues: newClues, nonSearchCluePlaced: true }, achInc: a => ({ ...a, clues: (a.clues || 0) + 1 }) });
           } else {
             proceed(["(手がかりの配置先が見つからなかった)"]);
           }
@@ -8164,7 +8167,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             logs.push(`${pc.charName} は手がかりを [${spotId}] ${getSpot(spotId)?.name} に配置した（出目: ${d1}, ${d2}）`);
           }
         }
-        return { ...p, clues: newClues, currentScene: { ...p.currentScene, phase: "action_done" }, log: [...logs.reverse(), ...p.log] };
+        return { ...p, clues: newClues, nonSearchCluePlaced: true, currentScene: { ...p.currentScene, phase: "action_done" }, log: [...logs.reverse(), ...p.log] };
       });
     });
   };
@@ -8441,9 +8444,10 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
       return {
         ...p,
         clues: newClues,
-        quests: nextQuests, 
-        currentScene: { ...p.currentScene, phase: "action_done" }, 
-        log: [logMsg, ...p.log] 
+        nonSearchCluePlaced: true, // 実績(鼠算式探索): 探し物以外の手がかり配置
+        quests: nextQuests,
+        currentScene: { ...p.currentScene, phase: "action_done" },
+        log: [logMsg, ...p.log]
       };
     });
   };
@@ -9953,6 +9957,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                       ...p,
                       quests: nextQuests,
                       clues: [...new Set([...(p.clues||[]), s1, s2].filter(Boolean))],
+                      nonSearchCluePlaced: true, // 実績(鼠算式探索): 探し物以外の手がかり配置
                       actedPcs: [...(p.actedPcs || []), pc.uid],
                       currentScene: null,
                       log: [
@@ -10660,6 +10665,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                     ...p,
                     newspaper: { ...p.newspaper, applied: true },
                     clues: [...new Set([...(p.clues || []), s1, s2].filter(Boolean))],
+                    nonSearchCluePlaced: true, // 実績(鼠算式探索): 探し物以外の手がかり配置
                     log: [`新聞[25]の効果で [${getSpot(s1)?.name}] と [${getSpot(s2)?.name}] に手がかりが追加された`, ...p.log],
                   }));
                   setPaperModal(prev => ({ ...prev, applied: true }));
@@ -10679,6 +10685,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       ...p,
                       newspaper: { ...p.newspaper, applied: true },
                       clues: [...new Set(newClues)],
+                      nonSearchCluePlaced: true, // 実績(鼠算式探索): 探し物以外の手がかり再配置
                       log: [`新聞[36]の効果で、すべての手がかりが再配置された`, ...p.log],
                     }));
                     setPaperModal(prev => ({ ...prev, applied: true }));
