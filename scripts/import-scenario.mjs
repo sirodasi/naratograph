@@ -20,16 +20,22 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-const [, , file, id] = process.argv;
-if (!file || !id) {
-  console.error("usage: node scripts/import-scenario.mjs <export.json> <id>");
+const args = process.argv.slice(2);
+const file = args[0];
+const id = args[1];
+const officialFlag = args.includes("--official");
+const authorIdx = args.indexOf("--author");
+const author = authorIdx >= 0 ? args[authorIdx + 1] : null;
+if (!file || !id || id.startsWith("--")) {
+  console.error('usage: node scripts/import-scenario.mjs <export.json> <id> [--official] [--author "名前"]');
   process.exit(1);
 }
 
 const raw = JSON.parse(fs.readFileSync(file, "utf8"));
 delete raw.createdAt;
 delete raw.updatedAt;
-const data = { ...raw, id };
+// official（公式バッジ）/ author（作者クレジット）は保存方法と独立。指定された分だけ付与。
+const data = { ...raw, id, ...(officialFlag ? { official: true } : {}), ...(author ? { author } : {}) };
 const json = JSON.stringify(data, null, 2);
 const diff = raw.difficulty;
 

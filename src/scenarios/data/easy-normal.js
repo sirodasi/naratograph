@@ -10,6 +10,9 @@
 // 主なフィールド（ScenarioEditor 準拠）:
 //   id            : 一意なID（kebab-case 推奨。フック登録キー・部屋への識別子に使う）
 //   name          : 表示名
+//   official      : true なら「公式」バッジ表示（幻想ナラトグラフ公式作のサンプル等）。
+//                   ★保存方法（収録/エディター）とは独立＝収録でも自作はあり得る。
+//   author        : 作者クレジット（任意・自由記述。"公式" と別に「作: 〇〇」を表示）
 //   difficulty    : "Easy" | "Normal" | "Hard" | "Lunatic"
 //   playerCountMin / playerCountMax : 推奨人数
 //   limit         : "N日目の{朝|昼|夕|夜}" 形式のリミット
@@ -58,6 +61,8 @@ export const EASY_NORMAL = [
       }
     ],
     "id": "hare",
+    "official": true,
+    "author": "幻想ナラトグラフ",
     "limit": "3日目の夜",
     "name": "ハレを飾るは幸か不幸か",
     "notes": "",

@@ -1087,11 +1087,15 @@ function ScenarioList({ onSelect, onEdit, selectedId, items }) {
           }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:12, color: selectedId === sc.id ? C.gold : C.text, marginBottom:2 }}>{sc.name}</div>
+              <div style={{ fontSize:12, color: selectedId === sc.id ? C.gold : C.text, marginBottom:2 }}>
+                {sc.official && <span style={{ fontSize:8, color:C.gold, border:`1px solid ${C.goldDim}`, borderRadius:3, padding:"0 4px", marginRight:5, verticalAlign:"middle" }}>公式</span>}
+                {sc.name}
+              </div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <Chip label={`${sc.playerCountMin}〜${sc.playerCountMax}人`} color={C.blue}/>
                 <Chip label={sc.difficulty} color={diffColor[sc.difficulty]||C.text}/>
                 <Chip label={`リミット: ${sc.limit}`} color={C.textDim}/>
+                {sc.author && <Chip label={`作: ${sc.author}`} color={C.textFaint}/>}
               </div>
             </div>
             {onEdit && (
@@ -1467,9 +1471,9 @@ export function ScenarioSelector({ value, onChange }) {
         <div style={{ marginTop:6, padding:10, background:"#0a0c16", border:`1px solid ${C.border}`, borderRadius:4 }}>
           {BUILTIN_SCENARIOS.length > 0 && (
             <>
-              <div style={secHdr}>★ 公式シナリオ</div>
+              <div style={secHdr}>収録シナリオ（アプリ同梱）</div>
               <ScenarioList items={BUILTIN_SCENARIOS} selectedId={value?.id} onSelect={sc => {onChange(sc);setOpen(false);}}/>
-              <div style={{ ...secHdr, marginTop:10 }}>自作シナリオ</div>
+              <div style={{ ...secHdr, marginTop:10 }}>エディターのシナリオ（自分の作成）</div>
             </>
           )}
           {scenarios.length === 0
@@ -1482,9 +1486,11 @@ export function ScenarioSelector({ value, onChange }) {
       {selected&&(
         <div style={{ marginTop:8, padding:8, background:"rgba(200,160,64,0.06)", border:`1px solid ${C.goldDim}50`, borderRadius:4 }}>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:4 }}>
+            {selected.official && <Chip label="公式" color={C.gold}/>}
             <Chip label={`${selected.playerCountMin}〜${selected.playerCountMax}人`} color={C.blue}/>
             <Chip label={selected.difficulty} color={C.gold}/>
             <Chip label={`リミット: ${selected.limit}`} color={C.textDim}/>
+            {selected.author && <Chip label={`作: ${selected.author}`} color={C.textFaint}/>}
           </div>
           {selected.bannedChars?.length>0&&(
             <div style={{fontSize:9,color:C.textFaint}}>選択不可: {selected.bannedChars.join("・")}</div>
