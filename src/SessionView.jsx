@@ -9193,7 +9193,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           const newPcs  = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: nextCur }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(nextCur / 5) } } });
                           // 特別な絆: 対象(pc)のスペシャルで親密度+1
                           const { pcs: pcs2, logs } = gainIntimacy(newPcs, pc.uid, 1, `${pc.charName}のスペシャル`);
-                          const pcs3 = bumpAch(pcs2, pc.uid, a => ({ ...a, specials: (a.specials || 0) + 1 }));
+                          const pcs3 = bumpAch(pcs2, pc.uid, a => ({ ...a, specials: (a.specials || 0) + 1, ...(p.unluckyPhase ? { unluckySpecials: (a.unluckySpecials || 0) + 1 } : {}) }));
                           return { ...p, pcs: pcs3, currentScene: { ...p.currentScene, specialResolved: true }, log:[...logs, `${pc.charName} は霊力を ${gain} 点回復した`, ...p.log] };
                         });
                       })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>霊力回復 (1D6)</button>
@@ -9213,7 +9213,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                         let newPcs = p.pcs.map(x => x.uid !== pc.uid ? x : { ...x, badStatus: newBs, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: !immune && bsName === "だるい" ? 1 : x.resources.やる気.cur } } });
                         // 実績(天邪鬼の悪運): 逆転(何でもひっくり返す)有効中の全ダイス6ファンブル
                         const isFlipFumble = flipCond && (sc.actionDice || []).length > 0 && (sc.actionDice || []).every(d => d === 6);
-                        newPcs = bumpAch(newPcs, pc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1, ...(isFlipFumble ? { flipFumble: true } : {}) }));
+                        newPcs = bumpAch(newPcs, pc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1, ...(isFlipFumble ? { flipFumble: true } : {}), ...(p.unluckyPhase ? { unluckyFumbled: true } : {}) }));
                         const log = immune ? `🛡 ${pc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `${pc.charName} は変調《${bsName}》を獲得した`;
                         return { ...p, pcs: newPcs, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleStatus: bsName }, log:[log, ...p.log] };
                       });
@@ -9509,7 +9509,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   const bsName = BAD_STATUS_TABLE[r[0]]?.name;
                   const immune = isBadStatusImmune(judgePc, bsName);
                   let newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
-                  newPcs = bumpAch(newPcs, judgePc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1 }));
+                  newPcs = bumpAch(newPcs, judgePc.uid, a => ({ ...a, fumbles: (a.fumbles || 0) + 1, ...(p.unluckyPhase ? { unluckyFumbled: true } : {}) }));
                   const fl = !bsName ? [] : [immune ? `🛡 ${judgePc.charName}《馬鹿》: 変調《${bsName}》を無効化！` : `💀 ファンブル！ ${judgePc.charName} は変調《${bsName}》を獲得した`];
                   return { ...markResolved({ ...p, pcs: newPcs }), log: [...fl, resultLabel, ...p.log] };
                 }));
@@ -9518,7 +9518,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   const gain = r[0];
                   const pcs0 = p.pcs.map(x => x.uid !== judgePc.uid ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
                   const { pcs: pcs1, logs } = gainIntimacy(pcs0, judgePc.uid, 1, `${judgePc.charName}のスペシャル`);
-                  const pcs2 = bumpAch(pcs1, judgePc.uid, a => ({ ...a, specials: (a.specials || 0) + 1 }));
+                  const pcs2 = bumpAch(pcs1, judgePc.uid, a => ({ ...a, specials: (a.specials || 0) + 1, ...(p.unluckyPhase ? { unluckySpecials: (a.unluckySpecials || 0) + 1 } : {}) }));
                   return { ...markResolved({ ...p, pcs: pcs2 }), log: [...logs, `✨ スペシャル！ ${judgePc.charName} は霊力 +${gain}点回復した`, resultLabel, ...p.log] };
                 }));
               } else {

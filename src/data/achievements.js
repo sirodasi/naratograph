@@ -46,6 +46,7 @@ export const ACHIEVEMENTS = [
   { id: "shunsatsu", type: "session", name: "瞬殺",         desc: "決戦を3ラウンド以内に勝利する",                check: c => c.won && c.decisiveRounds > 0 && c.decisiveRounds <= 3 },
   { id: "fushicho",  type: "session", name: "不死鳥の証明", desc: "1決戦で『不死身』を3回以上使って勝利する",      check: c => c.immortalUses >= 3 && c.won },
   { id: "kyokai",    type: "session", name: "境界跳躍",     desc: "八雲紫が通常移動を一度も行わず、全エリアを踏破する", check: c => c.isMurasaki && c.normalMoves === 0 && c.allAreas },
+  { id: "fukochu",   type: "session", name: "不幸中の幸い", desc: "紫苑の不運が効いている間にスペシャルを2回以上出し、その間ファンブルしない", check: c => c.unluckySpecials >= 2 && !c.unluckyFumbled },
   { id: "amanojaku", type: "session", bad: true, name: "天邪鬼の悪運", desc: "逆転スキルが有効な状態で全ダイス6の逆転ファンブルを引く", check: c => c.flipFumble },
 
   // ── 通算実績（ポジティブ） ──
@@ -116,6 +117,8 @@ export function buildAchContext(pc, gs, life, allChars) {
     normalMoves: ach.normalMoves || 0,
     allAreas,
     isMurasaki: pc.charId === "八雲紫",
+    unluckySpecials: ach.unluckySpecials || 0,
+    unluckyFumbled: !!ach.unluckyFumbled,
     yaruki: pc.resources?.やる気?.cur ?? 0,
     won: isDecisiveWin,
     lost: isDecisiveLoss,
