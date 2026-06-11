@@ -13,6 +13,7 @@
 //   official      : true なら「公式」バッジ表示（幻想ナラトグラフ公式作のサンプル等）。
 //                   ★保存方法（収録/エディター）とは独立＝収録でも自作はあり得る。
 //   author        : 作者クレジット（任意・自由記述。"公式" と別に「作: 〇〇」を表示）
+//   keywords      : PL・GMに公開するキーワード（タグ）の配列。例 ["梅雨","結婚式"]
 //   difficulty    : "Easy" | "Normal" | "Hard" | "Lunatic"
 //   playerCountMin / playerCountMax : 推奨人数
 //   limit         : "N日目の{朝|昼|夕|夜}" 形式のリミット
@@ -63,6 +64,7 @@ export const EASY_NORMAL = [
     "id": "hare",
     "official": true,
     "author": "猫憑ノコ",
+    "keywords": ["結婚", "妖怪退治"],
     "limit": "3日目の夜",
     "name": "ハレを飾るは幸か不幸か",
     "notes": "",

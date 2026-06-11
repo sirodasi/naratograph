@@ -272,6 +272,7 @@ const EMPTY_SCENARIO = () => ({
   playerCountMax: 4,
   bannedChars: [],
   difficulty: "Normal",
+  keywords: [],           // PL・GMに公開するキーワード（タグ）
   backstory: "",
   limit: "3日目の夜",
   quests: [],
@@ -771,6 +772,10 @@ function ScenarioForm({ initial, onSave, onCancel }) {
             </select>
             <Label>リミット</Label>
             <input style={iBase} value={sc.limit} onChange={e => upd("limit",e.target.value)} placeholder="例: 3日目の夜"/>
+            <Label>キーワード（PL・GMに公開・カンマ/読点区切り）</Label>
+            <input style={iBase} value={(sc.keywords||[]).join("、")}
+              onChange={e => upd("keywords", e.target.value.split(/[、,]/).map(s=>s.trim()).filter(Boolean))}
+              placeholder="例: 梅雨、人間の里、結婚"/>
           </div>
 
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:14, marginBottom:12 }}>
@@ -938,23 +943,33 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, animation: "backdropIn 0.15s ease" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#0a0c16", border: `1px solid ${C.goldDim}`, borderRadius: 8, padding: 20, maxWidth: 680, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, color: C.gold }}>
-              {sc.official && <span style={{ fontSize: 9, color: C.gold, border: `1px solid ${C.goldDim}`, borderRadius: 3, padding: "0 4px", marginRight: 6, verticalAlign: "middle" }}>公式</span>}
-              {sc.name}
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>
-              <Chip label={sc.difficulty} color={C.gold} />
-              <Chip label={`${sc.playerCountMin}〜${sc.playerCountMax}人`} color={C.blue} />
-              <Chip label={`リミット: ${sc.limit}`} color={C.textDim} />
-              {sc.author && <Chip label={`作: ${sc.author}`} color={C.textFaint} />}
-            </div>
+          <div style={{ fontSize: 16, color: C.gold, flex: 1 }}>
+            {sc.official && <span style={{ fontSize: 9, color: C.gold, border: `1px solid ${C.goldDim}`, borderRadius: 3, padding: "0 4px", marginRight: 6, verticalAlign: "middle" }}>公式</span>}
+            {sc.name}
+            {sc.author && <span style={{ fontSize: 9, color: C.textFaint, marginLeft: 8 }}>作: {sc.author}</span>}
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 16, flexShrink: 0 }}>✕</button>
         </div>
-        {sc.bannedChars?.length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginTop: 4 }}>選択不可: {sc.bannedChars.join("・")}</div>}
 
-        {sc.backstory && <Section title="バックストーリー"><div style={pre}>{sc.backstory}</div></Section>}
+        {/* 公開情報（PL・GMに公開） */}
+        <Section title="公開情報（PL・GMに公開）">
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+            <Chip label={sc.difficulty} color={C.gold} />
+            <Chip label={`${sc.playerCountMin}〜${sc.playerCountMax}人`} color={C.blue} />
+            <Chip label={`リミット: ${sc.limit}`} color={C.textDim} />
+          </div>
+          {(sc.keywords || []).length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+              {sc.keywords.map((k, i) => <Chip key={i} label={`# ${k}`} color={C.blue} />)}
+            </div>
+          )}
+          {sc.bannedChars?.length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>選択不可キャラ: {sc.bannedChars.join("・")}</div>}
+          {sc.backstory && <div style={{ fontSize: 9, color: C.gold, marginBottom: 2 }}>バックストーリー</div>}
+          {sc.backstory && <div style={pre}>{sc.backstory}</div>}
+        </Section>
+
+        {/* GM向け（ネタバレ） */}
+        <div style={{ marginTop: 16, padding: "6px 10px", background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 5, fontSize: 11, color: C.red, letterSpacing: 1 }}>🔒 ここから下は GM向け（各フェイズの処理・クエスト詳細・ネタバレ）</div>
 
         {(sc.blockedSpots?.length > 0 || rebinds.length > 0) && (
           <Section title="特殊ルール">

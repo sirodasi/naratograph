@@ -15,6 +15,7 @@ export const data = {
   playerCountMin: 2,
   playerCountMax: 4,
   limit: "3日目の夜",
+  keywords: [],                    // PL・GMに公開するキーワード（タグ）。例 ["妖怪の山","ゆっくり"]
   bannedChars: [],
   intro: "……",
   quests: [],
