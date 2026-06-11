@@ -5,6 +5,10 @@ import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
 import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
 import { ACHIEVEMENTS } from "./data/achievements";
+import { getBuiltinScenarios } from "./scenarios";
+
+// コード同梱のビルトインシナリオ（静的。glob 集約済み）
+const BUILTIN_SCENARIOS = getBuiltinScenarios();
 
 // キャラクター名一覧（選択不可設定用・循環import回避のため独立定義）
 const CHAR_NAMES = ["博麗霊夢", "霧雨魔理沙", "チルノ", "紅美鈴", "パチュリー・ノーレッジ", "十六夜咲夜", "レミリア・スカーレット", "フランドール・スカーレット", "アリス・マーガトロイド", "魂魄妖夢", "西行寺幽々子", "八雲藍", "八雲紫", "伊吹萃香", "鈴仙・優曇華院・イナバ", "八意永琳", "蓬莱山輝夜", "藤原妹紅", "射命丸文", "風見幽香", "小野塚小町", "河城にとり", "東風谷早苗", "八坂神奈子", "洩矢諏訪子", "比那名居天子", "星熊勇儀", "古明地さとり", "火焔猫燐", "霊烏路空", "古明地こいし", "ナズーリン", "多々良小傘", "村紗水蜜", "聖白蓮", "封獣ぬえ", "姫海棠はたて", "霍青娥", "物部布都", "豊聡耳神子", "二ツ岩マミゾウ", "秦こころ", "鬼人正邪", "少名針妙丸", "宇佐見菫子", "茨木華扇", "ドレミー・スイート", "クラウンピース", "高麗野あうん", "摩多羅隠岐奈", "依神女苑", "依神紫苑", "庭渡久侘歌", "吉弔八千慧", "埴安神袿姫", "驪駒早鬼", "管牧典", "天弓千亦", "饕餮尤魔", "日白残無"];
@@ -1044,26 +1048,29 @@ function ScenarioForm({ initial, onSave, onCancel }) {
 }
 
 // ── Scenario List ─────────────────────────────────────
-function ScenarioList({ onSelect, onEdit, selectedId }) {
-  const [scenarios, setScenarios] = useState([]);
-  const [loading, setLoading] = useState(true);
+function ScenarioList({ onSelect, onEdit, selectedId, items }) {
+  const [loaded, setLoaded] = useState([]);
+  const [loading, setLoading] = useState(!items);
   const user = auth.currentUser;
 
   useEffect(()=> {
+    if(items)return; // items 指定時は外部（ビルトイン等）なので Firebase は読まない
     if(!user)return;
     const r = ref(db, `users/${user.uid}/scenarios`);
     const unsub = onValue(r, snap => {
       if(snap.exists()){
         const arr = Object.entries(snap.val()).map(([id, v]) => ({...v,id}));
         arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
-        setScenarios(arr);
+        setLoaded(arr);
       } else {
-        setScenarios([]);
+        setLoaded([]);
       }
       setLoading(false);
     });
     return() => unsub();
-  },[user]);
+  },[user, items]);
+
+  const scenarios = items || loaded;
 
   const diffColor = { "Easy":C.green, "Normal":C.blue, "Hard":C.gold, "Lunatic":C.purple };
 
@@ -1439,7 +1446,8 @@ export function ScenarioSelector({ value, onChange }) {
     return() => unsub();
   },[user]);
 
-  const selected = scenarios.find(s => s.id === value?.id);
+  const selected = BUILTIN_SCENARIOS.find(s => s.id === value?.id) || scenarios.find(s => s.id === value?.id);
+  const secHdr = { fontSize:9, color:C.textFaint, letterSpacing:1, margin:"2px 0 6px" };
 
   return(
     <div>
@@ -1457,6 +1465,13 @@ export function ScenarioSelector({ value, onChange }) {
 
       {open&&(
         <div style={{ marginTop:6, padding:10, background:"#0a0c16", border:`1px solid ${C.border}`, borderRadius:4 }}>
+          {BUILTIN_SCENARIOS.length > 0 && (
+            <>
+              <div style={secHdr}>★ 公式シナリオ</div>
+              <ScenarioList items={BUILTIN_SCENARIOS} selectedId={value?.id} onSelect={sc => {onChange(sc);setOpen(false);}}/>
+              <div style={{ ...secHdr, marginTop:10 }}>自作シナリオ</div>
+            </>
+          )}
           {scenarios.length === 0
             ? <div style={{fontSize:10,color:C.textFaint}}>保存済みシナリオがありません。プロフィールから作成してください。</div>
             : <ScenarioList selectedId={value?.id} onSelect={sc => {onChange(sc);setOpen(false);}}/>
