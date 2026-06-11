@@ -1455,9 +1455,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const declareSpell = (spellCard, isPcAttacker, customCount = null) => {
     const attackerId = isPcAttacker ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPcAttacker ? b.npcCombatant : b.pcCombatant;
-    // 実績: 決戦でのPCスペルカード宣言を計測（ログを伴わない単発更新＝アンドゥ対象外）
+    // 実績: 決戦でのPCスペルカード宣言を計測（ログを伴わない単発更新＝アンドゥ対象外）。六根清浄斬は #6 用に記録
     if (isPcAttacker && (b.isFinal ?? (b.type === "mass" && !b.questId))) {
-      upd(p => ({ ...p, pcs: bumpAch(p.pcs, attackerId, a => ({ ...a, spells: (a.spells || 0) + 1 })) }));
+      const isRokkon = (spellCard?.name || "").includes("六根清浄斬");
+      upd(p => ({ ...p, pcs: bumpAch(p.pcs, attackerId, a => ({ ...a, spells: (a.spells || 0) + 1, ...(isRokkon ? { usedRokkon: true } : {}) })) }));
     }
     const attPos = b.positions?.[attackerId] || 1;
     const defPos = b.positions?.[defenderId] || 1;
@@ -4012,12 +4013,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                       ? (isPc ? "pc_evade_move" : "npc_evade_move")
                       : (isPc ? "pc_hit_check" : "npc_hit_check");
                     if (isPc) {
+                      let pcs = p.pcs.map(x => x.uid !== defenderId ? x : {
+                        ...x,
+                        resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: x.resources.スペルカード.cur - 1 } }
+                      });
+                      // 実績(半霊の見切り): 決戦で喰らいボムによる回避成功を記録
+                      const isFinalB = b.isFinal ?? (b.type === "mass" && !b.questId);
+                      if (success && isFinalB) pcs = bumpAch(pcs, defenderId, a => ({ ...a, kuraibomuSuccess: true }));
                       return {
                         ...p,
-                        pcs: p.pcs.map(x => x.uid !== defenderId ? x : {
-                          ...x,
-                          resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: x.resources.スペルカード.cur - 1 } }
-                        }),
+                        pcs,
                         battle: { ...p.battle, phase: nextPhase, pcLastResort: true },
                         log: [logMsg, ...p.log]
                       };

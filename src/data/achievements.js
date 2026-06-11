@@ -47,6 +47,7 @@ export const ACHIEVEMENTS = [
   { id: "fushicho",  type: "session", name: "不死鳥の証明", desc: "1決戦で『不死身』を3回以上使って勝利する",      check: c => c.immortalUses >= 3 && c.won },
   { id: "kyokai",    type: "session", name: "境界跳躍",     desc: "八雲紫が通常移動を一度も行わず、全エリアを踏破する", check: c => c.isMurasaki && c.normalMoves === 0 && c.allAreas },
   { id: "fukochu",   type: "session", name: "不幸中の幸い", desc: "紫苑の不運が効いている間にスペシャルを2回以上出し、その間ファンブルしない", check: c => c.unluckySpecials >= 2 && !c.unluckyFumbled },
+  { id: "hanrei",    type: "session", name: "半霊の見切り", desc: "妖夢が喰らいボム宣言後の回避成功から六根清浄斬を発動して勝利する", check: c => c.isYoumu && c.kuraibomuSuccess && c.usedRokkon && c.won },
   { id: "amanojaku", type: "session", bad: true, name: "天邪鬼の悪運", desc: "逆転スキルが有効な状態で全ダイス6の逆転ファンブルを引く", check: c => c.flipFumble },
 
   // ── 通算実績（ポジティブ） ──
@@ -119,6 +120,9 @@ export function buildAchContext(pc, gs, life, allChars) {
     isMurasaki: pc.charId === "八雲紫",
     unluckySpecials: ach.unluckySpecials || 0,
     unluckyFumbled: !!ach.unluckyFumbled,
+    isYoumu: pc.charId === "魂魄妖夢",
+    kuraibomuSuccess: !!ach.kuraibomuSuccess,
+    usedRokkon: !!ach.usedRokkon,
     yaruki: pc.resources?.やる気?.cur ?? 0,
     won: isDecisiveWin,
     lost: isDecisiveLoss,
