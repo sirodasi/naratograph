@@ -914,6 +914,91 @@ function ScenarioForm({ initial, onSave, onCancel }) {
   );
 }
 
+// ── Scenario Detail（読み取り専用ビューア。収録シナリオの中身を確認する） ──
+export function ScenarioDetail({ scenario: sc, onClose }) {
+  if (!sc) return null;
+  const spotName = id => SPOTS.find(s => s.id === id)?.name || id || "—";
+  const pre = { fontSize: 10, color: C.textDim, whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 3 };
+  const Section = ({ title, children }) => (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 10, color: C.gold, letterSpacing: 1, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>{title}</div>
+      {children}
+    </div>
+  );
+  const EnemyCard = ({ en, label }) => (
+    <div style={{ padding: "6px 8px", background: "rgba(192,57,43,0.06)", border: `1px solid ${C.redBorder}40`, borderRadius: 4, marginBottom: 4 }}>
+      <div style={{ fontSize: 10, color: C.red }}>{en.name || "（無名）"}{en.primary && " ★主敵"}{label && <span style={{ color: C.textFaint }}> {label}</span>}</div>
+      <div style={{ fontSize: 8, color: C.textDim, marginTop: 2 }}>攻撃{en.attack ?? "-"} / 残{en.life ?? "-"} / 人数{en.ninzu ?? "-"}{en.evade != null && ` / 回避${en.evade}`} / SC{en.spellcard ?? "-"}</div>
+      {(en.ds?.name || en.dsName) && <div style={{ fontSize: 8, color: C.textFaint, marginTop: 1 }}>弾幕: {en.ds?.name || en.dsName}</div>}
+      {[en.sc1name, en.sc2name].filter(Boolean).length > 0 && <div style={{ fontSize: 8, color: C.gold, marginTop: 1 }}>SC: {[en.sc1name, en.sc2name].filter(Boolean).join(" / ")}</div>}
+    </div>
+  );
+  const rebinds = Object.entries(sc.spotRebind || {});
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, animation: "backdropIn 0.15s ease" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#0a0c16", border: `1px solid ${C.goldDim}`, borderRadius: 8, padding: 20, maxWidth: 680, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, color: C.gold }}>
+              {sc.official && <span style={{ fontSize: 9, color: C.gold, border: `1px solid ${C.goldDim}`, borderRadius: 3, padding: "0 4px", marginRight: 6, verticalAlign: "middle" }}>公式</span>}
+              {sc.name}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>
+              <Chip label={sc.difficulty} color={C.gold} />
+              <Chip label={`${sc.playerCountMin}〜${sc.playerCountMax}人`} color={C.blue} />
+              <Chip label={`リミット: ${sc.limit}`} color={C.textDim} />
+              {sc.author && <Chip label={`作: ${sc.author}`} color={C.textFaint} />}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", fontSize: 16, flexShrink: 0 }}>✕</button>
+        </div>
+        {sc.bannedChars?.length > 0 && <div style={{ fontSize: 9, color: C.textFaint, marginTop: 4 }}>選択不可: {sc.bannedChars.join("・")}</div>}
+
+        {sc.backstory && <Section title="バックストーリー"><div style={pre}>{sc.backstory}</div></Section>}
+
+        {(sc.blockedSpots?.length > 0 || rebinds.length > 0) && (
+          <Section title="特殊ルール">
+            {sc.blockedSpots?.length > 0 && <div style={{ fontSize: 10, color: C.red }}>立入禁止: {sc.blockedSpots.map(spotName).join("・")}</div>}
+            {rebinds.length > 0 && <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>拠点リダイレクト: {rebinds.map(([a, b]) => `${spotName(a)}→${spotName(b)}`).join(" / ")}</div>}
+          </Section>
+        )}
+
+        <Section title={`クエスト（${(sc.quests || []).length}）`}>
+          {(sc.quests || []).map((q, i) => (
+            <div key={i} style={{ padding: "8px 10px", marginBottom: 6, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 11, color: C.text }}>#{i + 1} {q.name || "（無名クエスト）"}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
+                {q.solutionType && <Chip label={q.solutionType} color={C.gold} />}
+                {q.location && <Chip label={`@${spotName(q.location)}`} color={C.blue} />}
+                {q.level != null && <Chip label={`Lv${q.level}`} color={C.textDim} />}
+                {q.specifiedTag && <Chip label={`指定:${q.specifiedTag}`} color={C.textFaint} />}
+                {q.massBattle && <Chip label="集団戦" color={C.red} />}
+                {q.preBattleFlavorRoll && <Chip label={`演出判定(目標${q.preBattleFlavorRoll.target ?? 6})`} color={C.gold} />}
+              </div>
+              {q.summary && <div style={pre}>{q.summary}</div>}
+              {q.truth && <details style={{ marginTop: 4 }}><summary style={{ fontSize: 9, color: C.gold, cursor: "pointer" }}>真相（ネタバレ）</summary><div style={pre}>{q.truth}</div></details>}
+              {(q.enemy?.name || q.enemy?.dsName || q.enemy?.sc1name) && <div style={{ marginTop: 5 }}><EnemyCard en={q.enemy} /></div>}
+              {q.massBattle && (q.extraEnemies || []).map((e, j) => <EnemyCard key={j} en={e} label="追加敵" />)}
+            </div>
+          ))}
+        </Section>
+
+        <Section title="決戦フェイズ">
+          {(sc.finalBattleEnemies || []).map((e, i) => <EnemyCard key={i} en={e} />)}
+          {(sc.finalBattleOptionalEnemies || []).length > 0 && (
+            <>
+              <div style={{ fontSize: 9, color: C.gold, margin: "6px 0 3px" }}>追加候補エネミー（GMが任意投入）</div>
+              {sc.finalBattleOptionalEnemies.map((e, i) => <EnemyCard key={i} en={e} label="候補" />)}
+            </>
+          )}
+        </Section>
+
+        {sc.notes && <Section title="GMメモ"><div style={pre}>{sc.notes}</div></Section>}
+      </div>
+    </div>
+  );
+}
+
 // ── Scenario List ─────────────────────────────────────
 function ScenarioList({ onSelect, onEdit, selectedId, items }) {
   const [loaded, setLoaded] = useState([]);
@@ -1010,7 +1095,8 @@ export function BgmPresetEditor({ uid }) {
 
 // ── Profile Page ──────────────────────────────────────
 function ProfilePage({ onClose }) {
-  const [view, setView] = useState("account"); // account | scenarios | rooms
+  const [view, setView] = useState("account"); // account | scenarios | builtin | rooms | grown | achievements
+  const [detailSc, setDetailSc] = useState(null); // 収録シナリオ詳細モーダル
   const [editTarget, setEditTarget] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
@@ -1106,7 +1192,7 @@ function ProfilePage({ onClose }) {
     />
   );
 
-  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"],["achievements","実績"]];
+  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["builtin","収録シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"],["achievements","実績"]];
   const ENH_LABEL = { spell:"追加スペカ取得", ability:"能力スキル＋", bond:"特別な絆" };
 
   return(
@@ -1294,6 +1380,31 @@ function ProfilePage({ onClose }) {
           </div>
         );
       })()}
+
+      {/* ── 収録シナリオ（アプリ同梱・読み取り専用） ── */}
+      {view==="builtin"&&(
+        <div style={{maxWidth:640}}>
+          <div style={{fontSize:12,color:C.text,marginBottom:4}}>収録シナリオ（アプリ同梱）</div>
+          <div style={{fontSize:9,color:C.textFaint,marginBottom:12}}>コードに収録されたシナリオです。クリックで中身（バックストーリー・クエスト・敵・特殊ルール）を確認できます。</div>
+          {BUILTIN_SCENARIOS.length===0&&<div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>収録シナリオはまだありません</div>}
+          {BUILTIN_SCENARIOS.map(s=>(
+            <div key={s.id} onClick={()=>setDetailSc(s)} style={{padding:"10px 12px",marginBottom:6,borderRadius:5,cursor:"pointer",background:C.card,border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:12,color:C.text,marginBottom:2}}>
+                {s.official&&<span style={{fontSize:8,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:3,padding:"0 4px",marginRight:5,verticalAlign:"middle"}}>公式</span>}
+                {s.name}
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <Chip label={`${s.playerCountMin}〜${s.playerCountMax}人`} color={C.blue}/>
+                <Chip label={s.difficulty} color={C.gold}/>
+                <Chip label={`リミット: ${s.limit}`} color={C.textDim}/>
+                {s.author&&<Chip label={`作: ${s.author}`} color={C.textFaint}/>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {detailSc && <ScenarioDetail scenario={detailSc} onClose={()=>setDetailSc(null)}/>}
     </div>
   );
 }
@@ -1302,6 +1413,7 @@ function ProfilePage({ onClose }) {
 export function ScenarioSelector({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [scenarios, setScenarios] = useState([]);
+  const [showDetail, setShowDetail] = useState(false);
   const user = auth.currentUser;
 
   useEffect(()=> {
@@ -1362,8 +1474,10 @@ export function ScenarioSelector({ value, onChange }) {
           {selected.bannedChars?.length>0&&(
             <div style={{fontSize:9,color:C.textFaint}}>選択不可: {selected.bannedChars.join("・")}</div>
           )}
+          <button onClick={() => setShowDetail(true)} style={{ marginTop:6, padding:"4px 12px", fontSize:10, cursor:"pointer", borderRadius:3, background:"rgba(255,255,255,0.04)", border:`1px solid ${C.border}`, color:C.textDim }}>🔍 詳細を見る</button>
         </div>
       )}
+      {showDetail && selected && <ScenarioDetail scenario={selected} onClose={()=>setShowDetail(false)}/>}
     </div>
   );
 }
