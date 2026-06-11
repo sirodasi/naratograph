@@ -342,7 +342,7 @@ Toggled by GM in Lobby; stored at `rooms/{roomCode}/config`:
 
 ### 実績 (Achievements)
 
-Steam-style achievements, **per-player (uid)**, two layers. Defined declaratively in [src/data/achievements.js](src/data/achievements.js) (`ACHIEVEMENTS`, each `{ id, name, desc, type: "session"|"lifetime", bad?, check(ctx) }`; `bad:true` = 不名誉枠). ~33 total.
+Steam-style achievements, **per-player (uid)**, two layers. Defined declaratively in [src/data/achievements.js](src/data/achievements.js) (`ACHIEVEMENTS`, each `{ id, name, desc, type: "session"|"lifetime", bad?, check(ctx) }`; `bad:true` = 不名誉枠). ~41 total (incl. 8 char/situation-specific 超ニッチ). `SPOT_TOTAL`/`DS_TOTAL` import the real `SPOTS`/`OFFICIAL_DANMAKU_SKILLS` counts.
 
 - **Session stats** are tracked per-PC in `pc.ach` (`{ spots[], graze, grazeTotal, specials, fumbles, intervene, interveneDecisive, spells, clues, items, livesDropped, livesZero, moved, specialBondGained, growthBoth }`), woven in at event sites via `bumpAch(pcs, uid, fn)` / `achAddTo` (exported from achievements.js). Because the PC is rebuilt each session, `pc.ach` is naturally session-scoped (no reset needed). `dsDecisive` is **derived** from `gs.battle.usedds[uid]` (final battle) — not tracked.
 - **Lifetime stats** live at `users/{uid}/stats` (`sessions, chars[], bondTargets[], wins, graze, specials, fumbles, intervene, ds[], spots[], maxEnh, intimacy10, losses`); unlocked at `users/{uid}/achievements = { [id]: { at } }`; per-room dedup guard at `users/{uid}/achProcessed/{roomCode}`.
