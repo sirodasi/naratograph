@@ -45,6 +45,7 @@ export const ACHIEVEMENTS = [
   { id: "gyakkyo",   type: "session", name: "逆境の覇者",   desc: "【変調】を3つ以上抱えた状態で決戦に勝利する",    check: c => c.badStatus >= 3 && c.won },
   { id: "shunsatsu", type: "session", name: "瞬殺",         desc: "決戦を3ラウンド以内に勝利する",                check: c => c.won && c.decisiveRounds > 0 && c.decisiveRounds <= 3 },
   { id: "fushicho",  type: "session", name: "不死鳥の証明", desc: "1決戦で『不死身』を3回以上使って勝利する",      check: c => c.immortalUses >= 3 && c.won },
+  { id: "kyokai",    type: "session", name: "境界跳躍",     desc: "八雲紫が通常移動を一度も行わず、全エリアを踏破する", check: c => c.isMurasaki && c.normalMoves === 0 && c.allAreas },
   { id: "amanojaku", type: "session", bad: true, name: "天邪鬼の悪運", desc: "逆転スキルが有効な状態で全ダイス6の逆転ファンブルを引く", check: c => c.flipFumble },
 
   // ── 通算実績（ポジティブ） ──
@@ -88,6 +89,10 @@ export function buildAchContext(pc, gs, life, allChars) {
   const scenarioQuests = gs.scenarioData?.quests || [];
   const solved = (gs.quests || []).filter(q => q.solved).length;
   const allQuests = scenarioQuests.length > 0 && solved >= scenarioQuests.length;
+  // 全エリア踏破（境界跳躍用）: 訪れたスポットの area が全エリアを網羅するか
+  const visitedAreas = new Set((ach.spots || []).map(sid => SPOTS.find(s => s.id === sid)?.area).filter(Boolean));
+  const totalAreas = new Set(SPOTS.map(s => s.area)).size;
+  const allAreas = visitedAreas.size >= totalAreas;
   return {
     spots: (ach.spots || []).length,
     graze: ach.graze || 0,
@@ -108,6 +113,9 @@ export function buildAchContext(pc, gs, life, allChars) {
     flipFumble: !!ach.flipFumble,
     immortalUses: ach.immortalUses || 0,
     moved: !!ach.moved,
+    normalMoves: ach.normalMoves || 0,
+    allAreas,
+    isMurasaki: pc.charId === "八雲紫",
     yaruki: pc.resources?.やる気?.cur ?? 0,
     won: isDecisiveWin,
     lost: isDecisiveLoss,

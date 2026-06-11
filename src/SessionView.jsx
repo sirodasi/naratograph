@@ -6513,6 +6513,9 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         if (x.uid !== pc.uid) return x;
         let nx = withAbilityUse({ ...x, currentSpot: spotId }, bd.name, bd.freq);
         if (bd.consume) { const yr = nx.resources.やる気 || { cur: 0, max: 99 }; nx = { ...nx, resources: { ...nx.resources, やる気: { ...yr, cur: Math.max(0, yr.cur - bd.consume) } } }; }
+        // 実績(境界跳躍): 境界移動はエリア踏破に数えるが normalMoves には数えない
+        const ca = nx.ach || {};
+        nx = { ...nx, ach: { ...ca, moved: true, spots: achAddTo(ca, "spots", spotId) } };
         return nx;
       }),
       currentScene: p.currentScene?.pcUid === pc.uid ? { ...p.currentScene, phase: "action" } : p.currentScene,
@@ -7404,7 +7407,8 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
           if (extraUpdates.pc.currentSpot) {
             base.currentSpot = extraUpdates.pc.currentSpot;
             const ca = base.ach || {};
-            base.ach = { ...ca, moved: true, spots: achAddTo(ca, "spots", extraUpdates.pc.currentSpot) };
+            // 通常移動（境界などの能力移動は confirmBoundary 等で別計上）。normalMoves は #8 用
+            base.ach = { ...ca, moved: true, normalMoves: (ca.normalMoves || 0) + 1, spots: achAddTo(ca, "spots", extraUpdates.pc.currentSpot) };
           }
         }
         if (extraUpdates.achInc) base.ach = extraUpdates.achInc({ ...(base.ach || {}) });
