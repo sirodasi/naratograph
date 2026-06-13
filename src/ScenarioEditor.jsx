@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, update, push, remove, get } from "firebase/database";
+import { ref, onValue, set, push, remove, get } from "firebase/database";
+import { updateProfile } from "firebase/auth";
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
 import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
@@ -180,7 +181,7 @@ function summarizeStep(s) {
     if (a.type === "remove_attacker_mirror") return `→自フィールド同番-${a.count}`;
     return "";
   }).filter(Boolean).join(" ");
-  let base = "";
+  let base;
   switch (s.type) {
     case "self":                       base = `自機×${c}`; break;
     case "enemy":                      base = `敵機×${c}`; break;
@@ -1145,7 +1146,7 @@ function ProfilePage({ onClose }) {
   const [editTarget, setEditTarget] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
-  const [newName, setNewName] = useState("");
+  const [newName, setNewName] = useState(() => auth.currentUser?.displayName || "");
   const [nameSaving, setNameSaving] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
   const [grownChars, setGrownChars] = useState({}); // { instanceId: { charId, charName, ds, tags, enhancementsUsed, specialBond, ... } }
@@ -1153,8 +1154,11 @@ function ProfilePage({ onClose }) {
   const user = auth.currentUser;
 
   useEffect(()=> {
-    setNewName(user?.displayName||"");
-    if(user) get(ref(db,`users/${user.uid}/displayName`)).then(snap=>{ if(snap.exists()&&snap.val()) setNewName(snap.val()); }).catch(()=> {});
+    if(!user)return;
+    // RTDB の表示名を取得（無ければ Auth の displayName）。setState は非同期コールバック内のみ（effect本体では呼ばない）
+    get(ref(db,`users/${user.uid}/displayName`))
+      .then(snap=> setNewName(snap.exists()&&snap.val() ? snap.val() : (user.displayName||"")))
+      .catch(()=> setNewName(user.displayName||""));
   },[user]);
 
   // 自分が建てた部屋を取得
@@ -1315,7 +1319,6 @@ function ProfilePage({ onClose }) {
             <div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>作成した部屋はありません</div>
           )}
           {rooms.map(room => {
-            const playerCount = Object.keys(room.players||{}).length;
             const plCount = Object.values(room.players||{}).filter(p => p.role==="pl").length;
             const date = room.createdAt ? new Date(room.createdAt).toLocaleDateString("ja-JP") : "—";
             return(
