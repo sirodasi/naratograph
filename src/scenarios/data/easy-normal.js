@@ -20,6 +20,7 @@
 //   bannedChars[] : 選択不可キャラ名
 //   intro / backstory : 導入文
 //   quests[]      : クエスト定義（solutionType, level, enemy, massBattle, preBattleFlavorRoll 等）
+//   phaseNotes    : 各フェイズの特殊処理メモ（GM向け）{ intro, explore, battle, epilogue }
 //   finalBattleEnemies[] / finalBattleOptionalEnemies[] : 決戦の敵
 //   （Hard/Lunatic データ項目）blockedSpots[] / spotRebind{} など
 //

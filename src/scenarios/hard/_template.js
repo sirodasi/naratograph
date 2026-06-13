@@ -20,6 +20,8 @@ export const data = {
   intro: "……",
   quests: [],
   finalBattleEnemies: [],
+  // 各フェイズの特殊処理メモ（GM向け・任意。主に探索）。集団戦処理などの注記に。
+  // phaseNotes: { explore: "○○スポットでは集団戦…", battle: "", intro: "", epilogue: "" },
 
   // ── データで表現できる Hard/Lunatic 項目（リゾルバが解決） ──
   // blockedSpots: ["33"],                 // 探索不可スポット

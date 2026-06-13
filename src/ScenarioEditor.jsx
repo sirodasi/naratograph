@@ -277,6 +277,7 @@ const EMPTY_SCENARIO = () => ({
   limit: "3日目の夜",
   quests: [],
   notes: "",
+  phaseNotes: {},         // 各フェイズの特殊処理メモ（GM向け）{ intro, explore, battle, epilogue }
   startSpotType: "base",  // "base" (各PCの拠点) | "fixed" (全員同じスポット)
   startSpotId: "",        // startSpotType==="fixed" のときのスポットID
   blockedSpots: [],       // 探索フェイズ中に訪問不可のスポットID（Hard/Lunatic 追加ルール）
@@ -854,6 +855,17 @@ function ScenarioForm({ initial, onSave, onCancel }) {
             <textarea style={{...taBase,height:80}} value={sc.notes||""}
               onChange={e => upd("notes",e.target.value)}
               placeholder="GMだけが見るメモ（セッション中には非表示）"/>
+
+            <SecTitle>各フェイズの特殊処理（GM向け・任意）</SecTitle>
+            <div style={{ fontSize:9, color:C.textFaint, marginBottom:6 }}>各フェイズで必要な特殊処理を書き残します（例: 探索の集団戦処理、特定スポットの扱いなど）。主に探索フェイズ。</div>
+            {[["intro","導入"],["explore","探索"],["battle","決戦"],["epilogue","終幕"]].map(([k,label])=>(
+              <div key={k} style={{ marginBottom:4 }}>
+                <Label>{label}</Label>
+                <textarea style={{...taBase,height:48}} value={(sc.phaseNotes||{})[k]||""}
+                  onChange={e => upd("phaseNotes", { ...(sc.phaseNotes||{}), [k]: e.target.value })}
+                  placeholder={`${label}フェイズの特殊処理（任意）`}/>
+              </div>
+            ))}
           </div>
 
         </div>
@@ -919,18 +931,17 @@ function ScenarioForm({ initial, onSave, onCancel }) {
   );
 }
 
-// ── Scenario Detail（読み取り専用ビューア。収録シナリオの中身を確認する） ──
-export function ScenarioDetail({ scenario: sc, onClose }) {
-  if (!sc) return null;
-  const spotName = id => SPOTS.find(s => s.id === id)?.name || id || "—";
-  const pre = { fontSize: 10, color: C.textDim, whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 3 };
-  const Section = ({ title, children }) => (
+// ── Scenario Detail の小コンポーネント（render 内で定義しないようモジュールレベルに） ──
+function Section({ title, children }) {
+  return (
     <div style={{ marginTop: 12 }}>
       <div style={{ fontSize: 10, color: C.gold, letterSpacing: 1, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>{title}</div>
       {children}
     </div>
   );
-  const EnemyCard = ({ en, label }) => (
+}
+function EnemyCard({ en, label }) {
+  return (
     <div style={{ padding: "6px 8px", background: "rgba(192,57,43,0.06)", border: `1px solid ${C.redBorder}40`, borderRadius: 4, marginBottom: 4 }}>
       <div style={{ fontSize: 10, color: C.red }}>{en.name || "（無名）"}{en.primary && " ★主敵"}{label && <span style={{ color: C.textFaint }}> {label}</span>}</div>
       <div style={{ fontSize: 8, color: C.textDim, marginTop: 2 }}>攻撃{en.attack ?? "-"} / 残{en.life ?? "-"} / 人数{en.ninzu ?? "-"}{en.evade != null && ` / 回避${en.evade}`} / SC{en.spellcard ?? "-"}</div>
@@ -938,7 +949,15 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
       {[en.sc1name, en.sc2name].filter(Boolean).length > 0 && <div style={{ fontSize: 8, color: C.gold, marginTop: 1 }}>SC: {[en.sc1name, en.sc2name].filter(Boolean).join(" / ")}</div>}
     </div>
   );
+}
+
+// ── Scenario Detail（読み取り専用ビューア。収録シナリオの中身を確認する） ──
+export function ScenarioDetail({ scenario: sc, onClose }) {
+  if (!sc) return null;
+  const spotName = id => SPOTS.find(s => s.id === id)?.name || id || "—";
+  const pre = { fontSize: 10, color: C.textDim, whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 3 };
   const rebinds = Object.entries(sc.spotRebind || {});
+  const phaseNotes = [["intro","導入"],["explore","探索"],["battle","決戦"],["epilogue","終幕"]].filter(([k]) => (sc.phaseNotes || {})[k]?.trim());
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, animation: "backdropIn 0.15s ease" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#0a0c16", border: `1px solid ${C.goldDim}`, borderRadius: 8, padding: 20, maxWidth: 680, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
@@ -970,6 +989,17 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
 
         {/* GM向け（ネタバレ） */}
         <div style={{ marginTop: 16, padding: "6px 10px", background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 5, fontSize: 11, color: C.red, letterSpacing: 1 }}>🔒 ここから下は GM向け（各フェイズの処理・クエスト詳細・ネタバレ）</div>
+
+        {phaseNotes.length > 0 && (
+          <Section title="各フェイズの特殊処理">
+            {phaseNotes.map(([k, label]) => (
+              <div key={k} style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 9, color: C.gold }}>{label}フェイズ</div>
+                <div style={pre}>{sc.phaseNotes[k]}</div>
+              </div>
+            ))}
+          </Section>
+        )}
 
         {(sc.blockedSpots?.length > 0 || rebinds.length > 0) && (
           <Section title="特殊ルール">
@@ -1399,7 +1429,7 @@ function ProfilePage({ onClose }) {
       {/* ── 収録シナリオ（アプリ同梱・読み取り専用） ── */}
       {view==="builtin"&&(
         <div style={{maxWidth:640}}>
-          <div style={{fontSize:12,color:C.text,marginBottom:4}}>収録シナリオ（アプリ同梱）</div>
+          <div style={{fontSize:12,color:C.text,marginBottom:4}}>収録シナリオ</div>
           <div style={{fontSize:9,color:C.textFaint,marginBottom:12}}>コードに収録されたシナリオです。クリックで中身（バックストーリー・クエスト・敵・特殊ルール）を確認できます。</div>
           {BUILTIN_SCENARIOS.length===0&&<div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>収録シナリオはまだありません</div>}
           {BUILTIN_SCENARIOS.map(s=>(
@@ -1465,7 +1495,7 @@ export function ScenarioSelector({ value, onChange }) {
         <div style={{ marginTop:6, padding:10, background:"#0a0c16", border:`1px solid ${C.border}`, borderRadius:4 }}>
           {BUILTIN_SCENARIOS.length > 0 && (
             <>
-              <div style={secHdr}>収録シナリオ（アプリ同梱）</div>
+              <div style={secHdr}>収録シナリオ</div>
               <ScenarioList items={BUILTIN_SCENARIOS} selectedId={value?.id} onSelect={sc => {onChange(sc);setOpen(false);}}/>
               <div style={{ ...secHdr, marginTop:10 }}>エディターのシナリオ（自分の作成）</div>
             </>
