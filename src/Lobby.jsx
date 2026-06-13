@@ -165,16 +165,20 @@ function Lobby({ user, displayName, onProfile }) {
   const [err, setErr]         = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied]   = useState(false);
+  const [createScenario, setCreateScenario] = useState(null); // 部屋作成前に確定するシナリオ
 
   const createRoom = async () => {
     if (!isAllowedGm(user)) { setErr("このアカウントには部屋の作成（GM）権限がありません。"); return; }
+    if (!createScenario) { setErr("先にシナリオを選択してください。"); return; }
     setLoading(true);
     setErr("");
     const code = Math.random().toString(36).slice(2, 7).toUpperCase();
     try {
       await set(ref(db, `rooms/${code}`), {
         gmUid: user.uid, gmName: displayName, createdAt: Date.now(),
-        scenario: "", phase: "prep",
+        scenario: createScenario.name, scenarioId: createScenario.id,
+        scenarioData: createScenario, limit: createScenario.limit || "3日目の夜",
+        phase: "prep",
         players: { [user.uid]: { uid: user.uid, name: displayName, role: "gm", ready: false } },
         state: null, scene: null,
       });
@@ -238,14 +242,18 @@ function Lobby({ user, displayName, onProfile }) {
       )}
 
       {view === "create" && (
-        <LobbyCard color={C.red} style={{ minWidth: 280, animation: "lbFadeUp 0.4s 0.05s both" }}>
-          <div style={{ textAlign: "center", padding: "24px 32px" }}>
-            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 20 }}>GMとして新しいセッションを開始します</div>
-            <button onClick={createRoom} disabled={loading} style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "12px 32px", width: "100%", letterSpacing: 2 }) }}>
-              {loading ? "作成中…" : "部屋を作成する"}
+        <LobbyCard color={C.red} style={{ minWidth: 320, maxWidth: 420, animation: "lbFadeUp 0.4s 0.05s both" }}>
+          <div style={{ padding: "22px 26px" }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 14, textAlign: "center" }}>GMとして新しいセッションを開始します</div>
+            <div style={{ fontSize: 10, color: C.red, letterSpacing: 1, marginBottom: 6 }}>シナリオを選択（必須）</div>
+            <ScenarioSelector value={createScenario} onChange={sc => setCreateScenario(sc)} />
+            <button onClick={createRoom} disabled={loading || !createScenario}
+              style={{ ...btn(C.redBg, C.redBorder, C.red, { padding: "12px 32px", width: "100%", letterSpacing: 2, marginTop: 16, opacity: createScenario ? 1 : 0.4 }) }}>
+              {loading ? "作成中…" : createScenario ? "この内容で部屋を作成する" : "シナリオを選択してください"}
             </button>
-            <br />
-            <button onClick={() => setView("top")} style={{ ...btn("none", "none", C.textFaint, { marginTop: 12, fontSize: 11 }) }}>← 戻る</button>
+            <div style={{ textAlign: "center" }}>
+              <button onClick={() => { setView("top"); setCreateScenario(null); }} style={{ ...btn("none", "none", C.textFaint, { marginTop: 12, fontSize: 11 }) }}>← 戻る</button>
+            </div>
           </div>
         </LobbyCard>
       )}
@@ -297,7 +305,6 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
   const isMobile = useIsMobile();
   const [room, setRoom]                   = useState(null);
   const [step, setStep]                   = useState("charSelect");
-  const [selectedScenario, setSelectedScenario] = useState(null);
   const [showProfile, setShowProfile]     = useState(false);
   const [selectedChar, setSelectedChar]   = useState(null);
   const [selectedGrownId, setSelectedGrownId] = useState(null); // 成長インスタンスを選択中ならそのID（未成長は null）
@@ -499,8 +506,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
                 <div style={S.h2}>① シナリオ</div>
                 <button onClick={() => setShowProfile(true)} style={{ ...btn("rgba(255,255,255,0.03)", C.border, C.textDim, { padding: "2px 8px", fontSize: 9 }) }}>📋 管理</button>
               </div>
-              <ScenarioSelector value={selectedScenario} onChange={sc => {
-                setSelectedScenario(sc);
+              <ScenarioSelector value={room?.scenarioData} onChange={sc => {
                 update(ref(db, `rooms/${roomCode}`), {
                   scenario:     sc.name,
                   scenarioId:   sc.id,
