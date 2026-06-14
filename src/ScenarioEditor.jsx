@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
 import { ref, onValue, set, push, remove, get } from "firebase/database";
 import { updateProfile } from "firebase/auth";
@@ -960,7 +961,8 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
   const pre = { fontSize: 10, color: C.textDim, whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 3 };
   const rebinds = Object.entries(sc.spotRebind || {});
   const phaseNotes = [["intro","導入"],["explore","探索"],["battle","決戦"],["epilogue","終幕"]].filter(([k]) => (sc.phaseNotes || {})[k]?.trim());
-  return (
+  // transform を持つ祖先（LobbyCard のアニメ等）の影響で position:fixed の基準がずれるのを避けるため body 直下へ Portal
+  return createPortal((
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, animation: "backdropIn 0.15s ease" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#0a0c16", border: `1px solid ${C.goldDim}`, borderRadius: 8, padding: 20, maxWidth: 680, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
@@ -1048,7 +1050,7 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
         </>)}
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 // ── Scenario List ─────────────────────────────────────
