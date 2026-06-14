@@ -184,7 +184,7 @@ function useMapBounds(containerRef, active = true) {
 }
 
 // ─── MapView（GM/PL共通）────────────────────────────────────────
-function MapView({ gs, sceneData, isGm, upd, onSpotClick, user, setSceneData }) {
+function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
   const cycleIdx  = gs.cycleIdx || 0;
   const isNight   = cycleIdx === 3;
   const isEvening = cycleIdx === 2;
@@ -784,7 +784,7 @@ function SessionApp({ roomCode, user }) {
       clearTimeout(timeout);
       if (snap.exists()) {
         const val = snap.val();
-        setGs(prev => ({
+        setGs(_prev => ({
           ...DEFAULT_GS, ...val,
           resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
           items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
@@ -957,7 +957,7 @@ function SessionApp({ roomCode, user }) {
     }
   };
 
-  const startGambleBattle = (quest) => {
+  const _startGambleBattle = (quest) => {
     upd(p => ({
       ...p,
       battle: {

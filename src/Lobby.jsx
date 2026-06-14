@@ -48,7 +48,7 @@ function LobbyCard({ color = C.gold, children, style = {}, onClick }) {
 // ─── ユーティリティ ──────────────────────────────────────────────
 
 function rollD6()  { return Math.floor(Math.random() * 6) + 1; }
-function rollD66() { const a = rollD6(), b = rollD6(); return Math.min(a, b) * 10 + Math.max(a, b); }
+function _rollD66() { const a = rollD6(), b = rollD6(); return Math.min(a, b) * 10 + Math.max(a, b); }
 
 // ─── CharSprite ──────────────────────────────────────────────────
 
@@ -164,7 +164,6 @@ function Lobby({ user, displayName, onProfile }) {
   const [joinCode, setJoinCode] = useState("");
   const [err, setErr]         = useState("");
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied]   = useState(false);
   const [createScenario, setCreateScenario] = useState(null); // 部屋作成前に確定するシナリオ
 
   const createRoom = async () => {
@@ -301,7 +300,7 @@ const CUSTOM_INIT = {
   portrait: null,
 };
 
-function PrepRoom({ roomCode, user, displayName, isGm }) {
+function PrepRoom({ roomCode, user, isGm }) {
   const isMobile = useIsMobile();
   const [room, setRoom]                   = useState(null);
   const [step, setStep]                   = useState("charSelect");
@@ -312,7 +311,7 @@ function PrepRoom({ roomCode, user, displayName, isGm }) {
   const [selectedSkillId, setSelectedSkillId] = useState(null);
   const [diceResult, setDiceResult]       = useState(null);
   const [diceAnim, setDiceAnim]           = useState(false);
-  const [scenario, setScenario]           = useState("");
+  const [_scenario, setScenario]           = useState("");
   const [customForm, setCustomForm]       = useState(false);
   const [custom, setCustom]               = useState(CUSTOM_INIT);
   const [copied, setCopied]               = useState(false);

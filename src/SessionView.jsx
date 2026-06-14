@@ -8,7 +8,7 @@ import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
 import { C, btnFull, btnSmall, iStyle } from "./styles/colors";
 import { getSpellCardEffect } from "./data/spellCardEffects";
 import { getAbilityEffect, applyAbilityPassiveStats, getActiveAbility, isAtBase } from "./data/abilityEffects";
-import { applyStep, applyRandomResult, emptyGrid as makeEmptyGrid, analyzeSteps, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
+import { applyStep, applyRandomResult, resolveCount, shiftNon25Horizontal } from "./data/effectHandlers";
 import { getPreBattleFlavorRoll } from "./scenarios";
 import { ACHIEVEMENTS, buildAchContext, aggregateLifetime, getAchievement, bumpAch, achAddTo } from "./data/achievements";
 import { db, storage } from "./firebase";
@@ -96,19 +96,19 @@ export const ITEM_DATA = {
     timing: "行為判定直前",
     desc:    "次の行為判定の判定ダイス数が「1」増加します。",
     canUse:  () => false,
-    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, money: true } }),
+    use: (pc, _gs) => ({ ...pc, items: { ...pc.items, "小銭": Math.max(0, (pc.items["小銭"] || 0) - 1) }, flags: { ...pc.flags, money: true } }),
   },
   "お守り": {
     timing: "移動処理中",
     desc:    "移動で「6」が出たとき、ハプニングが発生せず6マス先まで移動できます。",
     canUse:  () => false,
-    use: (pc, gs) => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, amulet: true } }),
+    use: (pc, _gs) => ({ ...pc, items: { ...pc.items, "お守り": Math.max(0, (pc.items["お守り"] || 0) - 1) }, flags: { ...pc.flags, amulet: true } }),
   },
   "Pアイテム": {
     timing: "いつでも",
     desc:    "【霊力】を「3点」獲得します。",
     canUse:  pc => (pc.items?.["Pアイテム"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
-    use: (pc, gs) => {
+    use: (pc, _gs) => {
       const resources = { ...pc.resources };
       if (!(pc.badStatus || []).includes("スランプ")) {
         const r = resources.霊力 || { cur: 0, max: 30 };
@@ -121,7 +121,7 @@ export const ITEM_DATA = {
     timing: "いつでも",
     desc:    "3つ消費して【残り人数】を「1点」獲得します。（3つ以上保持時のみ）",
     canUse:  pc => (pc.items?.["残機のかけら"] || 0) >= 3 && !(pc.badStatus || []).includes("二日酔い"),
-    use: (pc, gs) => {
+    use: (pc, _gs) => {
       const resources = { ...pc.resources };
       const r = resources.残り人数 || { cur: 0, max: 5 };
       resources.残り人数 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
@@ -132,7 +132,7 @@ export const ITEM_DATA = {
     timing: "いつでも",
     desc:    "2つ消費して【スペルカード】を「1点」獲得します。（2つ以上保持時のみ）",
     canUse:  pc => (pc.items?.["スペカのかけら"] || 0) >= 2 && !(pc.badStatus || []).includes("二日酔い"),
-    use: (pc, gs) => {
+    use: (pc, _gs) => {
       const resources = { ...pc.resources };
       const r = resources.スペルカード || { cur: 0, max: 5 };
       resources.スペルカード = { cur: Math.min(r.cur + 1, r.max), max: r.max };
@@ -143,7 +143,7 @@ export const ITEM_DATA = {
     timing: "弾幕ごっこ前",
     desc:    "1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）",
     canUse:  pc => (pc.items?.["妖器"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
-    use: (pc, gs) => {
+    use: (pc, _gs) => {
       const resources = { ...pc.resources };
       const r = resources.攻撃力 || { cur: 1, max: 5 };
       resources.攻撃力 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
@@ -1108,7 +1108,7 @@ function BattleParticleCanvas() {
       isNpc: Math.random() < 0.55,
       a: 0.05 + Math.random() * 0.09,
     });
-    const pts = Array.from({ length: 48 }, (_, i) =>
+    const pts = Array.from({ length: 48 }, (_, _i) =>
       mk(Math.random() * ((cv.height || 600) + 20))
     );
 
@@ -1197,8 +1197,9 @@ function SpellDeclareItem({ spell, cardColor, declareSpell, isPcAttacker }) {
 }
 
 export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
-  const b = gs.battle;
-  if (!b) return null;
+  // b は実際には常に存在する（battle.active 時のみ描画）。フックを無条件に呼ぶため || {} で安全化し、
+  // 実際の null 判定はフック群の後で行う（rules-of-hooks 準拠）。
+  const b = gs.battle || {};
 
   const allPcs = gs.pcs || [];
   const pcs = b.participantPcUids
@@ -1322,6 +1323,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     }
   }, [b.phase, npcsDefeated, alivePcs.length]);
 
+  if (!gs.battle) return null; // フック群の後で実際の有無を判定（上の || {} と対）
+
   const handleSupportFire = (userUid) => {
     upd(p => ({
       ...p,
@@ -1334,7 +1337,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     }));
   };
 
-  const handleCover = (userUid, targetUid) => {
+  const _handleCover = (userUid, targetUid) => {
     animateDice(1, "かばう", (res) => {
       const die = res[0];
       upd(p => {
@@ -1411,8 +1414,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     });
   };
 
-  const executePcShot = () => executeShot(true);
-  const executeNpcShot = () => executeShot(false);
+  const _executePcShot = () => executeShot(true);
+  const _executeNpcShot = () => executeShot(false);
 
   // ─── スペルカード関連 ─────────────────────────────────────────────
 
@@ -1462,7 +1465,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     }
     const attPos = b.positions?.[attackerId] || 1;
     const defPos = b.positions?.[defenderId] || 1;
-    const attackerGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
+    const _attackerGrid = b.grids?.[attackerId] || [0,0,0,0,0,0];
 
     // スペカ点数を消費（no_sc_cost 効果（幻想春花）があれば消費しない）
     const consumeSpell = (p) => {
@@ -2985,7 +2988,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const spellPts    = attacker?.resources?.スペルカード?.cur || 0;
     const canDeclare  = isPcAttacker ? (isGm || user.uid === b.pcCombatant) : isGm;
     const cardColor   = isPcAttacker ? C.blue : C.red;
-    const borderColor = isPcAttacker ? C.blueBorder : C.redBorder;
+    const _borderColor = isPcAttacker ? C.blueBorder : C.redBorder;
 
     // roll_check_then_place: 判定ダイスを振る
     if (b.spellRollCheck && b.spellRollCheck.attackerId === (isPcAttacker ? b.pcCombatant : b.npcCombatant)) {
@@ -3812,7 +3815,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     const targetValue = isPc ? evadeTarget : npcDanmakuAtPos + 3;
     const bulletCount = isPc ? danmakuAtPos : npcDanmakuAtPos;
     const titleColor = isPc ? C.blue : C.red;
-    const borderColor = isPc ? C.blueBorder : C.redBorder;
+    const _borderColor = isPc ? C.blueBorder : C.redBorder;
     const isPlayable = isPc ? (user.uid === b.pcCombatant || isGm) : isGm;
     const canAutoSuccess = bulletCount === 0;
     const remainingDice = getEvadeDiceCount(isPc);
@@ -4312,8 +4315,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       });
     };
 
-    const borderColor = isVictory ? C.gold : C.red;
-    const titleColor  = isVictory ? C.gold : C.red;
+    const _borderColor = isVictory ? C.gold : C.red;
+    const _titleColor  = isVictory ? C.gold : C.red;
     const title       = isVictory
       ? (isFinal ? "🏆 最終決戦制覇！" : "🎉 勝利！")
       : (isFinal ? "💀 最終決戦敗北..." : "💀 敗北...");
@@ -5494,9 +5497,9 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
                   {isDead && <div style={{ position: "absolute", top: 4, right: 7, fontSize: 11, color: C.red, opacity: 0.6 }}>✝</div>}
                   <div style={{ fontSize: 12, color: isDead ? C.red : C.text, fontWeight: "bold", marginBottom: 7 }}>{pc.charName}</div>
                   <div style={{ fontSize: 10, color: C.textDim, lineHeight: 2 }}>
-                    <div>残り人数　<span style={{ color: lives > 0 ? C.green : C.red, fontWeight: "bold" }}>{lives}</span></div>
-                    <div>スペカ　　<span style={{ color: C.blue }}>{spells}</span></div>
-                    <div>グレイズ　<span style={{ color: C.gold }}>{graze}</span></div>
+                    <div>残り人数{"　"}<span style={{ color: lives > 0 ? C.green : C.red, fontWeight: "bold" }}>{lives}</span></div>
+                    <div>スペカ{"　　"}<span style={{ color: C.blue }}>{spells}</span></div>
+                    <div>グレイズ{"　"}<span style={{ color: C.gold }}>{graze}</span></div>
                   </div>
                 </div>
               );
@@ -5811,9 +5814,9 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const hasActed      = (gs.actedPcs ||[]).includes(pc.uid);
   const isActing      = gs.currentScene?.pcUid === pc.uid;
   const skillCanActivate = skill && skill.type !== "オート";
-  const currentSpotName  = getSpot(pc.currentSpot)?.name || "-";
+  const _currentSpotName  = getSpot(pc.currentSpot)?.name || "-";
 
-  const useItem = itemName => {
+  const consumeItem = itemName => {
     const data = ITEM_DATA[itemName];
     if (!data) return;
     sfx.itemUse();
@@ -6957,7 +6960,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         </div>
       )}
 
-      {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => useItem(itemModal)} onCancel={() => setItemModal(null)} />}
+      {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => consumeItem(itemModal)} onCancel={() => setItemModal(null)} />}
       {skillModal && skill && <SkillActivateModal skillName={skill.name} skillType={skill.type} desc={skill.desc} onConfirm={activateSkill} onCancel={() => setSkillModal(null)} />}
       {abilityModal && <SkillActivateModal skillName={abilityModal.name} skillType={abilityModal.type} desc={abilityModal.desc} onConfirm={() => activateAbility(abilityModal)} onCancel={() => setAbilityModal(null)} />}
       {abilityItemPick && (
@@ -7589,7 +7592,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
 
   // 6. LOSE_ITEM
   if (act.type === "LOSE_ITEM") {
-    const ownedItems = Object.entries(pc.items || {}).filter(([k, v]) => v > 0).map(([k]) => k);
+    const ownedItems = Object.entries(pc.items || {}).filter(([_k, v]) => v > 0).map(([k]) => k);
     if (ownedItems.length === 0) {
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
@@ -7659,7 +7662,7 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
 
   // 8. OPTIONAL_TRADE
   if (act.type === "OPTIONAL_TRADE") {
-    const ownedItems = Object.entries(pc.items || {}).filter(([k, v]) => v > 0).map(([k]) => k);
+    const ownedItems = Object.entries(pc.items || {}).filter(([_k, v]) => v > 0).map(([k]) => k);
     if (ownedItems.length === 0) {
       return (
         <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
@@ -8038,21 +8041,22 @@ function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone 
 // ─── ScenePanel ───────────────────────────────────────────────────
 function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) {
   const sc = gs.currentScene;
-  if (!sc) return null;
-  const pc = gs.pcs.find(p => p.uid === sc.pcUid);
-  if (!pc) return null;
-
-  const isMyTurn  = pc.uid === user?.uid || isGm;
-  // 手下シーン: sc.minionId があるとシーンの「位置」は手下のスポット。効果(霊力/絆/手がかり)は所有者pcが受ける。
-  const sceneMinion = sc.minionId ? (gs.minions || []).find(m => m.id === sc.minionId) : null;
-  const sceneSpot = sceneMinion ? sceneMinion.currentSpot : pc.currentSpot;
-  const spotDetail = SPOT_DETAILS[sceneSpot] || { tags: [], events:[], desc: "" };
+  const pc = sc ? gs.pcs.find(p => p.uid === sc.pcUid) : null;
+  // フックは無条件に呼ぶ（rules-of-hooks）。実際の sc/pc の有無判定はフック群の後で行う。
   const [fusuiSel, setFusuiSel] = useState(null); // 風水：振り直し対象のダイス添字配列（null=非選択モード）
   const [kyoukiSel, setKyoukiSel] = useState(null); // 狂気：観戦保持者が振り直す対象のダイス添字配列（null=非選択モード）
   const [unmeiSel, setUnmeiSel] = useState(null); // 運命＋：裏返す対象のダイス添字配列（null=非選択モード）
   const [doubutsuSel, setDoubutsuSel] = useState(null); // 動物を導く：観戦保持者が応援で振り直す対象のダイス添字配列
   const [qDoubutsuSel, setQDoubutsuSel] = useState(null); // クエスト版 動物：{ uid, indices } 振り直し対象（判定者別）
   const [shiwoWarp, setShiwoWarp] = useState(false); // 死を操る：ワープ先選択モード
+  const [selectedTarget, setSelectedTarget] = useState(""); // quest_penalty: 対象選択（条件付きフックにしないため先頭で宣言）
+  if (!sc || !pc) return null;
+
+  const isMyTurn  = pc.uid === user?.uid || isGm;
+  // 手下シーン: sc.minionId があるとシーンの「位置」は手下のスポット。効果(霊力/絆/手がかり)は所有者pcが受ける。
+  const sceneMinion = sc.minionId ? (gs.minions || []).find(m => m.id === sc.minionId) : null;
+  const sceneSpot = sceneMinion ? sceneMinion.currentSpot : pc.currentSpot;
+  const spotDetail = SPOT_DETAILS[sceneSpot] || { tags: [], events:[], desc: "" };
   const myPc = gs.pcs.find(p => p.uid === user?.uid); // 操作中ユーザーのPC（観戦者能力の判定用）
 
   const writeLog = msg => upd(p => ({ ...p, log: [msg, ...p.log] }));
@@ -8454,7 +8458,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 
   const hasClueHere = gs.clues?.includes(sceneSpot);
 
-  const gainBond = targetName => {
+  const _gainBond = targetName => {
     if ((pc.badStatus || []).includes("不機嫌")) {
       writeLog(`${pc.charName} は変調《不機嫌》のため絆を獲得できなかった`);
       return;
@@ -9781,8 +9785,6 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
             const allDecided = pcsHere.every(p => decisions[p.uid] !== undefined);
             const anyPaid = Object.values(decisions).some(v => v === true);
 
-            const [selectedTarget, setSelectedTarget] = useState("");
-
             const makeDecision = (paid, updatedPc = null) => {
               upd(p => {
                 const nextPcs = updatedPc ? p.pcs.map(x => x.uid === user.uid ? updatedPc : x) : p.pcs;
@@ -10053,7 +10055,7 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
 }
 
 // ─── RightPanel ───────────────────────────────────────────────────
-export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doAdvanceCycle, doReiryoku, doTransitionToExplore, pendingAction, setPendingAction, SPOTS, presence = {}, width = 300, undo, undoCount = 0 }) {
+export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doReiryoku, setPendingAction, SPOTS, presence = {}, width = 300, undo, undoCount = 0 }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
   const [paperModal, setPaperModal] = useState(null);
@@ -10848,7 +10850,7 @@ function BattleDiceTray({ diceResult, diceAnim, label }) {
   );
 }
 
-function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
+function BattleRightPanel({ gs, upd, user, isGm, animateDice }) {
   const [battleTab, setBattleTab] = useState("info");
   const b = gs.battle;
 
@@ -10867,7 +10869,7 @@ function BattleRightPanel({ gs, upd, user, isGm, getSpot, animateDice }) {
   );
 
   const isSpectator = spectators.some(p => p.uid === user.uid);
-  const isCombatant = b.pcCombatant === user.uid;
+  const _isCombatant = b.pcCombatant === user.uid;
 
   // PC/NPC 双方の名前を解決（援護/かばうの主体が NPC のこともあるため）
   const npcsList = b.participants?.npcs || [];

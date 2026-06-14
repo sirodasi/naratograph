@@ -80,7 +80,7 @@ export const achAddTo = (ach, key, val) => { const arr = ach[key] || []; return 
 
 // 当該PCのセッション統計（pc.ach）＋最終gs から、判定用の平坦コンテキストを作る。
 // life は集計後（このセッション分を含む）の通算統計。
-export function buildAchContext(pc, gs, life, allChars) {
+export function buildAchContext(pc, gs, life) {
   const ach = pc.ach || {};
   const isDecisiveWin = gs.battle?.result === "pc_win";
   const isDecisiveLoss = gs.battle?.result === "npc_win" || gs.battle?.result === "defeat";

@@ -47,13 +47,13 @@ function injectStyle() {
       }
     `;
     document.head.appendChild(el);
-  } catch {}
+  } catch { /* noop */ }
 }
 
 // 実効値を <html> 属性へ反映
 function apply() {
   const reduced = effectiveReduced();
-  try { document.documentElement.setAttribute("data-reduce-motion", reduced ? "1" : "0"); } catch {}
+  try { document.documentElement.setAttribute("data-reduce-motion", reduced ? "1" : "0"); } catch { /* noop */ }
   return reduced;
 }
 
@@ -69,7 +69,7 @@ export const motion = {
   toggle() {
     const next = !effectiveReduced();
     _override = next;
-    try { localStorage.setItem("reduceMotion", next ? "1" : "0"); } catch {}
+    try { localStorage.setItem("reduceMotion", next ? "1" : "0"); } catch { /* noop */ }
     return apply();
   },
 
@@ -83,6 +83,6 @@ export const motion = {
       const handler = () => { if (_override === null) apply(); };
       if (mq.addEventListener) mq.addEventListener("change", handler);
       else if (mq.addListener) mq.addListener(handler);  // 旧 Safari
-    } catch {}
+    } catch { /* noop */ }
   },
 };

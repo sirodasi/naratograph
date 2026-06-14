@@ -1047,7 +1047,7 @@ export function getSpellCardEffect(spellCardString) {
 /** スペルカード文字列からカード名のみを抽出 */
 export function extractSpellCardName(spellCardString) {
   if (!spellCardString) return spellCardString;
-  const bracketIdx = spellCardString.indexOf("】");
+  const _bracketIdx = spellCardString.indexOf("】");
   // 【...】パターンが終わる位置まではカード名+効果表記なので名前部分だけ返す
   const firstBracket = spellCardString.indexOf("【");
   if (firstBracket > 0) return spellCardString.slice(0, firstBracket).trim();

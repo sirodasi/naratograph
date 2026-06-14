@@ -57,7 +57,7 @@ export const sfx = {
 
   toggle() {
     _enabled = !_enabled;
-    try { localStorage.setItem("sfxMuted", _enabled ? "" : "1"); } catch {}
+    try { localStorage.setItem("sfxMuted", _enabled ? "" : "1"); } catch { /* noop */ }
   },
 
   // ── 弾幕配置: 短い高音ポップ ─────────────────────────────────────────────
@@ -67,7 +67,7 @@ export const sfx = {
       const t = getCtx().currentTime;
       // NPC側（青）は高め、PC側（赤）は少し低め
       tone("sine", isNpc ? 700 : 480, t, 0.09, 0.08, isNpc ? 1200 : 880);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── スペルカード宣言: 神秘的な和音チャイム ──────────────────────────────
@@ -85,7 +85,7 @@ export const sfx = {
       });
       // キラキラ高音（後半）
       tone("sine", isNpc ? 880 : 2093, t + 0.3, 0.5, 0.06, isNpc ? 440 : 1047);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── フェーズチェンジ ────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ export const sfx = {
         default:
           break;
       }
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── ダイスロール開始: ガラガラ音 ────────────────────────────────────────
@@ -136,7 +136,7 @@ export const sfx = {
       for (let i = 0; i < 5; i++) {
         burst(t + i * 0.09 + Math.random() * 0.03, 0.06, 0.12, 900 + Math.random() * 2000);
       }
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── ダイス結果確定 ─────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ export const sfx = {
       } else {
         tone("triangle", 523.25, t, 0.1, 0.09, 659.25);
       }
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── ヒット確定 ──────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ export const sfx = {
       const t = getCtx().currentTime;
       tone("sawtooth", 220, t, 0.2, 0.2, 55);
       burst(t, 0.1, 0.09, 500);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── 勝利 ──────────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ export const sfx = {
       [261.63, 329.63, 392, 523.25, 659.25].forEach((f, i) =>
         tone("sine", f, t + i * 0.1, 0.5, 0.14)
       );
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── 敗北 ──────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ export const sfx = {
       [392, 349.23, 311.13, 261.63, 220].forEach((f, i) =>
         tone("sine", f, t + i * 0.12, 0.55, 0.12)
       );
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── クエスト解決: 上昇三音＋キラキラ ────────────────────────────────
@@ -195,7 +195,7 @@ export const sfx = {
       const t = getCtx().currentTime;
       [523.25, 659.25, 783.99].forEach((f, i) => tone("sine", f, t + i * 0.12, 0.5, 0.14));
       tone("sine", 1567.98, t + 0.42, 0.4, 0.08, 2093);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── 手がかり配置: 柔らかい発見チャイム ──────────────────────────────
@@ -205,7 +205,7 @@ export const sfx = {
       const t = getCtx().currentTime;
       tone("sine", 880,  t,      0.18, 0.08, 1108);
       tone("sine", 1108, t + 0.14, 0.25, 0.06, 1318);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── シーン開始: 幕が上がる柔らかな上昇音 ────────────────────────────
@@ -217,7 +217,7 @@ export const sfx = {
       tone("triangle", 392,     t,        0.3, 0.1,  587.33);
       tone("triangle", 587.33,  t + 0.12, 0.4, 0.09, 880);
       tone("sine",     1174.66, t + 0.26, 0.5, 0.05, 1567.98);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── シーン終了: 静かに幕が下りる下降音 ──────────────────────────────
@@ -227,7 +227,7 @@ export const sfx = {
       const t = getCtx().currentTime;
       tone("sine", 659.25, t,        0.28, 0.08, 523.25);
       tone("sine", 440,    t + 0.16, 0.45, 0.07, 329.63);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── 個性スキル発動: 魔法的なキラキラチャイム ────────────────────────
@@ -240,7 +240,7 @@ export const sfx = {
         tone("triangle", f, t + d, 0.35, 0.1)
       );
       tone("sine", 1318.51, t + 0.2, 0.4, 0.06, 1975.53);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── アイテム使用: 軽いポップ音 ──────────────────────────────────────
@@ -250,7 +250,7 @@ export const sfx = {
       const t = getCtx().currentTime;
       tone("triangle", 784,    t,        0.1,  0.09, 1046.5);
       tone("sine",     1046.5, t + 0.07, 0.14, 0.05, 1318.51);
-    } catch {}
+    } catch { /* noop */ }
   },
 
   // ── サイクル進行（時間帯: 0=朝, 1=昼, 2=夕, 3=夜）─────────────────
@@ -282,6 +282,6 @@ export const sfx = {
         default:
           break;
       }
-    } catch {}
+    } catch { /* noop */ }
   },
 };

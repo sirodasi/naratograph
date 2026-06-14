@@ -52,7 +52,7 @@ function transition(url) {
     _fadeTimer = setInterval(() => {
       t += step; const k = Math.min(1, t / dur);
       oldA.volume = fromOld * (1 - k);
-      if (k >= 1) { clearFade(); try { oldA.pause(); } catch {} }
+      if (k >= 1) { clearFade(); try { oldA.pause(); } catch { /* noop */ } }
     }, step);
     _playingUrl = "";
     return;
@@ -67,7 +67,7 @@ function transition(url) {
     newA.volume = 0;
     const p = newA.play();
     if (p && p.catch) p.catch(() => {});  // 自動再生ブロックや無効URLは握りつぶす
-  } catch {}
+  } catch { /* noop */ }
 
   const toNew = effVol();
   let t = 0; const step = 40, dur = 800;
@@ -75,7 +75,7 @@ function transition(url) {
     t += step; const k = Math.min(1, t / dur);
     newA.volume = toNew * k;
     oldA.volume = fromOld * (1 - k);
-    if (k >= 1) { clearFade(); try { oldA.pause(); } catch {} }
+    if (k >= 1) { clearFade(); try { oldA.pause(); } catch { /* noop */ } }
   }, step);
 
   _activeIdx  = newIdx;
@@ -96,13 +96,13 @@ export const bgm = {
 
   setVolume(v) {
     _volume = Math.min(1, Math.max(0, v));
-    try { localStorage.setItem("bgmVolume", String(_volume)); } catch {}
+    try { localStorage.setItem("bgmVolume", String(_volume)); } catch { /* noop */ }
     applyVolumeNow();
   },
 
   toggleMute() {
     _muted = !_muted;
-    try { localStorage.setItem("bgmMuted", _muted ? "1" : "0"); } catch {}
+    try { localStorage.setItem("bgmMuted", _muted ? "1" : "0"); } catch { /* noop */ }
     applyVolumeNow();
     // ミュート解除直後に、鳴らすべきトラックがまだ無音なら再開
     if (!_muted && _unlocked && _desiredUrl && _playingUrl !== _desiredUrl) {
