@@ -10593,10 +10593,13 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 ];
                 const allLogs = gs.log || [];
                 const q = logSearch.trim();
-                const filtered = allLogs.filter(e =>
-                  (logFilter === "all" || logCategory(e) === logFilter) &&
-                  (q === "" || e.includes(q))
-                );
+                // 元配列の index を保持（同一文言の重複ログでも key が一意になるよう）
+                const filtered = allLogs
+                  .map((e, idx) => ({ e, idx }))
+                  .filter(({ e }) =>
+                    (logFilter === "all" || logCategory(e) === logFilter) &&
+                    (q === "" || e.includes(q))
+                  );
                 return (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6 }}>
@@ -10625,9 +10628,9 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                     </div>
                     {allLogs.length === 0 && <div style={{ fontSize: 10, color: C.textFaint }}>なし</div>}
                     {allLogs.length > 0 && filtered.length === 0 && <div style={{ fontSize: 10, color: C.textFaint, textAlign: "center", padding: 8 }}>該当するログがありません</div>}
-                    {filtered.map((e) => {
+                    {filtered.map(({ e, idx }) => {
                       const lc = logColor(e);
-                      return <div key={e.slice(0, 60)} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1, animation: "logSlideIn 0.32s ease forwards" }}>{e}</div>;
+                      return <div key={idx} style={{ fontSize: 10, color: lc, padding: "3px 6px", borderBottom: `1px solid ${C.border}18`, borderLeft: `2px solid ${lc}55`, marginBottom: 1, animation: "logSlideIn 0.32s ease forwards" }}>{e}</div>;
                     })}
                   </div>
                 );
@@ -11344,8 +11347,8 @@ function BattleRightPanel({ gs, upd, user, isGm, animateDice }) {
             {battleLogs.length === 0 && (
               <div style={{ fontSize: 10, color: C.textFaint, padding: 6, textAlign: "center" }}>戦闘ログはまだありません</div>
             )}
-            {battleLogs.map((entry) => (
-              <div key={entry.slice(0, 60)} style={{
+            {battleLogs.map((entry, i) => (
+              <div key={i} style={{
                 fontSize: 10, color: "#6a7a8a", padding: "4px 0",
                 borderBottom: "1px solid rgba(255,255,255,0.02)",
                 lineHeight: 1.4, animation: "logSlideIn 0.32s ease forwards"
