@@ -464,6 +464,10 @@ export function SceneStage({ sceneData, sceneText, editable = false, onChange })
   );
 }
 
+// 描写画像を Firebase Storage 経由で保存するか。Spark プランは Storage が Blaze 必須で使えないため
+// false（data URL で RTDB に直接保存）。Blaze にアップグレードしバケット＋CORS を設定したら true に。
+const SCENE_IMG_USE_STORAGE = false;
+
 // ─── SceneEditor（描写の編集・GM用）: モード切替（任意）＋テキスト＋背景＋立ち絵。RightPanel と終幕で共用 ──
 export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle = true, user }) {
   // transparent=true: 立ち絵など透過を保持したい画像（webp→非対応はPNG）。false（背景）: JPEG。
@@ -482,8 +486,9 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
           canvas.width  = img.width  * scale;
           canvas.height = img.height * scale;
           canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-          // transparent は webp（非対応ブラウザは toBlob が image/png で返す＝透過保持）
-          canvas.toBlob(b => resolve(b), transparent ? "image/webp" : "image/jpeg", transparent ? 0.85 : 0.82);
+          // transparent は webp（非対応ブラウザは toBlob が image/png で返す＝透過保持）。
+          // data URL で RTDB に直接保存するため画質はやや抑えめ（同期を軽くする）。
+          canvas.toBlob(b => resolve(b), transparent ? "image/webp" : "image/jpeg", transparent ? 0.80 : 0.72);
         };
         img.onerror = () => resolve(null);
         img.src = ev.target.result;
@@ -492,16 +497,19 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
       reader.readAsDataURL(file);
     });
     if (!blob) return;
-    // Storage へアップロード → URL（失敗時は data URL フォールバック）
-    try {
-      const ext = (blob.type && blob.type.split("/")[1]) || (transparent ? "webp" : "jpg");
-      const path = `sceneImages/${user?.uid || "anon"}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      await uploadBytes(storageRef(storage, path), blob);
-      cb(await getDownloadURL(storageRef(storage, path)));
-    } catch (e) {
-      console.error("画像のStorageアップロードに失敗。data URLで保存します。", e);
-      const r = new FileReader(); r.onload = () => cb(r.result); r.readAsDataURL(blob);
+    // Storage が使える環境ならアップロード → URL。未使用（Spark）／失敗時は data URL フォールバック。
+    if (SCENE_IMG_USE_STORAGE) {
+      try {
+        const ext = (blob.type && blob.type.split("/")[1]) || (transparent ? "webp" : "jpg");
+        const path = `sceneImages/${user?.uid || "anon"}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        await uploadBytes(storageRef(storage, path), blob);
+        cb(await getDownloadURL(storageRef(storage, path)));
+        return;
+      } catch (e) {
+        console.error("画像のStorageアップロードに失敗。data URLで保存します。", e);
+      }
     }
+    const r = new FileReader(); r.onload = () => cb(r.result); r.readAsDataURL(blob);
   };
   // 表情（faces）操作。img は常に現在の表情に同期し、表示側は変更不要。
   const updP = (i, fn) => setSceneData(d => ({ ...d, portraits: d.portraits.map((x, j) => j === i ? fn(x) : x) }));
@@ -552,7 +560,7 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
       ) : (
         <label style={{ display: "block", padding: "8px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint, marginBottom: 6 }}>
           ＋ 背景画像
-          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 1280, url => setSceneData(d => ({ ...d, bg: url })))} />
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 960, url => setSceneData(d => ({ ...d, bg: url })))} />
         </label>
       )}
 
@@ -594,7 +602,7 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
                 </div>
               ))}
               <label title="表情を追加" style={{ width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${C.border}`, borderRadius: 2, cursor: "pointer", fontSize: 12, color: C.textFaint }}>＋
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => addFace(i, url), true)} />
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 420, url => addFace(i, url), true)} />
               </label>
             </div>
           </div>
@@ -603,7 +611,7 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
       {(sceneData.portraits || []).length < 8 && (
         <label style={{ display: "block", padding: "5px", textAlign: "center", border: `1px dashed ${C.border}`, borderRadius: 3, cursor: "pointer", fontSize: 10, color: C.textFaint }}>
           ＋ 立ち絵を追加
-          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 600, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })), true)} />
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => loadImage(e.target.files[0], 420, url => setSceneData(d => ({ ...d, portraits: [...(d.portraits || []), { img: url, name: "" }] })), true)} />
         </label>
       )}
 
