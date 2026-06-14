@@ -954,6 +954,7 @@ function EnemyCard({ en, label }) {
 
 // ── Scenario Detail（読み取り専用ビューア。収録シナリオの中身を確認する） ──
 export function ScenarioDetail({ scenario: sc, onClose }) {
+  const [gmOpen, setGmOpen] = useState(false); // GM向け（ネタバレ）を折りたたむ。既定で閉じる
   if (!sc) return null;
   const spotName = id => SPOTS.find(s => s.id === id)?.name || id || "—";
   const pre = { fontSize: 10, color: C.textDim, whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 3 };
@@ -988,9 +989,13 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
           {sc.backstory && <div style={pre}>{sc.backstory}</div>}
         </Section>
 
-        {/* GM向け（ネタバレ） */}
-        <div style={{ marginTop: 16, padding: "6px 10px", background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 5, fontSize: 11, color: C.red, letterSpacing: 1 }}>🔒 ここから下は GM向け（各フェイズの処理・クエスト詳細・ネタバレ）</div>
+        {/* GM向け（ネタバレ）— クリックで展開。既定は折りたたみ */}
+        <div onClick={() => setGmOpen(v => !v)} style={{ marginTop: 16, padding: "7px 10px", background: "rgba(192,57,43,0.08)", border: `1px solid ${C.redBorder}`, borderRadius: 5, fontSize: 11, color: C.red, letterSpacing: 1, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+          <span>{gmOpen ? "▼" : "▶"}</span>🔒 GM向け（各フェイズの処理・クエスト詳細・ネタバレ）
+          {!gmOpen && <span style={{ fontSize: 9, color: C.textFaint, marginLeft: "auto" }}>クリックで展開</span>}
+        </div>
 
+        {gmOpen && (<>
         {phaseNotes.length > 0 && (
           <Section title="各フェイズの特殊処理">
             {phaseNotes.map(([k, label]) => (
@@ -1040,6 +1045,7 @@ export function ScenarioDetail({ scenario: sc, onClose }) {
         </Section>
 
         {sc.notes && <Section title="GMメモ"><div style={pre}>{sc.notes}</div></Section>}
+        </>)}
       </div>
     </div>
   );
