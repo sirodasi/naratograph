@@ -1284,8 +1284,15 @@ function SessionApp({ roomCode, user }) {
     );
   }
 
+  // モバイルの探索（マップ表示）時はドロワーをやめ、マップを上部に固定して下にパネルを積む（縦スタック）。
+  // 戦闘・ボーナス・終了・描写モードは従来どおり（フル画面＋ドロワー）。
+  const showingMap = gs.sessionPhase !== "end" && gs.sessionPhase !== "battle_bonus" && !gs.battle?.active && !gs.sceneMode;
+  const stackMobile = isMobile && showingMap;
+
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Noto Serif JP', serif" }}>
+    <div style={stackMobile
+      ? { display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden", fontFamily: "'Noto Serif JP', serif" }
+      : { display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Noto Serif JP', serif" }}>
       <style>{`
         ::-webkit-scrollbar { width: 3px }
         ::-webkit-scrollbar-thumb { background: #1a1e2a }
@@ -1384,7 +1391,9 @@ function SessionApp({ roomCode, user }) {
         }
       `}</style>
 
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div style={stackMobile
+        ? { width: "100%", aspectRatio: `${MAP_NATURAL_W} / ${MAP_NATURAL_H}`, position: "relative", overflow: "hidden", flexShrink: 0 }
+        : { flex: 1, position: "relative", overflow: "hidden" }}>
         {gs.sessionPhase === "end" ? (
           <SessionEndView gs={gs} upd={upd} isGm={mode === "gm"} user={user} roomCode={roomCode} />
         ) : gs.sessionPhase === "battle_bonus" ? (
@@ -1421,8 +1430,10 @@ function SessionApp({ roomCode, user }) {
             undo={undo} undoCount={undoCount}
           />
         );
+        // モバイルの探索: マップ下に残り高さで常設（内部スクロール）。ドロワー化しない。
+        if (stackMobile) return <div style={{ flex: 1, minHeight: 0, width: "100%" }}>{panelEl}</div>;
         if (!isMobile) return panelEl;
-        // モバイル: 右パネルを右からのドロワーにする（フローティングボタンで開閉）
+        // モバイル（戦闘・描写等）: 右パネルを右からのドロワーにする（フローティングボタンで開閉）
         const myTurn = gs.currentScene?.pcUid === user?.uid; // 自分のシーン中は手番アラート
         const alert = myTurn && !panelOpen;
         return (
