@@ -292,7 +292,7 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
 
         return (
           <div key={spot.id}
-            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isReachable ? 15 : (hasClue || newsMarker ? 4 : 3), cursor: (canClick && !isDream) ? "pointer" : "default" }}
+            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isHov ? 60 : (isReachable ? 15 : (hasClue || newsMarker ? 4 : 3)), cursor: (canClick && !isDream) ? "pointer" : "default" }}
             onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
 
             {/* 移動可能リング */}
