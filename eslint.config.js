@@ -28,11 +28,14 @@ export default defineConfig([
       }],
       // Fast Refresh のヒント。SessionView 等はヘルパーとコンポーネントを意図的に併存 export しているため無効化。
       'react-refresh/only-export-components': 'off',
-      // React Compiler 向けの助言ルール群（本プロジェクトは Compiler 未使用）。error ではなく warn に下げて可視化のみ。
-      'react-hooks/purity': 'warn',
-      'react-hooks/refs': 'warn',
+      // React Compiler 向けの助言ルール群（本プロジェクトは Compiler 未使用）。
+      // 既存コードの意図的パターン（演出の遷移検知・非リアクティブ ref 参照・装飾 Math.random 等）に
+      // 対する false-concern のため off。static-components は render 内コンポーネント生成という
+      // 実害（サブツリー再マウント）を捕捉でき有用なので warn のまま残す。
+      'react-hooks/purity': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/set-state-in-effect': 'off',
       'react-hooks/static-components': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
     },
   },
 ])
