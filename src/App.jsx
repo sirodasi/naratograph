@@ -185,79 +185,52 @@ function useMapBounds(containerRef, active = true) {
 }
 
 // ─── MapView（GM/PL共通）────────────────────────────────────────
-// ─── 早見表モーダル（探索イベント・新聞イベントの一覧。マップから閲覧） ──────
-function MapInfoModal({ spots, onClose }) {
-  const [tab, setTab] = useState("spot");
-  const [openId, setOpenId] = useState(null);
+// ─── スポット詳細モーダル（クリックしたスポットの探索イベント＋適用中の新聞効果） ──
+function SpotDetailModal({ spot, newsMarker, newspaper, canMove, onMove, onClose }) {
   const G = "#c8a040", DIM = "#8b6914", TXT = "#c8b89a", FAINT = "#5a6575", BORD = "#1a2535";
-  // エリア順にグループ化（夢の世界は除外）
-  const areas = [];
-  for (const s of spots) {
-    if (s.id === "dream") continue;
-    let g = areas.find(a => a.area === s.area);
-    if (!g) { g = { area: s.area, list: [] }; areas.push(g); }
-    g.list.push(s);
-  }
-  // 新聞は D66。ゾロ目（11/22/33/44/55/66）は共通効果なので1件にまとめる
-  const newsList = [];
-  let zoroAdded = false;
-  for (const roll of Object.keys(NEWSPAPER).map(Number).sort((a, b) => a - b)) {
-    const isZoro = String(roll)[0] === String(roll)[1];
-    if (isZoro) { if (zoroAdded) continue; zoroAdded = true; }
-    newsList.push({ roll, isZoro, n: NEWSPAPER[roll] });
-  }
+  const d = SPOT_DETAILS[spot.id];
+  const tags = d?.tags || [];
+  const parts = (d?.desc || "").split("アドバイス");
+  const flavor = parts[0].trim();
+  const advice = parts[1]?.trim();
+  const news = newsMarker && newspaper ? NEWSPAPER[newspaper.roll] : null;
   return createPortal((
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Serif JP', serif" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#0a0c16", border: `1px solid ${DIM}`, borderRadius: 8, width: "100%", maxWidth: 560, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", borderBottom: `1px solid ${BORD}`, flexShrink: 0 }}>
-          {[["spot", "📜 探索イベント"], ["news", "📰 新聞イベント"]].map(([k, l]) => (
-            <div key={k} onClick={() => setTab(k)} style={{ flex: 1, padding: "10px", textAlign: "center", fontSize: 12, cursor: "pointer", color: tab === k ? G : FAINT, borderBottom: tab === k ? `2px solid ${G}` : "2px solid transparent" }}>{l}</div>
-          ))}
-          <div onClick={onClose} style={{ padding: "10px 14px", cursor: "pointer", color: FAINT, fontSize: 14 }}>✕</div>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#0a0c16", border: `1px solid ${DIM}`, borderRadius: 8, width: "100%", maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 14px", borderBottom: `1px solid ${BORD}`, flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 14, color: G }}>[{spot.roll}] {spot.name}</div>
+            {tags.length > 0 && <div style={{ fontSize: 9, color: DIM, marginTop: 2 }}>《{tags.join("・")}》</div>}
+          </div>
+          <div onClick={onClose} style={{ cursor: "pointer", color: FAINT, fontSize: 14 }}>✕</div>
         </div>
-        <div style={{ overflowY: "auto", padding: 14 }}>
-          {tab === "spot" && areas.map(g => (
-            <div key={g.area} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, color: FAINT, letterSpacing: 2, marginBottom: 4 }}>{g.area}</div>
-              {g.list.map(s => {
-                const d = SPOT_DETAILS[s.id];
-                const open = openId === s.id;
-                return (
-                  <div key={s.id} style={{ marginBottom: 4 }}>
-                    <div onClick={() => setOpenId(open ? null : s.id)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", background: "rgba(255,255,255,0.02)", border: `1px solid ${BORD}`, borderRadius: 4, cursor: "pointer" }}>
-                      <span style={{ fontSize: 9, color: FAINT }}>{open ? "▼" : "▶"}</span>
-                      <span style={{ fontSize: 11, color: TXT }}>[{s.roll}] {s.name}</span>
-                      {d?.tags?.length > 0 && <span style={{ fontSize: 8, color: DIM }}>《{d.tags.join("・")}》</span>}
-                      <span style={{ marginLeft: "auto", fontSize: 8, color: FAINT }}>イベント{d?.events?.length || 0}</span>
-                    </div>
-                    {open && (
-                      <div style={{ padding: "6px 8px 6px 18px" }}>
-                        {(d?.events || []).map((ev, i) => (
-                          <div key={i} style={{ marginBottom: 6 }}>
-                            <div style={{ fontSize: 10, color: G }}>{ev.name} <span style={{ color: FAINT }}>（目標{ev.target}）</span></div>
-                            <div style={{ fontSize: 9, color: TXT, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{ev.effect || "—"}</div>
-                          </div>
-                        ))}
-                        {(!d?.events || d.events.length === 0) && <div style={{ fontSize: 9, color: FAINT }}>イベントなし</div>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+        <div style={{ overflowY: "auto", padding: 14, flex: 1 }}>
+          {flavor && <div style={{ fontSize: 9, color: TXT, whiteSpace: "pre-wrap", lineHeight: 1.7, marginBottom: 10 }}>{flavor}</div>}
+
+          {news && (
+            <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(255,183,77,0.08)", border: "1px solid #b5701f", borderRadius: 5 }}>
+              <div style={{ fontSize: 10, color: "#ffb74d", marginBottom: 3 }}>📰 新聞の特殊効果（このスポットに適用中）</div>
+              <div style={{ fontSize: 10, color: G }}>{news.title}</div>
+              <div style={{ fontSize: 9, color: TXT, whiteSpace: "pre-wrap", lineHeight: 1.6, marginTop: 2 }}>{news.effect}</div>
+            </div>
+          )}
+
+          <div style={{ fontSize: 9, color: FAINT, letterSpacing: 2, borderBottom: `1px solid ${BORD}`, paddingBottom: 3, marginBottom: 6 }}>探索イベント</div>
+          {(d?.events || []).map((ev, i) => (
+            <div key={i} style={{ marginBottom: 8, padding: "6px 8px", background: "rgba(255,255,255,0.02)", border: `1px solid ${BORD}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 10, color: G }}>{ev.name} <span style={{ color: FAINT }}>（目標{ev.target}）</span></div>
+              <div style={{ fontSize: 9, color: TXT, whiteSpace: "pre-wrap", lineHeight: 1.6, marginTop: 1 }}>{ev.effect || "—"}</div>
             </div>
           ))}
-          {tab === "news" && (
-            <>
-              <div style={{ fontSize: 8, color: FAINT, marginBottom: 8, lineHeight: 1.6 }}>新聞（朝刊）効果の一覧。毎朝 D66 で決定し探索に影響します。ゾロ目は共通の特殊効果。</div>
-              {newsList.map(({ roll, isZoro, n }) => (
-                <div key={roll} style={{ marginBottom: 6, padding: "6px 8px", background: "rgba(255,255,255,0.02)", border: `1px solid ${BORD}`, borderRadius: 4 }}>
-                  <div style={{ fontSize: 10, color: G }}>{isZoro ? "★ゾロ目（11・22・33・44・55・66）" : `[${roll}]`} {n.title}</div>
-                  <div style={{ fontSize: 9, color: TXT, whiteSpace: "pre-wrap", lineHeight: 1.6, marginTop: 2 }}>{n.effect}</div>
-                </div>
-              ))}
-            </>
-          )}
+          {(!d?.events || d.events.length === 0) && <div style={{ fontSize: 9, color: FAINT }}>探索イベントはありません</div>}
+
+          {advice && <details style={{ marginTop: 8 }}><summary style={{ fontSize: 9, color: DIM, cursor: "pointer" }}>アドバイス</summary><div style={{ fontSize: 9, color: TXT, whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 3 }}>{advice}</div></details>}
         </div>
+        {canMove && (
+          <div style={{ padding: 12, borderTop: `1px solid ${BORD}`, flexShrink: 0 }}>
+            <button onClick={() => { onMove(); onClose(); }} style={{ width: "100%", padding: "9px", fontSize: 12, cursor: "pointer", borderRadius: 5, background: "rgba(100,181,246,0.16)", border: "1px solid #64b5f6", color: "#64b5f6", fontFamily: "'Noto Serif JP', serif" }}>🚶 このスポットへ移動</button>
+          </div>
+        )}
       </div>
     </div>
   ), document.body);
@@ -271,7 +244,7 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
 
   const mapRef   = useRef(null);
   const mapBounds = useMapBounds(mapRef, !gs.sceneMode); // 描写モード解除で地図再表示時に再計測
-  const [infoOpen, setInfoOpen] = useState(false); // 早見表モーダル
+  const [detailSpot, setDetailSpot] = useState(null); // クリックしたスポットの詳細モーダル { spot, newsMarker, canMove }
 
   const scale    = mapBounds.width > 0 ? mapBounds.width / MAP_NATURAL_W : 0.5;
   const baseSize = Math.round(22 * Math.max(0.5, Math.min(scale * 1.8, 1.4)));
@@ -300,8 +273,7 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
 
   return (
     <div ref={mapRef} style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#060810" }}>
-      <button onClick={() => setInfoOpen(true)} title="探索イベント・新聞イベントの早見表" style={{ position: "absolute", left: 8, bottom: 8, zIndex: 30, padding: "5px 10px", fontSize: 10, background: "rgba(20,24,40,0.92)", border: "1px solid #3a4560", borderRadius: 6, color: "#c8b89a", cursor: "pointer", fontFamily: "'Noto Serif JP', serif" }}>📖 早見表</button>
-      {infoOpen && <MapInfoModal spots={SPOTS} onClose={() => setInfoOpen(false)} />}
+      {detailSpot && <SpotDetailModal spot={detailSpot.spot} newsMarker={detailSpot.newsMarker} newspaper={gs.newspaper} canMove={detailSpot.canMove} onMove={() => onSpotClick(detailSpot.spot.id)} onClose={() => setDetailSpot(null)} />}
       <style>{`
         @keyframes pulseRing {
           0%   { transform: translate(-50%,-50%) scale(1);   opacity: 0.75; }
@@ -370,12 +342,10 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
         if (newsMarker) shadows.push("0 0 15px rgba(255,183,77,0.8), inset 0 0 10px rgba(255,183,77,0.4)");
         const boxShadow = shadows.length > 0 ? shadows.join(", ") : "none";
 
-        const canClick  = isGm || (isMovePhase && isMyTurn && isReachable);
-
         return (
           <div key={spot.id}
-            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isHov ? 60 : (isReachable ? 15 : (hasClue || newsMarker ? 4 : 3)), cursor: (canClick && !isDream) ? "pointer" : "default" }}
-            onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (canClick && !isDream) onSpotClick(spot.id); }}>
+            style={{ position: "absolute", left: sx, top: sy, transform: "translate(-50%,-50%)", zIndex: isHov ? 60 : (isReachable ? 15 : (hasClue || newsMarker ? 4 : 3)), cursor: !isDream ? "pointer" : "default" }}
+            onMouseEnter={() => setHov(spot.id)} onMouseLeave={() => setHov(null)} onClick={() => { if (!isDream) setDetailSpot({ spot, newsMarker, canMove: isMovePhase && (isGm || (isMyTurn && isReachable)) }); }}>
 
             {/* 移動可能リング */}
             {isReachable && (
