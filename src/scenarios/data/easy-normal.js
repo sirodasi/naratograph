@@ -64,7 +64,10 @@ export const EASY_NORMAL = [
     "id": "hare",
     "official": true,
     "author": "猫憑ノコ",
-    "keywords": ["結婚", "妖怪退治"],
+    "keywords": [
+      "結婚",
+      "妖怪退治"
+    ],
     "limit": "3日目の夜",
     "name": "ハレを飾るは幸か不幸か",
     "notes": "",
@@ -189,7 +192,8 @@ export const EASY_NORMAL = [
       "spellcard": 2
     }
   ],
-  "id": "-Ov0_FojYWj6JBPrfuDE",
+  "id": "yukidoke-kaleidoscope",
+  "author": "しろだし",
   "keywords": [
     "雪解け",
     "不穏",

@@ -78,6 +78,11 @@ export const data = {
     }
   ],
   "id": "yukkuri",
+  "author": "しろだし",
+  "keywords": [
+    "ゆっくり",
+    "集団戦"
+  ],
   "limit": "3日目の夜",
   "name": "ゆっくりなんてしてられない！",
   "notes": "",
