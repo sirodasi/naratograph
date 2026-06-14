@@ -5655,6 +5655,16 @@ function SkillActivateModal({ skillName, skillType, desc, onConfirm, onCancel })
   );
 }
 
+// CharDetailModal 内のセクション見出し（render 内で定義しないようモジュールレベルに）
+function Section({ label, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
 // ─── CharDetailModal（キャラクター詳細・読み取り専用） ────────────────
 function CharDetailModal({ pc, onClose }) {
   const skill   = pc.ps || null;
@@ -5670,13 +5680,6 @@ function CharDetailModal({ pc, onClose }) {
   const badStatus = pc.badStatus || [];
   const resKeys = ["やる気", "残り人数", "スペルカード", "グレイズ", "霊力", "攻撃力"];
   const resources = pc.resources || {};
-
-  const Section = ({ label, children }) => (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>{label}</div>
-      {children}
-    </div>
-  );
 
   const renderSkill = (s, accentColor) => (
     <div style={{ marginBottom: 8 }}>
