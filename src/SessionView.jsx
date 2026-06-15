@@ -178,6 +178,9 @@ export const BAD_STATUS_TABLE = {
 };
 
 const SKILL_TYPE_COLOR = { "オート": "#81c784", "アクション": "#64b5f6", "サポート": "#ffb74d" };
+// 発動可能スキルの強調：ブロック枠（左アクセント＋淡い地＋内側グロー）と発動ボタン
+const skillReadyBox = (color) => ({ borderLeft: `3px solid ${color}`, background: `${color}12`, borderRadius: 4, padding: "6px 8px", boxShadow: `inset 0 0 0 1px ${color}26` });
+const skillActivateBtn = (color) => ({ padding: "5px 14px", cursor: "pointer", borderRadius: 4, fontSize: 11, fontWeight: 700, background: `${color}30`, border: `1px solid ${color}`, color, boxShadow: `0 0 7px ${color}45` });
 // 人を狂わす程度の能力の「絆なし応援」を表す擬似絆ラベル（bondUsed ではなく kuruwasuUsed[対象] を消費）
 const KURUWASU_BOND = "（絆なし応援）";
 // 特別な絆の応援を表す擬似絆ラベル（成長で獲得した specialBond を使う応援）
@@ -5834,6 +5837,10 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const hasActed      = (gs.actedPcs ||[]).includes(pc.uid);
   const isActing      = gs.currentScene?.pcUid === pc.uid;
   const skillCanActivate = skill && skill.type !== "オート";
+  // 強調表示用：個性スキルが今すぐ発動可能か＋その色（型色）
+  const psColor = SKILL_TYPE_COLOR[skill?.type] || C.gold;
+  const psReady = skillCanActivate && !isCustomChar && !(skill?.name === "カリスマ" && pc[PS_ONCE_FLAG]);
+  const abColor = SKILL_TYPE_COLOR[activeAbility?.type] || "#90caf9";
   const _currentSpotName  = getSpot(pc.currentSpot)?.name || "-";
 
   const consumeItem = itemName => {
@@ -5933,6 +5940,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (freq === "scene")   return u.sceneId === abilitySceneId();
     return false;
   };
+  // 強調表示用：能力スキルが今すぐ発動可能か（非オート or リアクティブ／未使用）
+  const abReady = !!activeAbility?.name && (activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && !abilityUsedUp(activeAbility);
   // base(pc派生) に使用回数フラグを記録して返す
   const withAbilityUse = (base, name, freq) => {
     if (!freq) return base;
@@ -6774,11 +6783,12 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
 
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
           {skill && (
-            <div style={{ marginBottom: 6 }}>
+            <div style={{ marginBottom: 6, ...(psReady ? skillReadyBox(psColor) : {}) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                 <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[skill.type] || C.text}18`, border: `1px solid ${SKILL_TYPE_COLOR[skill.type] || C.text}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[skill.type] || C.text }}>{skill.type}</span>
-                <span style={{ fontSize: 11, color: skillCanActivate ? C.gold : "#81c784" }}>《{skill.name}》</span>
+                <span style={{ fontSize: 11, fontWeight: psReady ? 700 : 400, color: psReady ? psColor : "#81c784" }}>《{skill.name}》</span>
                 {skill.type === "オート" && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
+                {psReady && <span style={{ fontSize: 8, color: psColor, marginLeft: "auto" }}>● 発動可能</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{skill.desc}</div>
 
@@ -6810,16 +6820,18 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               )}
 
               {skillCanActivate && !isCustomChar && !(skill.name === "カリスマ" && pc[PS_ONCE_FLAG]) && (
-                <button onClick={() => setSkillModal(true)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(200,160,64,0.2)", border: "1px solid #8b6914", color: C.gold }}>発動する</button>
+                <button onClick={() => setSkillModal(true)} style={skillActivateBtn(psColor)}>発動する</button>
               )}
             </div>
           )}
           {activeAbility?.name && (
-            <div style={{ marginTop: 6 }}>
+            <div style={{ marginTop: 6, ...(abReady ? skillReadyBox(abColor) : {}) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[activeAbility.type] || "#90caf9"}18`, border: `1px solid ${SKILL_TYPE_COLOR[activeAbility.type] || "#90caf9"}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[activeAbility.type] || "#90caf9" }}>{activeAbility.type}</span>
-                <span style={{ fontSize: 11, color: "#90caf9" }}>《{activeAbility.name}》</span>
+                <span style={{ padding: "1px 6px", background: `${abColor}18`, border: `1px solid ${abColor}50`, borderRadius: 8, fontSize: 8, color: abColor }}>{activeAbility.type}</span>
+                <span style={{ fontSize: 11, fontWeight: abReady ? 700 : 400, color: abReady ? abColor : "#90caf9" }}>《{activeAbility.name}》</span>
                 {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
+                {activeAbility.type === "オート" && !getAbilityEffect(activeAbility)?.reactive && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
+                {abReady && <span style={{ fontSize: 8, color: abColor, marginLeft: "auto" }}>● 発動可能</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
               {pc.disguisedAs && <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>🦝 変身中：{pc.disguisedAs} として扱う</div>}
@@ -6827,7 +6839,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               {(activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && (
                 abilityUsedUp(activeAbility)
                   ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
-                  : <button onClick={() => setAbilityModal(activeAbility)} style={{ padding: "4px 12px", cursor: "pointer", borderRadius: 3, fontSize: 10, background: "rgba(144,202,249,0.15)", border: "1px solid #1565c080", color: "#90caf9" }}>発動する</button>
+                  : <button onClick={() => setAbilityModal(activeAbility)} style={skillActivateBtn(abColor)}>発動する</button>
               )}
             </div>
           )}
