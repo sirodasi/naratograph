@@ -11,6 +11,7 @@ import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
 import { motion } from "./motion";
+import { fontScale } from "./fontScale";
 import { bgm } from "./bgm";
 
 import {
@@ -1670,6 +1671,7 @@ export default function App() {
 
   useEffect(() => {
     motion.init();  // 演出抑制の <html> 属性反映 + OS設定変化の監視
+    fontScale.init();  // 文字サイズ（body zoom）の反映
 
     const params = new URLSearchParams(window.location.search);
     const r = params.get("room");

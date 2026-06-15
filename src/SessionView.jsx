@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { CharSprite, CHARACTERS } from "./Lobby";
 import { sfx } from "./audio";
 import { motion } from "./motion";
+import { fontScale } from "./fontScale";
 import { bgm } from "./bgm";
 import { SPOT_DETAILS } from "./data/spots";
 import { EDGES, ADJACENT_MAP, OFFICIAL_DANMAKU_SKILLS } from "./data/gameData";
@@ -10090,6 +10091,8 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [showDiceHistory, setShowDiceHistory] = useState(false);
   const [motionReduced, setMotionReduced] = useState(motion.reduced);
   const toggleMotion = () => { motion.toggle(); setMotionReduced(motion.reduced); };
+  const [fontLevel, setFontLevel] = useState(fontScale.level); // 0標準/1大/2特大
+  const cycleFont = () => setFontLevel(fontScale.cycle());
   const [showBgm, setShowBgm] = useState(false);
   const [bgmMuted, setBgmMuted] = useState(bgm.muted);
   const [bgmVol, setBgmVol] = useState(bgm.volume);
@@ -10342,6 +10345,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               ))}
               <div onClick={() => setShowBgm(v => !v)} title="BGM設定" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: bgmMuted ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{bgmMuted ? "🔈" : "🎵"}</div>
               <div onClick={toggleMotion} title={motionReduced ? "演出: 抑制中（クリックで通常に戻す）" : "演出: 通常（クリックで抑制）"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{motionReduced ? "🚫" : "🎬"}</div>
+              <div onClick={cycleFont} title={`文字サイズ: ${fontScale.label}（クリックで変更）`} style={{ padding: "6px 7px", textAlign: "center", fontSize: 10 + fontLevel * 3, lineHeight: 1, cursor: "pointer", color: fontLevel > 0 ? C.gold : C.textFaint, borderBottom: "2px solid transparent", fontWeight: fontLevel > 0 ? 700 : 400 }}>A</div>
               <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
               {isGm && (
                 <div onClick={() => { if (undoCount > 0 && undo && window.confirm("直近の操作を1つ取り消しますか？")) undo(); }} title={undoCount > 0 ? `直近の操作を取り消す（${undoCount}件）` : "取り消せる操作はありません"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: undoCount > 0 ? "pointer" : "default", color: undoCount > 0 ? C.gold : "#2a3545", borderBottom: "2px solid transparent", opacity: undoCount > 0 ? 1 : 0.6 }}>↩</div>
