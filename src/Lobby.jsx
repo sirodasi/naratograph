@@ -427,8 +427,8 @@ function PrepRoom({ roomCode, user, isGm }) {
       as:  { name: custom.asName, type: custom.asType, desc: custom.asDesc },
       ds:  { name: custom.dsName, desc: custom.dsDesc },
       spellCards:    [
-        custom.sc1name && `${custom.sc1name}${custom.sc1desc ? " " + custom.sc1desc : ""}`,
-        custom.sc2name && `${custom.sc2name}${custom.sc2desc ? " " + custom.sc2desc : ""}`,
+        custom.sc1name && { name: custom.sc1name, desc: custom.sc1desc || "" },
+        custom.sc2name && { name: custom.sc2name, desc: custom.sc2desc || "" },
       ].filter(Boolean),
       growthAbility: {},
       growthSpellCard: "",
@@ -671,7 +671,7 @@ function PrepRoom({ roomCode, user, isGm }) {
                   <div style={{ fontSize: 10, color: C.textDim, lineHeight: 1.7, marginBottom: 8 }}>{dsShow?.desc}</div>
                   <div style={S.sec}>【スペルカード】</div>
                   {selectedChar.spellCards?.map((sc, i) => (
-                    <div key={i} style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>・{sc}</div>
+                    <div key={i} style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>・{typeof sc === "string" ? sc : `${sc.name}${sc.desc ? " " + sc.desc : ""}`}</div>
                   ))}
                   {(grown?.enhancementsUsed || []).includes("spell") && selectedChar.growthSpellCard && (
                     <div style={{ fontSize: 10, color: C.gold, marginBottom: 2 }}>・{typeof selectedChar.growthSpellCard === "string" ? selectedChar.growthSpellCard : selectedChar.growthSpellCard?.name}（追加）</div>

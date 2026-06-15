@@ -2434,7 +2434,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
 
     if (isSuccess) {
       // PC回避のスペシャル → 探索同様に animateDice で霊力回復（+特別な絆の親密度+1）
-      if (isPc && isSpecial) {
+      const reiFull = (combatant.resources?.霊力?.cur || 0) >= (combatant.resources?.霊力?.max || 20);
+      if (isPc && isSpecial && !reiFull) {
         animateDice(1, "霊力回復", r => {
           const gain = r[0];
           upd(p => {
@@ -2443,6 +2444,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
             const pcs2 = bumpAch(pcs1, b.pcCombatant, a => ({ ...a, specials: (a.specials || 0) + 1 }));
             return { ...p, pcs: pcs2, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [...logs, `${baseSuccessLog} スペシャル！霊力+${gain} 移動先を選択してください。`, ...p.log] };
           });
+        });
+      } else if (isPc && isSpecial) {
+        // 霊力が最大 → 回復ロールをスキップ（親密度+1・実績は付与）
+        upd(p => {
+          const { pcs: pcs1, logs } = gainIntimacy(p.pcs, b.pcCombatant, 1, `${combatant.charName}のスペシャル`);
+          const pcs2 = bumpAch(pcs1, b.pcCombatant, a => ({ ...a, specials: (a.specials || 0) + 1 }));
+          return { ...p, pcs: pcs2, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [...logs, `${baseSuccessLog} スペシャル！（霊力は最大のため回復なし）移動先を選択してください。`, ...p.log] };
         });
       } else {
         upd(p => ({ ...p, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [`${baseSuccessLog}${isPc ? " 移動先を選択してください。" : ""}`, ...p.log] }));
@@ -9207,10 +9215,21 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                   {isFumble && !sc.fumbleCanceled ? "ファンブル！" : isSuccess ? "成功！" : "失敗…"}
                 </div>
 
-                {pendingSpecial && (
+                {pendingSpecial && (() => {
+                  const reiFull = (pc.resources?.霊力?.cur || 0) >= (pc.resources?.霊力?.max || 0);
+                  // 霊力が最大 → 回復ロールをスキップ（親密度+1・実績は付与）
+                  const resolveNoRecover = () => upd(p => {
+                    const { pcs: pcs2, logs } = gainIntimacy(p.pcs, pc.uid, 1, `${pc.charName}のスペシャル`);
+                    const pcs3 = bumpAch(pcs2, pc.uid, a => ({ ...a, specials: (a.specials || 0) + 1, ...(p.unluckyPhase ? { unluckySpecials: (a.unluckySpecials || 0) + 1 } : {}) }));
+                    return { ...p, pcs: pcs3, currentScene: { ...p.currentScene, specialResolved: true }, log:[...logs, `${pc.charName} のスペシャル（霊力は最大のため回復なし）`, ...p.log] };
+                  });
+                  return (
                   <div style={{ marginBottom: 12, padding: 10, background: "rgba(200,160,64,0.1)", border: "1px solid #8b691460", borderRadius: 4 }}>
                     <div style={{ fontSize: 11, color: C.gold, marginBottom: 8 }}>✨ スペシャル報酬を選択</div>
                     <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                      {reiFull ? (
+                        <button onClick={resolveNoRecover} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>スペシャル確定（霊力最大）</button>
+                      ) : (
                       <button onClick={() => animateDice(1, "霊力回復", res => {
                         upd(p => {
                           const gain    = (pc.badStatus || []).includes("スランプ") ? 0 : res[0];
@@ -9222,10 +9241,12 @@ function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, room }) 
                           return { ...p, pcs: pcs3, currentScene: { ...p.currentScene, specialResolved: true }, log:[...logs, `${pc.charName} は霊力を ${gain} 点回復した`, ...p.log] };
                         });
                       })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 10 })}>霊力回復 (1D6)</button>
+                      )}
                       {(pc.badStatus || []).length > 0 && <button onClick={() => upd(p => ({ ...p, currentScene: { ...p.currentScene, phase: "special_cure" } }))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { fontSize: 10 })}>変調解除</button>}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {pendingFumble && (
                   <div style={{ marginBottom: 12, padding: 10, background: "rgba(224,112,96,0.1)", border: "1px solid #e0706060", borderRadius: 4 }}>

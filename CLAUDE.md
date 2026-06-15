@@ -213,10 +213,10 @@ Skill data on enemies is stored as `ds: { name, desc }` (normalized from legacy 
 
 ### Spell-card data flow
 
-To keep Firebase writes small, the canonical spell-card representation is **raw text** (PC) or `{name, desc, ref?}` (NPC). Derived fields are recomputed at render time.
+The canonical spell-card representation is **`{ name, desc }`** (PC, from `characters.js`) or `{ name, desc, ref? }` (NPC). Derived fields are recomputed at render time. (Legacy raw strings are still accepted everywhere for backward-compat.)
 
-- **Storage**: PC `spellCards[]` and `growthSpellCard` in `gs.pcs` are stored as raw strings. NPC `spellCards[]` are stored as `{ name, desc, ref? }` (omit `ref` when empty). `normalizeScenario()` in `App.jsx` does **not** pre-build spell objects.
-- **Rendering**: `buildSpellCard(card)` (exported from `SessionView.jsx`) accepts a string or an object and returns a full view-model with `name`, `text`, `textBody`, `condition`, `effects`, `timing`, `effectTiming`, `manual`, `structured`. Call at render time only.
+- **Storage**: PC `spellCards[]` and `growthSpellCard` (in `characters.js` and carried into `gs.pcs`) are **`{ name, desc }`** objects — `name` is the spell title (up to the first `」`), `desc` is the effect text. NPC `spellCards[]` are `{ name, desc, ref? }` (omit `ref` when empty). Older saved data (Firebase `grownChars`, in-flight rooms) and custom-character spell cards may still be **raw strings**; all consumers tolerate both (`typeof sc === "string" ? sc : sc.name`). `normalizeScenario()` does **not** pre-build spell objects.
+- **Rendering**: `buildSpellCard(card)` (exported from `SessionView.jsx`) accepts a string **or** an object (`{name, desc}`/`{name, text}`) and returns a full view-model with `name`, `text` (= `desc`), `textBody`, `condition`, `effects`, `timing`, `effectTiming`, `manual`, `structured`. The structured-effect lookup keys on `card.ref || name`. Render `spell.name` as the header and `spell.textBody || spell.text` as the body (since `desc` no longer repeats the name, there is no duplication). Call at render time only.
 - **In-battle persistence** (`pendingSpell`, `manualSpell` in `gs.battle`): store via `slimSpellForStorage(spellCard)` (only `name`, `text`, `manual`, optional `ref`). Read via `expandStoredSpell(stored)` to rebuild derived fields. The expand helper is tolerant of legacy full-shape data.
 - **Condition extraction**: `parseSpell` runs `extractCondition(text)` which locates `"このスペルカード"` and returns the first sentence containing `できない` / `限り使用できない` / `場合にしか使用できない`. `textBody` is `text` with that condition sentence stripped — render `textBody` for the body and `condition` separately with the ⚠ warning to avoid duplication.
 

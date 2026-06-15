@@ -26,6 +26,20 @@ describe('CHARACTERS データ整合性', () => {
     }
   });
 
+  it('spellCards / growthSpellCard が {name, desc} 形式（名前と効果の分離）', () => {
+    for (const ch of CHARACTERS) {
+      for (const sc of ch.spellCards) {
+        expect(typeof sc, `${ch.id} の spellCard が文字列のまま`).toBe('object');
+        expect(sc.name, `${ch.id} の spellCard.name が空`).toBeTruthy();
+        expect(typeof sc.desc, `${ch.id} の spellCard.desc`).toBe('string');
+      }
+      if (ch.growthSpellCard != null && ch.growthSpellCard !== '') {
+        expect(ch.growthSpellCard.name, `${ch.id} の growthSpellCard.name が空`).toBeTruthy();
+        expect(typeof ch.growthSpellCard.desc, `${ch.id} の growthSpellCard.desc`).toBe('string');
+      }
+    }
+  });
+
   it('全キャラクターの spriteRow / spriteCol が数値', () => {
     for (const ch of CHARACTERS) {
       expect(typeof ch.spriteRow, `${ch.id} の spriteRow`).toBe('number');
