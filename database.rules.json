@@ -1,0 +1,63 @@
+{
+  "rules": {
+    // 既定はすべて拒否（未知のパスを塞ぐ deny-by-default）
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      "$roomCode": {
+        // 参加には部屋コードが必要。認証済みなら読める（join 前にシナリオ/参加者を確認するため）。
+        ".read": "auth != null",
+
+        // 部屋レベルの書き込み = ①作成（自分を GM に設定・許可メールのみ） ②既存部屋の GM による全操作・削除。
+        // プレイヤーはここでは許可されず、下位パス（players/{uid}・presence/{uid}・state・scene）でのみ書ける。
+        ".write": "auth != null && ( (!data.exists() && newData.child('gmUid').val() === auth.uid && auth.token.email === 'sora1225n@gmail.com') || (data.exists() && data.child('gmUid').val() === auth.uid) )",
+
+        // 各プレイヤーは自分の players/{uid} のみ書ける（参加・キャラ選択・ready）。GM は部屋レベル権限で全員分可。
+        "players": {
+          "$uid": {
+            ".write": "auth != null && $uid === auth.uid"
+          }
+        },
+
+        // presence は自分のノードのみ（onDisconnect 管理）。
+        "presence": {
+          "$uid": {
+            ".write": "auth != null && $uid === auth.uid"
+          }
+        },
+
+        // ゲーム状態（gs 全体）は参加者なら書ける（GM もしくはその部屋の players/{uid} が存在する者）。
+        "state": {
+          ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
+        },
+
+        // 描写（背景・立ち絵）も参加者なら書ける。
+        "scene": {
+          ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
+        }
+      }
+    },
+
+    "users": {
+      "$uid": {
+        // 個人データ（プロフィール・自作シナリオ・シーンプリセット・実績・通算統計）は本人のみ。
+        ".read": "auth != null && $uid === auth.uid",
+        ".write": "auth != null && $uid === auth.uid",
+
+        // ただし BGM プリセットは他クライアントが GM の設定を読むため公開読み取り（書き込みは本人のみ＝上の write を継承）。
+        "bgm": {
+          ".read": "auth != null"
+        }
+      }
+    },
+
+    "grownChars": {
+      "$uid": {
+        // 成長キャラ（インスタンス）は本人のみ読み書き。セッションへは join 時に部屋側へコピーされる。
+        ".read": "auth != null && $uid === auth.uid",
+        ".write": "auth != null && $uid === auth.uid"
+      }
+    }
+  }
+}
