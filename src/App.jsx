@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, get, onDisconnect, remove, serverTimestamp } from "firebase/database";
+import { ref, onValue, set, update, get, onChildAdded, onDisconnect, remove, serverTimestamp } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
 import { BackstoryScreen, EpilogueView, SceneStage, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
 import { useIsMobile } from "./useIsMobile";
+import { dehydrateScene, hydrateScene } from "./sceneAssets";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
@@ -531,6 +532,8 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
 }
 
 // ─── SessionApp ──────────────────────────────────────────────────
+const LOG_CAP = 400; // gs.log の最大保持件数（無限肥大を防ぐ。全文は終了時にエクスポート）
+
 function SessionApp({ roomCode, user }) {
   const [mode, setMode]             = useState(null);
   const [gs, setGs]                 = useState(DEFAULT_GS);
@@ -554,6 +557,8 @@ function SessionApp({ roomCode, user }) {
   const [undoCount, setUndoCount] = useState(0); // アンドゥ可能数（ボタン制御用）
   // 参加者（GM もしくはその部屋の players 登録者）か。未参加（PL共有画面の閲覧者）は閲覧専用＝書き込まない。
   const isParticipantRef = useRef(false);
+  const sceneAssetsRef = useRef({});  // 描写アセット（id→data URL）。増分購読で蓄積。
+  const rawSceneRef    = useRef(null); // RTDB 上の生 scene（id＋座標）。アセット到着時に再ハイドレート。
   const timerRef      = useRef(null);
   const prevCycleRef  = useRef({ day: null, cycleIdx: null });
   const prevQuestsRef = useRef(null);
@@ -864,14 +869,20 @@ function SessionApp({ roomCode, user }) {
       setSynced(true);
     }, () => { clearTimeout(timeout); setSynced(true); });
 
+    // scene 本体（id＋座標）と sceneAssets（画像 id→data URL）を別購読し、合成して setSceneData。
+    const rehydrate = () => { if (rawSceneRef.current) setSceneData(hydrateScene(rawSceneRef.current, sceneAssetsRef.current)); };
     const unsubScene = onValue(sceneRef, snap => {
-      if (snap.exists()) {
-        const val = snap.val();
-        setSceneData({ bg: val.bg ?? null, portraits: val.portraits ?? [], fx: val.fx ?? {} });
-      }
+      rawSceneRef.current = snap.exists() ? snap.val() : null;
+      if (rawSceneRef.current) rehydrate();
+    });
+    // アセットは内容ハッシュ id ＝不変なので onChildAdded で増分のみ取得（全量再DLを避ける）。
+    const assetsRef = ref(db, `rooms/${roomCode}/sceneAssets`);
+    const unsubAssets = onChildAdded(assetsRef, snap => {
+      sceneAssetsRef.current = { ...sceneAssetsRef.current, [snap.key]: snap.val() };
+      rehydrate();
     });
 
-    return () => { clearTimeout(timeout); unsubGs(); unsubScene(); };
+    return () => { clearTimeout(timeout); unsubGs(); unsubScene(); unsubAssets(); };
   }, [mode, gsPath, scenePath]);
 
   function normalizePc(p) {
@@ -949,7 +960,9 @@ function SessionApp({ roomCode, user }) {
     if (!isParticipantRef.current) return; // 閲覧専用（未参加クライアント）は state を書き込まない
     let fired = false;
     setGs(prev => {
-      const next = typeof fn === "function" ? fn(prev) : fn;
+      let next = typeof fn === "function" ? fn(prev) : fn;
+      // ログ肥大防止: 上限を超えたら古いものを落とす（prepend なので末尾が古い。全文は終了時にエクスポート）。
+      if (next?.log?.length > LOG_CAP) next = { ...next, log: next.log.slice(0, LOG_CAP) };
       if (!fired) {
         fired = true;
         // アンドゥ: ログが増えた＝意味のある操作 の直前状態を保存（ダイス演出等のログ無し更新は無視）
@@ -977,11 +990,18 @@ function SessionApp({ roomCode, user }) {
   const setSceneDataAndSync = useCallback((fn) => {
     if (!isParticipantRef.current) return; // 閲覧専用は scene を書き込まない
     setSceneData(prev => {
-      const next = typeof fn === "function" ? fn(prev) : fn;
-      set(ref(db, scenePath), next).catch(console.error);
+      const next = typeof fn === "function" ? fn(prev) : fn; // ローカルはハイドレート済み（data URL）を保持
+      // 画像を id 化し、未知の新規アセットだけ sceneAssets へ。scene 本体は id＋座標のみ＝軽量。
+      const { scene: dehydrated, newAssets } = dehydrateScene(next, sceneAssetsRef.current);
+      const ids = Object.keys(newAssets);
+      if (ids.length) {
+        ids.forEach(id => { sceneAssetsRef.current[id] = newAssets[id]; }); // 楽観的に known へ
+        update(ref(db, `rooms/${roomCode}/sceneAssets`), newAssets).catch(console.error);
+      }
+      set(ref(db, scenePath), dehydrated).catch(console.error);
       return next;
     });
-  }, [scenePath]);
+  }, [scenePath, roomCode]);
 
   useEffect(() => {
     if (!synced || !room || mode !== "gm") return;

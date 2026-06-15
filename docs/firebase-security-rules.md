@@ -14,7 +14,8 @@ GM 制限（`ALLOWED_GM_EMAILS`）も**クライアント側だけ**だった。
 | `rooms/{code}/players/{uid}` | 〃（部屋経由） | 本人のみ（GM は部屋権限で全員可） |
 | `rooms/{code}/presence/{uid}` | 〃 | 本人のみ |
 | `rooms/{code}/state`（gs 全体） | 〃 | **参加者**（GM もしくはその部屋の players に居る者） |
-| `rooms/{code}/scene`（描写） | 〃 | 参加者 |
+| `rooms/{code}/scene`（描写：id＋座標） | 〃 | 参加者 |
+| `rooms/{code}/sceneAssets`（描写画像 id→data URL） | 〃 | 参加者 |
 | `users/{uid}` | 本人のみ | 本人のみ |
 | `users/{uid}/bgm` | 認証済み（他クライアントが GM の BGM プリセットを読むため） | 本人のみ |
 | `grownChars/{uid}` | 本人のみ | 本人のみ |

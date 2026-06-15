@@ -22,6 +22,9 @@
         },
         "scene": {
           ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
+        },
+        "sceneAssets": {
+          ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
         }
       }
     },
