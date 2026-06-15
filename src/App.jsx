@@ -552,6 +552,8 @@ function SessionApp({ roomCode, user }) {
   const pendingRerollCb = useRef(null); // 振り直し確定時に呼ぶ cb
   const undoStackRef = useRef([]);      // アンドゥ用の直前gsスナップショット（最大20）
   const [undoCount, setUndoCount] = useState(0); // アンドゥ可能数（ボタン制御用）
+  // 参加者（GM もしくはその部屋の players 登録者）か。未参加（PL共有画面の閲覧者）は閲覧専用＝書き込まない。
+  const isParticipantRef = useRef(false);
   const timerRef      = useRef(null);
   const prevCycleRef  = useRef({ day: null, cycleIdx: null });
   const prevQuestsRef = useRef(null);
@@ -846,7 +848,7 @@ function SessionApp({ roomCode, user }) {
           clues:  val.clues  || [],
           log:    val.log    || [],
         }));
-      } else if (mode === "gm") {
+      } else if (mode === "gm" && isParticipantRef.current) {
         get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
           const r     = roomSnap.exists() ? roomSnap.val() : null;
           const initGs = {
@@ -944,6 +946,7 @@ function SessionApp({ roomCode, user }) {
   }
 
   const upd = useCallback((fn) => {
+    if (!isParticipantRef.current) return; // 閲覧専用（未参加クライアント）は state を書き込まない
     let fired = false;
     setGs(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
@@ -972,6 +975,7 @@ function SessionApp({ roomCode, user }) {
   }, [gsPath]);
 
   const setSceneDataAndSync = useCallback((fn) => {
+    if (!isParticipantRef.current) return; // 閲覧専用は scene を書き込まない
     setSceneData(prev => {
       const next = typeof fn === "function" ? fn(prev) : fn;
       set(ref(db, scenePath), next).catch(console.error);
@@ -1256,6 +1260,11 @@ function SessionApp({ roomCode, user }) {
 
   // ─── レンダリング ────────────────────────────────────────────
 
+  // 参加者判定（毎レンダー更新）。未参加（PL共有画面の閲覧者）は書き込み無効＝閲覧専用。
+  const isParticipant = !!room?.players?.[user.uid];
+  isParticipantRef.current = isParticipant;
+  const viewOnly = !!mode && !isParticipant;
+
   if (!mode) return (
     <div style={{ background: "#040608", color: "#c8b89a", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Serif JP', serif" }}>
       <div style={{ textAlign: "center" }}>
@@ -1448,6 +1457,15 @@ function SessionApp({ roomCode, user }) {
           </>
         );
       })()}
+
+      {/* 閲覧専用バナー（未参加クライアント＝PL共有画面の閲覧者） */}
+      {viewOnly && (
+        <div style={{ position: "fixed", bottom: 8, left: 8, zIndex: 199, pointerEvents: "none" }}>
+          <div style={{ background: "rgba(10,14,24,0.92)", border: "1px solid #3a4560", borderRadius: 14, padding: "4px 12px", fontSize: 10, color: "#8b97a8", letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 }}>
+            👁 閲覧専用モード（このアカウントは参加していません）
+          </div>
+        </div>
+      )}
 
       {/* 接続状態インジケータ（切断時のみ表示） */}
       {!connected && (
