@@ -10360,17 +10360,27 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               </div>
             )}
 
-            <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-              {TABS.map(([id, label]) => (
-                <div key={id} style={{ flex: 1, padding: "6px 2px", textAlign: "center", fontSize: 10, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
-              ))}
-              <div onClick={() => setShowBgm(v => !v)} title="BGM設定" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: bgmMuted ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{bgmMuted ? "🔈" : "🎵"}</div>
-              <div onClick={toggleMotion} title={motionReduced ? "演出: 抑制中（クリックで通常に戻す）" : "演出: 通常（クリックで抑制）"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: motionReduced ? C.textFaint : C.gold, borderBottom: "2px solid transparent" }}>{motionReduced ? "🚫" : "🎬"}</div>
-              <div onClick={cycleFont} title={`文字サイズ: ${fontScale.label}（クリックで変更）`} style={{ padding: "6px 7px", textAlign: "center", fontSize: 10 + fontLevel * 3, lineHeight: 1, cursor: "pointer", color: fontLevel > 0 ? C.gold : C.textFaint, borderBottom: "2px solid transparent", fontWeight: fontLevel > 0 ? 700 : 400 }}>A</div>
-              <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: "pointer", color: C.textFaint, borderBottom: "2px solid transparent" }}>⌨</div>
-              {isGm && (
-                <div onClick={() => { if (undoCount > 0 && undo && window.confirm("直近の操作を1つ取り消しますか？")) undo(); }} title={undoCount > 0 ? `直近の操作を取り消す（${undoCount}件）` : "取り消せる操作はありません"} style={{ padding: "6px 7px", textAlign: "center", fontSize: 11, cursor: undoCount > 0 ? "pointer" : "default", color: undoCount > 0 ? C.gold : "#2a3545", borderBottom: "2px solid transparent", opacity: undoCount > 0 ? 1 : 0.6 }}>↩</div>
-              )}
+            <div style={{ flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
+              {/* 1段目: ナビゲーションタブ */}
+              <div style={{ display: "flex" }}>
+                {TABS.map(([id, label]) => (
+                  <div key={id} style={{ flex: 1, padding: "7px 2px", textAlign: "center", fontSize: 11, cursor: "pointer", color: tab === id ? C.gold : C.textFaint, borderBottom: tab === id ? `2px solid ${C.gold}` : "2px solid transparent", background: tab === id ? "rgba(200,160,64,0.05)" : "transparent" }} onClick={() => setTab(id)}>{label}</div>
+                ))}
+              </div>
+              {/* 2段目: ツールバー（左=操作 / 右=表示設定） */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${C.border}55`, background: "rgba(255,255,255,0.015)", padding: "1px 5px" }}>
+                <div style={{ display: "flex", gap: 2 }}>
+                  {isGm && (
+                    <div onClick={() => { if (undoCount > 0 && undo && window.confirm("直近の操作を1つ取り消しますか？")) undo(); }} title={undoCount > 0 ? `直近の操作を取り消す（${undoCount}件）` : "取り消せる操作はありません"} style={{ padding: "4px 10px", fontSize: 13, cursor: undoCount > 0 ? "pointer" : "default", color: undoCount > 0 ? C.gold : "#2a3545", opacity: undoCount > 0 ? 1 : 0.6 }}>↩</div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 2 }}>
+                  <div onClick={() => setShowBgm(v => !v)} title="BGM設定" style={{ padding: "4px 10px", fontSize: 13, cursor: "pointer", color: bgmMuted ? C.textFaint : C.gold }}>{bgmMuted ? "🔈" : "🎵"}</div>
+                  <div onClick={toggleMotion} title={motionReduced ? "演出: 抑制中（クリックで通常に戻す）" : "演出: 通常（クリックで抑制）"} style={{ padding: "4px 10px", fontSize: 13, cursor: "pointer", color: motionReduced ? C.textFaint : C.gold }}>{motionReduced ? "🚫" : "🎬"}</div>
+                  <div onClick={cycleFont} title={`文字サイズ: ${fontScale.label}（クリックで変更）`} style={{ padding: "4px 10px", fontSize: 11 + fontLevel * 2, lineHeight: 1.2, cursor: "pointer", color: fontLevel > 0 ? C.gold : C.textFaint, fontWeight: fontLevel > 0 ? 700 : 400 }}>A</div>
+                  <div onClick={() => setShowShortcuts(true)} title="キーボードショートカット (?)" style={{ padding: "4px 10px", fontSize: 13, cursor: "pointer", color: C.textFaint }}>⌨</div>
+                </div>
+              </div>
             </div>
 
             {showBgm && (
