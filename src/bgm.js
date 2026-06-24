@@ -19,11 +19,14 @@ let _muted = (() => {
 })();
 
 let _unlocked   = false;
-let _desiredUrl = "";   // フェーズ由来の「鳴らすべきURL」
-let _playingUrl = "";   // 実際に再生中のURL
-let _players    = null; // [Audio, Audio]
+let _desiredUrl = "";   
+let _playingUrl = "";   
+let _players    = null; 
 let _activeIdx  = 0;
 let _fadeTimer  = null;
+let _currentVolState = 0;
+
+function effVol(k = 1) { return _muted ? 0 : _volume * BGM_GAIN * k; }
 
 function ensurePlayers() {
   if (_players) return;
@@ -31,10 +34,26 @@ function ensurePlayers() {
   _players.forEach(a => { a.loop = true; a.preload = "auto"; a.volume = 0; });
 }
 
-function effVol() { return _muted ? 0 : _volume * BGM_GAIN; }
-
 function clearFade() {
   if (_fadeTimer) { clearInterval(_fadeTimer); _fadeTimer = null; }
+}
+
+function updateAudioVolume(k) {
+  if (!_players) return;
+  _currentVolState = k;
+  const vol = effVol(k);
+  const a = _players[_activeIdx];
+  if (a) {
+    a.volume = vol;
+    a.muted = vol <= 0;
+  }
+}
+
+// フェード中でなければ再生中要素の音量を即時反映
+function applyVolumeNow() {
+  if (!_players || _fadeTimer) return;
+  const a = _players[_activeIdx];
+  if (_playingUrl) a.volume = effVol();
 }
 
 // 新トラックへクロスフェード（url="" なら停止フェード）
@@ -44,14 +63,18 @@ function transition(url) {
   clearFade();
 
   const oldA = _players[_activeIdx];
-  const fromOld = oldA.volume;
+  const fromOldK = _currentVolState;
 
   if (!url) {
     // 停止: 現行をフェードアウト
     let t = 0; const step = 40, dur = 600;
     _fadeTimer = setInterval(() => {
       t += step; const k = Math.min(1, t / dur);
-      oldA.volume = fromOld * (1 - k);
+      
+      const oldVol = effVol(fromOldK * (1 - k));
+      oldA.volume = oldVol;
+      oldA.muted = oldVol <= 0;
+      
       if (k >= 1) { clearFade(); try { oldA.pause(); } catch { /* noop */ } }
     }, step);
     _playingUrl = "";
@@ -65,28 +88,29 @@ function transition(url) {
     newA.src = url;
     newA.currentTime = 0;
     newA.volume = 0;
+    newA.muted = true;
     const p = newA.play();
-    if (p && p.catch) p.catch(() => {});  // 自動再生ブロックや無効URLは握りつぶす
+    if (p && p.catch) p.catch(() => {});
   } catch { /* noop */ }
 
-  const toNew = effVol();
   let t = 0; const step = 40, dur = 800;
   _fadeTimer = setInterval(() => {
     t += step; const k = Math.min(1, t / dur);
-    newA.volume = toNew * k;
-    oldA.volume = fromOld * (1 - k);
+    
+    // 旧オーディオを徐々に絞る
+    const oldVol = effVol(fromOldK * (1 - k));
+    oldA.volume = oldVol;
+    oldA.muted = oldVol <= 0;
+
+    // 新オーディオを徐々に上げる
+    _activeIdx = newIdx;
+    updateAudioVolume(k);
+
     if (k >= 1) { clearFade(); try { oldA.pause(); } catch { /* noop */ } }
   }, step);
 
   _activeIdx  = newIdx;
   _playingUrl = url;
-}
-
-// フェード中でなければ再生中要素の音量を即時反映
-function applyVolumeNow() {
-  if (!_players || _fadeTimer) return;
-  const a = _players[_activeIdx];
-  if (_playingUrl) a.volume = effVol();
 }
 
 export const bgm = {
