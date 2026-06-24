@@ -722,9 +722,11 @@ function SessionApp({ roomCode, user }) {
     const b = gs.bgm || {};
     const pre = gmBgm || {};
     const pick = k => b[k] || pre[k] || "";
-    const url = gs.battle?.active ? pick("battle")
+    const url = b.override ? b.override : (
+      gs.battle?.active ? pick("battle")
       : gs.sessionPhase === "end" ? pick("end")
-      : pick("explore");  // intro / explore など通常時
+      : pick("explore")  // intro / explore など通常時
+    );
     bgm.setTrack(url);
   }, [gs.bgm, gmBgm, gs.battle?.active, gs.sessionPhase]);
 

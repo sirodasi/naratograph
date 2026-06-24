@@ -10415,7 +10415,25 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                 </div>
                 {isGm && (
                   <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
-                    <div style={{ fontSize: 9, color: C.red, letterSpacing: 1, marginBottom: 6 }}>▶ GM: フェーズ別BGMのURL設定</div>
+                    <div style={{ fontSize: 9, color: C.red, letterSpacing: 1, marginBottom: 6 }}>▶ GM: BGMの設定</div>
+                    
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "4px", background: "rgba(200,160,64,0.1)", borderRadius: 4, border: `1px solid ${C.goldDim}` }}>
+                      <span style={{ fontSize: 9, color: C.gold, minWidth: 52 }}>手動再生</span>
+                      <input
+                        value={(gs.bgm || {}).override || ""}
+                        onChange={e => { const v = e.target.value; upd(p => ({ ...p, bgm: { ...(p.bgm || {}), override: v } })); }}
+                        placeholder="フェーズBGMを一時的に上書き"
+                        style={{ ...iStyle, flex: 1, fontSize: 9, padding: "4px 6px", borderColor: "transparent", background: "rgba(0,0,0,0.3)" }}
+                      />
+                      {(gs.bgm || {}).override && (
+                        <button 
+                          onClick={() => upd(p => ({ ...p, bgm: { ...(p.bgm || {}), override: "" } }))}
+                          style={{ background: "transparent", border: "none", color: C.textDim, cursor: "pointer", fontSize: 12, padding: "2px 6px" }}
+                          title="手動再生を解除して元のBGMに戻す"
+                        >✕</button>
+                      )}
+                    </div>
+
                     {[["explore", "探索/導入"], ["battle", "弾幕ごっこ"], ["end", "セッション終了"]].map(([key, label]) => (
                       <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
                         <span style={{ fontSize: 9, color: C.textDim, minWidth: 56 }}>{label}</span>
@@ -10428,7 +10446,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                       </div>
                     ))}
                     <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.6, marginTop: 4 }}>
-                      ※ 直接再生可能な音声ファイルのURLを指定してください。空欄の場合はプロフィール/準備フェイズで事前設定したBGMが再生されます。著作権・利用規約はGMの責任で確認を。
+                      ※ 手動再生に入力するとフェーズのBGMより優先されます。空欄にしたり✕を押すと、フェーズに応じたBGMに戻ります。
                     </div>
                   </div>
                 )}
