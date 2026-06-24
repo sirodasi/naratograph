@@ -910,7 +910,7 @@ function SessionApp({ roomCode, user }) {
   function buildPcList(r) {
     if (!r?.players) return [];
     return Object.values(r.players)
-      .filter(p => p.role === "pl" && p.charId)
+      .filter(p => p.role !== "gm" && p.charId)
       .map(p => {
         const charData   = CHARACTERS.find(c => c.id === p.charId) ?? null;
         const charBase   = charData?.base ?? p.base ?? "人間の里";
