@@ -149,7 +149,7 @@ const DEFAULT_SCENE = { bg: null, portraits: [] };
 // 空オブジェクト/配列を書くと除去される影響で、次回の読み戻しが undefined になり、それを再書込すると失敗する。
 // 書込直前にオブジェクトのキーから undefined を再帰的に除去して防御する（ローカル state は元のまま）。
 function stripUndefined(v) {
-  if (Array.isArray(v)) return v.map(stripUndefined);
+  if (Array.isArray(v)) return v.map(stripUndefined).filter(x => x !== undefined);
   if (v && typeof v === "object") {
     const out = {};
     for (const k in v) if (v[k] !== undefined) out[k] = stripUndefined(v[k]);

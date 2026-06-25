@@ -10993,8 +10993,12 @@ function BattleRightPanel({ gs, upd, user, isGm, animateDice }) {
   const b = gs.battle;
 
   // バトル開始時点のログ長をスナップショット → 戦闘中に追加されたログのみ表示
-  const battleStartLogLenRef = useRef((gs.log || []).length);
-  const battleLogs = (gs.log || []).slice(0, Math.max(0, (gs.log || []).length - battleStartLogLenRef.current));
+  const battleStartLogRef = useRef((gs.log || [])[0]);
+  const battleLogs = useMemo(() => {
+    const logs = gs.log || [];
+    const idx = logs.findIndex(l => l === battleStartLogRef.current);
+    return idx >= 0 ? logs.slice(0, idx) : logs;
+  }, [gs.log]);
   const pcCombatant = gs.pcs.find(p => p.uid === b.pcCombatant);
   const npcCombatant = b.participants.npcs.find(n => n.id === b.npcCombatant);
 

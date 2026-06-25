@@ -344,18 +344,22 @@ export function applyRandomResult(defGrid, diceResults, stepHint = {}) {
     targets.forEach(c => placedCells.push(c));
   } else if (specialType === "clear_then_double") {
     // 各ダイス目のマス: 既存弾幕を除去→2つ配置
-    const unique = [...new Set(diceResults.filter(d => d >= 1 && d <= 6))];
-    for (const d of unique) {
-      def[d - 1] = 2;
-      placedCells.push(d);
+    const counts = {};
+    diceResults.forEach(d => { if (d >= 1 && d <= 6) counts[d] = (counts[d] || 0) + 1; });
+    for (const [d, c] of Object.entries(counts)) {
+      def[d - 1] = c + 1;
+      placedCells.push(Number(d));
     }
   } else if (specialType === "clear_neighbors") {
     // 各ダイス目のマスの弾幕除去→その全隣接マスに×1
-    const unique = [...new Set(diceResults.filter(d => d >= 1 && d <= 6))];
-    for (const d of unique) def[d - 1] = 0;
-    const neighbors = [...new Set(unique.flatMap(c => GRID_ALL_ADJ[c] || []))];
-    def = addBullets(def, neighbors, 1);
-    neighbors.forEach(c => placedCells.push(c));
+    for (const d of diceResults) {
+      if (d >= 1 && d <= 6) {
+        def[d - 1] = Math.max(0, (def[d - 1] || 0) - 1);
+        const neighbors = GRID_ALL_ADJ[d] || [];
+        def = addBullets(def, neighbors, 1);
+        neighbors.forEach(c => placedCells.push(c));
+      }
+    }
   } else {
     // 通常: 各ダイス目のマスに+1
     for (const d of diceResults) {
