@@ -321,7 +321,7 @@ function SceneParticles({ kind }) {
       dur: rnd(cfg.dur[0], cfg.dur[1]), delay: -rnd(0, cfg.dur[1]),
       drift: rnd(-50, 50), rot: rnd(180, 720),
     }));
-  }, [kind]);
+  }, [cfg]);
   if (!cfg) return null;
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 5 }}>
@@ -674,7 +674,7 @@ function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highl
       if (curr.some((v, i) => v > (prev[i] || 0))) sfx.bullet(isNpc);
     }
     prevGridRef.current = [...curr];
-  }, [grid]);
+  }, [grid, isNpc]);
 
   return (
     <div style={{
@@ -1217,7 +1217,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const pcs = b.participantPcUids
     ? allPcs.filter(pc => b.participantPcUids.includes(pc.uid))
     : allPcs;
-  const npcs = b.participants?.npcs || [];
+  const npcs = useMemo(() => b.participants?.npcs || [], [b.participants?.npcs]);
 
   const alivePcs = pcs.filter(p => (p.resources?.残り人数?.cur || 0) > 0);
   const aliveNpcs = npcs.filter(n => (n.resources?.残り人数?.cur || 0) > 0);
@@ -1248,7 +1248,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
       },
       log: [...resetLogs.reverse(), ...p.log]
     }));
-  }, [b.phase, alivePcs.length, aliveNpcs.length, unactedPcs.length, unactedNpcs.length, b.actedPcs?.length, b.actedNpcs?.length, upd]);
+  }, [b.phase, alivePcs.length, aliveNpcs.length, unactedPcs.length, unactedNpcs.length, b.actedPcs, b.actedNpcs, upd]);
 
   // 使い魔: スキップ → ショットイントロで自動援護射撃（PC/NPC両対応・状態は独立管理）
   useEffect(() => {
@@ -1297,7 +1297,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         break;
       }
     }
-  }, [b.spellUsedBy, b.round]);
+  }, [b.spellUsedBy, b.round, pcs, npcs]);
   useEffect(() => {
     if (!spellFlash) return;
     const t = setTimeout(() => setSpellFlash(null), 2800);
@@ -1310,10 +1310,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
   const [evadeDoubutsuSel, setEvadeDoubutsuSel] = useState(null);
   useEffect(() => { if (b.phase !== "pc_evade_result") setEvadeDoubutsuSel(null); }, [b.phase]);
   const prevBannerPhase = useRef(null);
-  const BANNER_PHASES = { pc_shot_intro: "PC ショット", npc_shot_intro: "NPC ショット", pc_evade_intro: "PC 回避", npc_evade_intro: "NPC 回避", pc_dropout: "PC 脱落", npc_dropout: "NPC 脱落" };
   useEffect(() => {
     if (b.phase === prevBannerPhase.current) return;
     prevBannerPhase.current = b.phase;
+    const BANNER_PHASES = { pc_shot_intro: "PC ショット", npc_shot_intro: "NPC ショット", pc_evade_intro: "PC 回避", npc_evade_intro: "NPC 回避", pc_dropout: "PC 脱落", npc_dropout: "NPC 脱落" };
     const label = BANNER_PHASES[b.phase];
     if (label) {
       setPhaseBanner(label);
@@ -5139,7 +5139,7 @@ function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
       if (alive) { setRecords(acc); setLoading(false); }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [myPcs]);
 
   const setForm = (uid, patch) => setForms(f => ({ ...f, [uid]: { ...(f[uid] || {}), ...patch } }));
 
@@ -5359,13 +5359,13 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
   useEffect(() => {
     const t = setTimeout(() => { isVictory ? sfx.victory() : sfx.defeat(); }, 300);
     return () => clearTimeout(t);
-  }, []);
+  }, [isVictory]);
 
   const PARTICLES = isVictory
     ? [{ x: 8, d: 0, s: 6.2 }, { x: 22, d: 1.3, s: 8 }, { x: 38, d: 0.6, s: 7.1 },
-       { x: 52, d: 2.1, s: 5.8 }, { x: 67, d: 0.9, s: 9 }, { x: 80, d: 1.7, s: 6.6 },
-       { x: 91, d: 3.2, s: 7.4 }, { x: 14, d: 2.7, s: 8.3 }, { x: 45, d: 0.3, s: 5.5 },
-       { x: 74, d: 1.1, s: 7.8 }]
+        { x: 52, d: 2.1, s: 5.8 }, { x: 67, d: 0.9, s: 9 }, { x: 80, d: 1.7, s: 6.6 },
+        { x: 91, d: 3.2, s: 7.4 }, { x: 14, d: 2.7, s: 8.3 }, { x: 45, d: 0.3, s: 5.5 },
+        { x: 74, d: 1.1, s: 7.8 }]
     : [];
 
   // セッションログを txt でダウンロード（ふりかえり用）
@@ -6626,12 +6626,12 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   }, [pc.resources]); // eslint-disable-line
 
   // 一発限り（1セッション1回）スキルの発動を検出して効果音を鳴らす
+  const onceFlag = !!pc[PS_ONCE_FLAG];
   useEffect(() => {
-    const cur = !!pc[PS_ONCE_FLAG];
-    if (prevOnceFlagRef.current === null) { prevOnceFlagRef.current = cur; return; }
-    if (!prevOnceFlagRef.current && cur) sfx.skillActivate();
-    prevOnceFlagRef.current = cur;
-  }, [pc[PS_ONCE_FLAG]]);
+    if (prevOnceFlagRef.current === null) { prevOnceFlagRef.current = onceFlag; return; }
+    if (!prevOnceFlagRef.current && onceFlag) sfx.skillActivate();
+    prevOnceFlagRef.current = onceFlag;
+  }, [onceFlag]);
 
   return (
     <div style={{ border: `1px solid ${isActing ? C.blue : C.border}`, borderRadius: 2, marginBottom: 6, overflow: "hidden", transition: "border 0.2s, box-shadow 0.2s", boxShadow: isActing ? `0 0 16px ${C.blue}28` : "none", background: isActing ? `${C.blue}06` : "transparent" }}>
