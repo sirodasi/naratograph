@@ -528,6 +528,10 @@ function PrepRoom({ roomCode, user, isGm }) {
                 手がかりイベント
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 11 }}>
+                <input type="checkbox" checked={room.config?.usePlotPlacement || false} onChange={() => toggleExtraRule("usePlotPlacement")} />
+                プロット配置（弾幕ごっこ開始時の初期位置を秘匿同時決定）
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 11 }}>
                 <input type="checkbox" checked={room.config?.useRandomPlacement || false} onChange={() => toggleExtraRule("useRandomPlacement")} />
                 ランダム配置（弾幕ごっこ開始時の初期位置をD6で決定）
               </label>

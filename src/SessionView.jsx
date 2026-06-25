@@ -145,10 +145,7 @@ export const ITEM_DATA = {
     desc:    "1ラウンドの間【攻撃力】が1点増加します。（輝針城の限定アイテム）",
     canUse:  pc => (pc.items?.["妖器"] || 0) > 0 && !(pc.badStatus || []).includes("二日酔い"),
     use: (pc, _gs) => {
-      const resources = { ...pc.resources };
-      const r = resources.攻撃力 || { cur: 1, max: 5 };
-      resources.攻撃力 = { cur: Math.min(r.cur + 1, r.max), max: r.max };
-      return { ...pc, items: { ...pc.items, "妖器": Math.max(0, (pc.items["妖器"] || 0) - 1) }, resources, flags: { ...pc.flags, youki: true } };
+      return { ...pc, items: { ...pc.items, "妖器": Math.max(0, (pc.items["妖器"] || 0) - 1) }, flags: { ...pc.flags, youki: true } };
     },
   },
 };
@@ -1400,7 +1397,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
     // ★ 使い魔スキル: ショットダイス数 -1
     const hasFamiliar = hasOfficialSkill(attacker, "使い魔");
     // 剣術を扱う程度の能力（オート）: 弾幕ごっこ参加時の攻撃力を実効値に置換
-    const totalDice = calcShotDiceCount(effectiveAttackPower(attacker, gs.sessionPhase), bonus, hasFamiliar);
+    const baseAtk = effectiveAttackPower(attacker, gs.sessionPhase);
+    const youkiBonus = attacker?.flags?.youki ? 1 : 0;
+    const totalDice = calcShotDiceCount(baseAtk + youkiBonus, bonus, hasFamiliar);
 
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const defenderId = isPc ? b.npcCombatant : b.pcCombatant;
@@ -2795,6 +2794,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         }
       }
 
+      restoredPcs = restoredPcs.map(pc => pc.flags?.youki ? { ...pc, flags: { ...pc.flags, youki: false } } : pc);
+
       // 太陽を盗んだ鴉: このラウンドで残り人数が減らなかった保有者は残り人数-1
       const suntan = currentB.suntanPenalty || {};
       const reduced = currentB.hpReducedThisRound || {};
@@ -4032,46 +4033,38 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 const targetValue = count + 3;
                 const defenderId = targetId;
                 animateDice(2, "喰らいボム", (res) => {
-                  const maxDie = Math.max(...res);
-                  const success = maxDie >= targetValue;
-                  const logMsg = `💜 ${target?.charName || target?.name} 喰らいボム！SC-1 (追加:${res.join(",")}) → ${success ? "回避成功！" : "失敗..."}`;
                   upd(p => {
-                    const nextPhase = success
-                      ? (isPc ? "pc_evade_move" : "npc_evade_move")
-                      : (isPc ? "pc_hit_check" : "npc_hit_check");
-                    if (isPc) {
-                      let pcs = p.pcs.map(x => x.uid !== defenderId ? x : {
-                        ...x,
-                        resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: x.resources.スペルカード.cur - 1 } }
-                      });
-                      // 実績(半霊の見切り): 決戦で喰らいボムによる回避成功を記録
-                      const isFinalB = b.isFinal ?? (b.type === "mass" && !b.questId);
-                      if (success && isFinalB) pcs = bumpAch(pcs, defenderId, a => ({ ...a, kuraibomuSuccess: true }));
-                      return {
-                        ...p,
-                        pcs,
-                        battle: { ...p.battle, phase: nextPhase, pcLastResort: true },
-                        log: [logMsg, ...p.log]
-                      };
-                    } else {
-                      return {
-                        ...p,
-                        battle: {
-                          ...p.battle,
-                          phase: nextPhase,
-                          npcLastResort: true,
-                          participants: {
-                            ...p.battle.participants,
-                            npcs: p.battle.participants.npcs.map(n => n.id !== defenderId ? n : {
-                              ...n,
-                              resources: { ...n.resources, スペルカード: { ...n.resources.スペルカード, cur: n.resources.スペルカード.cur - 1 } }
-                            })
-                          }
-                        },
-                        log: [logMsg, ...p.log]
-                      };
+                    // SCを1消費
+                    let pcs = p.pcs.map(x => x.uid !== defenderId ? x : {
+                      ...x,
+                      resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, x.resources.スペルカード.cur - 1) } }
+                    });
+                    // 実績記録
+                    const isFinalB = b.isFinal ?? (b.type === "mass" && !b.questId);
+                    if (isFinalB && Math.max(...res) >= targetValue) {
+                      pcs = bumpAch(pcs, defenderId, a => ({ ...a, kuraibomuSuccess: true }));
                     }
+                    
+                    // 現在の回避ダイスプールに追加
+                    const newDice = [...(p.battle.evadeRoll?.dice || []), ...res];
+                    
+                    return {
+                      ...p,
+                      pcs,
+                      battle: { 
+                        ...p.battle, 
+                        pcLastResort: true,
+                        evadeRoll: { ...p.battle.evadeRoll, dice: newDice }
+                      },
+                      log: [`💜 ${target?.charName || target?.name} 喰らいボム！SC-1 (追加:${res.join(",")})`, ...p.log]
+                    };
                   });
+                  // 状態更新後、少し待ってから再判定を確定させる（アニメーションの完了を待つため）
+                  setTimeout(() => {
+                    const combatant = isPc ? combatantPc : combatantNpc;
+                    const currentDice = [...(gs.battle?.evadeRoll?.dice || []), ...res];
+                    resolveEvadeApply(isPc, currentDice, targetValue, combatant);
+                  }, 100);
                 });
               }}
               style={btnFull("rgba(171,71,188,0.2)", "#7b1fa2", C.purple, { opacity: (target?.resources?.スペルカード?.cur || 0) >= 1 ? 1 : 0.35 })}>
@@ -4214,37 +4207,145 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           <button
             disabled={!b.startOrder || (b.participantPcUids || allPcs.map(p => p.uid)).length === 0}
             onClick={() => {
-              const positions = {};
-              const grids = {};
               const useRandom = gs.config?.useRandomPlacement;
+              const usePlot = gs.config?.usePlotPlacement;
               const participantUids = b.participantPcUids || allPcs.map(p => p.uid);
-              allPcs.filter(p => participantUids.includes(p.uid)).forEach(p => {
-                positions[p.uid] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
-                grids[p.uid] = [0,0,0,0,0,0];
-              });
-              npcs.forEach(n => {
-                positions[n.id] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
-                grids[n.id] = [0,0,0,0,0,0];
-              });
 
-              upd(p => ({
-                ...p,
-                battle: {
-                  ...p.battle,
-                  phase: "round_start",
-                  positions,
-                  grids,
-                  round: 1,
-                  actedPcs: [],
-                  actedNpcs: [],
-                },
-                log: ["⚖️ 弾幕ごっこ開始！規約に従い、正々堂々と戦いましょう。", ...(p.log || [])]
-              }));
+              if (usePlot) {
+                const grids = {};
+                allPcs.filter(p => participantUids.includes(p.uid)).forEach(p => { grids[p.uid] = [0,0,0,0,0,0]; });
+                npcs.forEach(n => { grids[n.id] = [0,0,0,0,0,0]; });
+                upd(p => ({
+                  ...p,
+                  battle: {
+                    ...p.battle,
+                    phase: "plot_initial",
+                    grids,
+                    plotChoices: {},
+                    round: 1,
+                    actedPcs: [],
+                    actedNpcs: []
+                  },
+                  log: ["⚖️ プロット配置が開始されました。配置マスを秘匿決定してください。", ...(p.log || [])]
+                }));
+              } else {
+                const positions = {};
+                const grids = {};
+                allPcs.filter(p => participantUids.includes(p.uid)).forEach(p => {
+                  positions[p.uid] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
+                  grids[p.uid] = [0,0,0,0,0,0];
+                });
+                npcs.forEach(n => {
+                  positions[n.id] = useRandom ? Math.floor(Math.random() * 6) + 1 : 5;
+                  grids[n.id] = [0,0,0,0,0,0];
+                });
+
+                upd(p => ({
+                  ...p,
+                  battle: {
+                    ...p.battle,
+                    phase: "round_start",
+                    positions,
+                    grids,
+                    round: 1,
+                    actedPcs: [],
+                    actedNpcs: [],
+                  },
+                  log: ["⚖️ 弾幕ごっこ開始！規約に従い、正々堂々と戦いましょう。", ...(p.log || [])]
+                }));
+              }
             }}
             style={btnFull(C.redBg, C.redBorder, C.red, { padding: "12px", opacity: b.startOrder ? 1 : 0.3, marginTop: 4 })}
           >
             対戦を開始する
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (b.phase === "plot_initial") {
+    const participantUids = b.participantPcUids || allPcs.map(p => p.uid);
+    const myPcs = pcs.filter(p => p.uid === user.uid && participantUids.includes(p.uid));
+    const isAllPcsPlotted = participantUids.every(uid => b.plotChoices?.[uid]);
+    const isAllNpcsPlotted = npcs.every(n => b.plotChoices?.[n.id]);
+    const isAllPlotted = isAllPcsPlotted && isAllNpcsPlotted;
+
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608" }}>
+        <div style={{ background: "#0c1020", border: `1px solid ${C.goldDim}`, padding: 30, borderRadius: 8, maxWidth: 500, width: "90%" }}>
+          <div style={{ fontSize: 16, color: C.gold, marginBottom: 20, textAlign: "center" }}>プロット配置：初期位置の秘匿決定</div>
+
+          {myPcs.map(p => (
+            <div key={p.uid} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: C.blue, marginBottom: 8 }}>{p.charName} の配置マスを選択</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                {[1,2,3,4,5,6].map(num => {
+                  const selected = b.plotChoices?.[p.uid] === num;
+                  return (
+                    <button key={num} onClick={() => upd(st => ({ ...st, battle: { ...st.battle, plotChoices: { ...(st.battle.plotChoices || {}), [p.uid]: num } } }))}
+                      style={btnFull(selected ? C.blueBg : "rgba(255,255,255,0.05)", selected ? C.blueBorder : C.border, selected ? C.blue : C.text, { width: 40, height: 40, fontSize: 14 })}>
+                      {num}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {isGm && npcs.map(n => (
+            <div key={n.id} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: C.red, marginBottom: 8 }}>{n.name} の配置マスを選択</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                {[1,2,3,4,5,6].map(num => {
+                  const selected = b.plotChoices?.[n.id] === num;
+                  return (
+                    <button key={num} onClick={() => upd(st => ({ ...st, battle: { ...st.battle, plotChoices: { ...(st.battle.plotChoices || {}), [n.id]: num } } }))}
+                      style={btnFull(selected ? C.redBg : "rgba(255,255,255,0.05)", selected ? C.redBorder : C.border, selected ? C.red : C.text, { width: 40, height: 40, fontSize: 14 })}>
+                      {num}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>現在の準備状況</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {participantUids.map(uid => {
+                const name = allPcs.find(p => p.uid === uid)?.charName || "PC";
+                const done = !!b.plotChoices?.[uid];
+                return <span key={uid} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: done ? C.greenBg : "rgba(255,255,255,0.05)", color: done ? C.green : C.textFaint, border: `1px solid ${done ? C.greenBorder : C.border}` }}>{name} {done ? "✓" : "…"}</span>;
+              })}
+              {npcs.map(n => {
+                const done = !!b.plotChoices?.[n.id];
+                return <span key={n.id} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: done ? C.greenBg : "rgba(255,255,255,0.05)", color: done ? C.green : C.textFaint, border: `1px solid ${done ? C.greenBorder : C.border}` }}>{n.name} {done ? "✓" : "…"}</span>;
+              })}
+            </div>
+          </div>
+
+          {isGm ? (
+            <button
+              disabled={!isAllPlotted}
+              onClick={() => {
+                const positions = { ...b.plotChoices };
+                upd(p => ({
+                  ...p,
+                  battle: { ...p.battle, phase: "round_start", positions, plotChoices: null },
+                  log: ["⚖️ 全員の配置マスが一斉に公開されました！ 弾幕ごっこを開始します。", ...(p.log || [])]
+                }));
+              }}
+              style={{ ...btnFull(C.goldBg, C.goldDim, C.gold, { marginTop: 20, padding: "12px" }), opacity: isAllPlotted ? 1 : 0.4 }}
+            >
+              一斉公開して弾幕ごっこを開始
+            </button>
+          ) : (
+            <div style={{ textAlign: "center", fontSize: 11, color: C.textDim, marginTop: 20 }}>
+              {isAllPlotted ? "全員の準備が完了しました。GMの開始を待っています…" : "他の参加者のプロットを待っています…"}
+            </div>
+          )}
+
         </div>
       </div>
     );
