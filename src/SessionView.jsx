@@ -1716,12 +1716,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
           const hasMirrorGraze = effList.some(e => e.type === "mirror_graze_gain");             // ミシガンロール: 相手のグレイズ獲得に同調
           animateDice(totalDice, `${spellCard.name}（ランダム配置）`, res => {
             let finalDef = [...snapDef];
+            let finalAtk = [...snapAtk];
             let offset = 0;
             for (const hint of randomHints) {
               const batch = res.slice(offset, offset + hint.diceCount);
               offset += hint.diceCount;
-              const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
+              const { defGrid: nextDef, atkGrid: nextAtk } = applyRandomResult(finalDef, finalAtk, batch, hint, attPos, defPos);
               finalDef = nextDef;
+              finalAtk = nextAtk;
             }
             // 配置後の移動効果（摩多羅隠岐奈「太古に失われた背中」）
             if (hasShift) finalDef = shiftNon25Horizontal(finalDef);
@@ -1750,7 +1752,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
                 battle: {
                   ...p.battle,
                   participants: { ...p.battle.participants, npcs },
-                  grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk },
+                  grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: finalAtk },
                   spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
                   ...(moveSelect ? { spellMoveSelect: moveSelect } : {}),
                   ...(resourceEffects.length > 0 ? { evasionRestore: evRestore } : {}),
@@ -2043,18 +2045,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData }) {
         upd(p => ({ ...p, battle: { ...p.battle, spellRollCheck: null } }));
         animateDice(totalDice, `${src.spellName}（配置）`, res2 => {
           let finalDef = [...snapDef2];
+          let finalAtk = [...snapAtk2];
           let offset = 0;
           for (const hint of randomHints) {
             const batch = res2.slice(offset, offset + hint.diceCount);
             offset += hint.diceCount;
-            const { defGrid: nextDef } = applyRandomResult(finalDef, batch, hint);
+            const { defGrid: nextDef, atkGrid: nextAtk } = applyRandomResult(finalDef, finalAtk, batch, hint, attPos, defPos);
             finalDef = nextDef;
+            finalAtk = nextAtk;
           }
           upd(p => ({
             ...p,
             battle: {
               ...p.battle,
-              grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: snapAtk2 },
+              grids: { ...p.battle.grids, [defenderId]: finalDef, [attackerId]: finalAtk },
             },
             log: [`🎲 ${src.spellName}：判定${label}（${res.join(",")}）→ ランダム配置完了`, ...p.log],
           }));

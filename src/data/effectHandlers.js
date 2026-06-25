@@ -46,7 +46,7 @@ export function removeBullets(grid, cells, count = 1) {
  * @param {number[]} placedCells - このステップで配置したセル番号リスト
  * @returns {{ defGrid: number[], atkGrid: number[] }}
  */
-export function applyAfterEffect(afterDef, defGrid, atkGrid, placedCells) {
+export function applyAfterEffect(afterDef, defGrid, atkGrid, placedCells, atkPos, defPos) {
   const count = afterDef.count ?? 1;
   let def = [...defGrid];
   let atk = [...atkGrid];
@@ -75,7 +75,11 @@ export function applyAfterEffect(afterDef, defGrid, atkGrid, placedCells) {
     }
     case "remove_attacker_mirror": {
       // 配置したマスと同番号の攻撃側フィールドの弾幕を除去
-      atk = removeBullets(atk, unique, count);
+      const baseCount = count;
+      for (const cell of unique) {
+        const removeCount = (cell === atkPos) ? baseCount + 1 : baseCount;
+        atk[cell - 1] = Math.max(0, (atk[cell - 1] || 0) - removeCount);
+      }
       break;
     }
     default:
@@ -86,10 +90,10 @@ export function applyAfterEffect(afterDef, defGrid, atkGrid, placedCells) {
 }
 
 /** steps[].after[] リストを順番に適用 */
-export function applyAfterEffects(afterList, defGrid, atkGrid, placedCells) {
+export function applyAfterEffects(afterList, defGrid, atkGrid, placedCells, atkPos, defPos) {
   let result = { defGrid, atkGrid };
   for (const after of (afterList || [])) {
-    result = applyAfterEffect(after, result.defGrid, result.atkGrid, placedCells);
+    result = applyAfterEffect(after, result.defGrid, result.atkGrid, placedCells, atkPos, defPos);
   }
   return result;
 }
@@ -312,7 +316,7 @@ export function applyStep(step, defGrid, atkGrid, atkPos, defPos) {
 
   // アフターエフェクトを適用（配置があった場合のみ）
   if (step.after && placedCells.length > 0) {
-    const r = applyAfterEffects(step.after, def, atk, placedCells);
+    const r = applyAfterEffects(step.after, def, atk, placedCells, atkPos, defPos);
     def = r.defGrid;
     atk = r.atkGrid;
   }
@@ -331,8 +335,9 @@ export function applyStep(step, defGrid, atkGrid, atkPos, defPos) {
  * @param {object}   stepHint    - applyStep が返した { specialType?, fillCount?, afterList? }
  * @returns {{ defGrid: number[], placedCells: number[] }}
  */
-export function applyRandomResult(defGrid, diceResults, stepHint = {}) {
+export function applyRandomResult(defGrid, atkGrid, diceResults, stepHint = {}, atkPos, defPos) {
   let def = [...defGrid];
+  let atk = [...atkGrid];
   const placedCells = [];
   const { specialType, fillCount = 1, afterList = [] } = stepHint;
 
@@ -372,11 +377,12 @@ export function applyRandomResult(defGrid, diceResults, stepHint = {}) {
 
   // アフターエフェクト
   if (afterList.length > 0 && placedCells.length > 0) {
-    const r = applyAfterEffects(afterList, def, emptyGrid(), placedCells);
+    const r = applyAfterEffects(afterList, def, atk, placedCells, atkPos, defPos);
     def = r.defGrid;
+    atk = r.atkGrid;
   }
 
-  return { defGrid: def, placedCells };
+  return { defGrid: def, atkGrid: atk, placedCells };
 }
 
 // ─── ユーティリティ ────────────────────────────────────────────────────────────
