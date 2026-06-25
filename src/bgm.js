@@ -49,6 +49,20 @@ function ensurePlayers() {
     a.volume = 0; 
     a.muted = _muted;
   });
+
+  const tryPlay = () => {
+    if (_needsPlayOnInteraction && _playingUrl && _players[_activeIdx].paused) {
+      _needsPlayOnInteraction = false;
+      const p = _players[_activeIdx].play();
+      if (p && p.catch) {
+        p.catch(e => {
+          if (e.name === "NotAllowedError") _needsPlayOnInteraction = true;
+        });
+      }
+    }
+  };
+  window.addEventListener("pointerdown", tryPlay);
+  window.addEventListener("keydown", tryPlay);
 }
 
 // 新トラックへクロスフェード（url="" なら停止フェード）
