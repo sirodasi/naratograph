@@ -5836,10 +5836,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
   const isCustomChar  = pc.charId?.startsWith("custom_");
   const hasActed      = (gs.actedPcs ||[]).includes(pc.uid);
   const isActing      = gs.currentScene?.pcUid === pc.uid;
-  const skillCanActivate = skill && skill.type !== "オート";
   // 強調表示用：個性スキルが今すぐ発動可能か＋その色（型色）
   const psColor = SKILL_TYPE_COLOR[skill?.type] || C.gold;
-  const psReady = skillCanActivate && !isCustomChar && !(skill?.name === "カリスマ" && pc[PS_ONCE_FLAG]);
   const abColor = SKILL_TYPE_COLOR[activeAbility?.type] || "#90caf9";
   const _currentSpotName  = getSpot(pc.currentSpot)?.name || "-";
 
@@ -6780,13 +6778,27 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           </div>
 
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
-          {skill && (
-            <div style={{ marginBottom: 6, ...(psReady ? skillReadyBox(psColor) : {}) }}>
+          
+          {/* 個性スキルの表示 */}
+          {skill && (() => {
+            const isPassive = skill.passive;
+            const hasCustomUI = skill.hasCustomUI;
+            const isCustomChar = pc.charId?.startsWith("custom_");
+            // 発動ボタンを出す条件（専用UIがなく、パッシブでもないこと）
+            const canActivate = !isCustomChar && !hasCustomUI && !isPassive;
+            const isUsedUp = skill.name === "カリスマ" && pc[PS_ONCE_FLAG];
+            const isReady = canActivate && !isUsedUp;
+
+            return (
+            <div style={{ marginBottom: 6, ...(isReady ? skillReadyBox(psColor) : {}) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[skill.type] || C.text}18`, border: `1px solid ${SKILL_TYPE_COLOR[skill.type] || C.text}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[skill.type] || C.text }}>{skill.type}</span>
-                <span style={{ fontSize: 11, fontWeight: psReady ? 700 : 400, color: psReady ? psColor : "#81c784" }}>《{skill.name}》</span>
-                {skill.type === "オート" && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
-                {psReady && <span style={{ fontSize: 8, color: psColor, marginLeft: "auto" }}>● 発動可能</span>}
+                <span style={{ padding: "1px 6px", background: `${SKILL_TYPE_COLOR[skill.type] || C.text}18`, border: `1px solid ${SKILL_TYPE_COLOR[skill.type] || C.text}50`, borderRadius: 8, fontSize: 8, color: SKILL_TYPE_COLOR[skill.type] || C.text, flexShrink: 0, whiteSpace: "nowrap" }}>{skill.type}</span>
+                <span style={{ fontSize: 11, fontWeight: isReady ? 700 : 400, color: isReady ? psColor : "#81c784", flex: 1, minWidth: 0, wordBreak: "keep-all" }}>《{skill.name}》</span>
+                
+                {isPassive && <span style={{ fontSize: 8, color: "#81c784", flexShrink: 0, whiteSpace: "nowrap" }}>常時発動中</span>}
+                {hasCustomUI && <span style={{ fontSize: 8, color: "#ffb74d", flexShrink: 0, whiteSpace: "nowrap" }}>タイミング発動</span>}
+                
+                {isReady && <span style={{ fontSize: 8, color: psColor, marginLeft: "auto", flexShrink: 0, whiteSpace: "nowrap" }}>● 発動可能</span>}
               </div>
               <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{skill.desc}</div>
 
@@ -6801,7 +6813,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                           {Object.values(BAD_STATUS_TABLE).map(bs => (
                             <button key={bs.name} onClick={() => onUpdatePc({ ...pc, badStatusImmune: bs.name })}
-                              style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textDim }}>
+                              style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, color: C.textDim, flexShrink: 0, whiteSpace: "nowrap" }}>
                               {bs.name}
                             </button>
                           ))}
@@ -6817,11 +6829,26 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
                 <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 4 }}>（このセッションは使用済み）</div>
               )}
 
-              {skillCanActivate && !isCustomChar && !(skill.name === "カリスマ" && pc[PS_ONCE_FLAG]) && (
-                <button onClick={() => setSkillModal(true)} style={skillActivateBtn(psColor)}>発動する</button>
+              {isCustomChar ? null : (
+                canActivate ? (
+                  isUsedUp
+                    ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
+                    : <button onClick={() => setSkillModal(true)} style={skillActivateBtn(psColor)}>発動する</button>
+                ) : hasCustomUI ? (
+                  <div style={{ fontSize: 9, color: "#ffb74d", padding: "4px 8px", background: "rgba(255,183,77,0.1)", borderRadius: 4, border: "1px solid rgba(255,183,77,0.3)" }}>
+                    💡 条件を満たした際、専用のボタンが表示されます
+                  </div>
+                ) : isPassive && skill.name !== "馬鹿" ? (
+                  <div style={{ fontSize: 9, color: "#81c784", padding: "4px 8px", background: "rgba(129,199,132,0.1)", borderRadius: 4, border: "1px solid rgba(129,199,132,0.3)" }}>
+                    ⚙️ 常に効果が適用されています
+                  </div>
+                ) : null
               )}
             </div>
-          )}
+            );
+          })()}
+
+          {/* 能力スキルの表示 */}
           {activeAbility?.name && (() => {
             const meta = getAbilityEffect(activeAbility);
             const hasCustomUI = meta?.hasCustomUI;
@@ -6834,14 +6861,14 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
             return (
               <div style={{ marginTop: 6, ...(isReady ? skillReadyBox(abColor) : {}) }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <span style={{ padding: "1px 6px", background: `${abColor}18`, border: `1px solid ${abColor}50`, borderRadius: 8, fontSize: 8, color: abColor }}>{activeAbility.type}</span>
-                  <span style={{ fontSize: 11, fontWeight: isReady ? 700 : 400, color: isReady ? abColor : "#90caf9" }}>《{activeAbility.name}》</span>
-                  {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
+                  <span style={{ padding: "1px 6px", background: `${abColor}18`, border: `1px solid ${abColor}50`, borderRadius: 8, fontSize: 8, color: abColor, flexShrink: 0, whiteSpace: "nowrap" }}>{activeAbility.type}</span>
+                  <span style={{ fontSize: 11, fontWeight: isReady ? 700 : 400, color: isReady ? abColor : "#90caf9", flex: 1, minWidth: 0, wordBreak: "keep-all" }}>《{activeAbility.name}》</span>
+                  {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold, flexShrink: 0, whiteSpace: "nowrap" }}>成長</span>}
                   
-                  {isPassive && !isReactive && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
-                  {hasCustomUI && <span style={{ fontSize: 8, color: "#ffb74d" }}>タイミング発動</span>}
+                  {isPassive && !isReactive && <span style={{ fontSize: 8, color: "#81c784", flexShrink: 0, whiteSpace: "nowrap" }}>常時発動中</span>}
+                  {hasCustomUI && <span style={{ fontSize: 8, color: "#ffb74d", flexShrink: 0, whiteSpace: "nowrap" }}>タイミング発動</span>}
                   
-                  {isReady && <span style={{ fontSize: 8, color: abColor, marginLeft: "auto" }}>● 発動可能</span>}
+                  {isReady && <span style={{ fontSize: 8, color: abColor, marginLeft: "auto", flexShrink: 0, whiteSpace: "nowrap" }}>● 発動可能</span>}
                 </div>
                 <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
                 {pc.disguisedAs && <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>🦝 変身中：{pc.disguisedAs} として扱う</div>}
