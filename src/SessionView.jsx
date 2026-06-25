@@ -5940,8 +5940,6 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
     if (freq === "scene")   return u.sceneId === abilitySceneId();
     return false;
   };
-  // 強調表示用：能力スキルが今すぐ発動可能か（非オート or リアクティブ／未使用）
-  const abReady = !!activeAbility?.name && (activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && !abilityUsedUp(activeAbility);
   // base(pc派生) に使用回数フラグを記録して返す
   const withAbilityUse = (base, name, freq) => {
     if (!freq) return base;
@@ -6824,25 +6822,59 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               )}
             </div>
           )}
-          {activeAbility?.name && (
-            <div style={{ marginTop: 6, ...(abReady ? skillReadyBox(abColor) : {}) }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ padding: "1px 6px", background: `${abColor}18`, border: `1px solid ${abColor}50`, borderRadius: 8, fontSize: 8, color: abColor }}>{activeAbility.type}</span>
-                <span style={{ fontSize: 11, fontWeight: abReady ? 700 : 400, color: abReady ? abColor : "#90caf9" }}>《{activeAbility.name}》</span>
-                {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
-                {activeAbility.type === "オート" && !getAbilityEffect(activeAbility)?.reactive && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
-                {abReady && <span style={{ fontSize: 8, color: abColor, marginLeft: "auto" }}>● 発動可能</span>}
+          {activeAbility?.name && (() => {
+            const meta = getAbilityEffect(activeAbility);
+            const hasCustomUI = meta?.hasCustomUI;
+            const isPassive = meta?.passive;
+            const isReactive = meta?.reactive;
+            // 発動ボタンを出す条件（専用UIがなく、パッシブでもないか、あるいは手動リアクティブ指定がある場合）
+            const canActivate = !isCustomChar && (isReactive || (!hasCustomUI && !isPassive));
+            const isReady = !!activeAbility?.name && canActivate && !abilityUsedUp(activeAbility);
+
+            return (
+              <div style={{ marginTop: 6, ...(isReady ? skillReadyBox(abColor) : {}) }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <span style={{ padding: "1px 6px", background: `${abColor}18`, border: `1px solid ${abColor}50`, borderRadius: 8, fontSize: 8, color: abColor }}>{activeAbility.type}</span>
+                  <span style={{ fontSize: 11, fontWeight: isReady ? 700 : 400, color: isReady ? abColor : "#90caf9" }}>《{activeAbility.name}》</span>
+                  {isAbilityGrown && pc.growthAbility?.name && <span style={{ padding: "1px 5px", background: "rgba(255,213,79,0.16)", border: `1px solid ${C.goldDim}`, borderRadius: 8, fontSize: 8, color: C.gold }}>成長</span>}
+                  
+                  {isPassive && !isReactive && <span style={{ fontSize: 8, color: "#81c784" }}>常時発動中</span>}
+                  {hasCustomUI && <span style={{ fontSize: 8, color: "#ffb74d" }}>タイミング発動</span>}
+                  
+                  {isReady && <span style={{ fontSize: 8, color: abColor, marginLeft: "auto" }}>● 発動可能</span>}
+                </div>
+                <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
+                {pc.disguisedAs && <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>🦝 変身中：{pc.disguisedAs} として扱う</div>}
+                {pc.untargetable && <div style={{ fontSize: 9, color: "#90caf9", marginBottom: 4 }}>👁 対象外：特殊効果の対象に選ばれない</div>}
+                
+                {/* 正邪: ひっくり返すの無効化トグル */}
+                {activeAbility?.name === "何でもひっくり返す程度の能力＋" && !isCustomChar && (
+                  <div style={{ marginBottom: 6 }}>
+                    <button onClick={() => onUpdatePc({ ...pc, abilityToggleOff: !pc.abilityToggleOff })}
+                      style={{ padding: "3px 8px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: pc.abilityToggleOff ? "rgba(224,112,96,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${pc.abilityToggleOff ? C.redBorder : C.border}`, color: pc.abilityToggleOff ? C.red : C.textDim }}>
+                      {pc.abilityToggleOff ? "🛡 現在: 特殊効果 無効化中（クリックで有効化）" : "現在: 特殊効果 有効（クリックで無効化）"}
+                    </button>
+                  </div>
+                )}
+
+                {isCustomChar ? null : (
+                  canActivate ? (
+                    abilityUsedUp(activeAbility)
+                      ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
+                      : <button onClick={() => setAbilityModal(activeAbility)} style={skillActivateBtn(abColor)}>発動する</button>
+                  ) : hasCustomUI ? (
+                    <div style={{ fontSize: 9, color: "#ffb74d", padding: "4px 8px", background: "rgba(255,183,77,0.1)", borderRadius: 4, border: "1px solid rgba(255,183,77,0.3)" }}>
+                      💡 条件を満たした際、専用のボタンが表示されます
+                    </div>
+                  ) : isPassive ? (
+                    <div style={{ fontSize: 9, color: "#81c784", padding: "4px 8px", background: "rgba(129,199,132,0.1)", borderRadius: 4, border: "1px solid rgba(129,199,132,0.3)" }}>
+                      ⚙️ 常に効果が適用されています
+                    </div>
+                  ) : null
+                )}
               </div>
-              <div style={{ fontSize: 9, color: C.textFaint, lineHeight: 1.7, marginBottom: 6 }}>{activeAbility.desc}</div>
-              {pc.disguisedAs && <div style={{ fontSize: 9, color: "#ce93d8", marginBottom: 4 }}>🦝 変身中：{pc.disguisedAs} として扱う</div>}
-              {pc.untargetable && <div style={{ fontSize: 9, color: "#90caf9", marginBottom: 4 }}>👁 対象外：特殊効果の対象に選ばれない</div>}
-              {(activeAbility.type !== "オート" || getAbilityEffect(activeAbility)?.reactive) && !isCustomChar && (
-                abilityUsedUp(activeAbility)
-                  ? <div style={{ fontSize: 9, color: C.textFaint }}>（使用済み）</div>
-                  : <button onClick={() => setAbilityModal(activeAbility)} style={skillActivateBtn(abColor)}>発動する</button>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* 所有権を失わせる（千亦）: 対象に選ばれたキャラはアイテム交換（1つ失い1つ獲得）できる */}
           {(gs.itemSwapTargets || []).includes(pc.uid) && !isCustomChar && ITEM_NAMES.some(n => (pc.items?.[n] || 0) > 0) && (
