@@ -234,7 +234,11 @@ export function applyStep(step, defGrid, atkGrid, atkPos, defPos) {
       }
       if (cleared > 0) {
         placedCells = [defPos];
-        def = addBullets(def, placedCells, cleared);
+        let amount = cleared * (step.multiplier ?? 1);
+        if (step.round === "ceil") amount = Math.ceil(amount);
+        else if (step.round === "floor") amount = Math.floor(amount);
+        else amount = Math.round(amount);
+        def = addBullets(def, placedCells, amount);
       }
       break;
     }
