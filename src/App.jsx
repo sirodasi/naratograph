@@ -602,7 +602,7 @@ function SessionApp({ roomCode, user }) {
       const t = setTimeout(() => setQuestSolveFlash(null), 3600);
       return () => clearTimeout(t);
     }
-  }, [gs.quests]);
+  }, [gs.quests, gs.sessionPhase, gs.battle?.active]);
 
   // 手がかり配置を検出してバナー
   useEffect(() => {
@@ -638,7 +638,7 @@ function SessionApp({ roomCode, user }) {
       // シーン終了（currentScene が null になった）
       sfx.sceneEnd();
     }
-  }, [gs.currentScene?.pcUid, gs.battle?.active]);
+  }, [gs.currentScene?.pcUid, gs.battle?.active, gs.sessionPhase, gs.pcs]);
 
   // フェーズ遷移（sessionPhase / battle.active）を検出
   useEffect(() => {
@@ -691,7 +691,7 @@ function SessionApp({ roomCode, user }) {
       unsub();
       remove(presRef).catch(() => {});
     };
-  }, [roomCode, user?.uid]);
+  }, [roomCode, user?.uid, user?.displayName]);
 
   // ── 全参加者のプレゼンスを購読 ─────────────────────────────────────────
   useEffect(() => {
@@ -834,7 +834,7 @@ function SessionApp({ roomCode, user }) {
       if (myPlayer && !mode) setMode(myPlayer.role === "gm" ? "gm" : "pl");
     });
     return () => unsub();
-  }, [roomCode, user.uid]);
+  }, [roomCode, user.uid, mode]);
 
   useEffect(() => {
     if (!mode) return;
@@ -886,7 +886,7 @@ function SessionApp({ roomCode, user }) {
     });
 
     return () => { clearTimeout(timeout); unsubGs(); unsubScene(); unsubAssets(); };
-  }, [mode, gsPath, scenePath]);
+  }, [mode, gsPath, scenePath, roomCode]);
 
   function normalizePc(p) {
     const charData = CHARACTERS.find(c => c.id === p.charId) ?? null;
@@ -1012,7 +1012,7 @@ function SessionApp({ roomCode, user }) {
     if ((gs.pcs || []).length === 0 && hasPlayers) {
       upd(p => ({ ...p, pcs: buildPcList(room) }));
     }
-  }, [synced, room, mode]);
+  }, [synced, room, mode, gs?.pcs, upd]);
 
   // ─── フェイズ遷移・進行処理 ────────────────────────────────────
 
