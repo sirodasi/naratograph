@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, push, remove, get, query, orderByChild, equalTo, limitToLast } from "firebase/database";
+import { ref, onValue, set, push, remove, get } from "firebase/database";
 import { updateProfile } from "firebase/auth";
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
@@ -1062,15 +1062,25 @@ function ScenarioList({ onSelect, onEdit, selectedId, items }) {
   useEffect(()=> {
     if(items)return; // items 指定時は外部（ビルトイン等）なので Firebase は読まない
     if(!user)return;
-    const r = query(ref(db, "rooms"), orderByChild("gmUid"), equalTo(user.uid), limitToLast(20));
-    const unsub = onValue(r,snap => {
-      if(snap.exists()){
-        const arr = Object.entries(snap.val()).map(([code, v]) => ({code,...v}));
-        arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
-        setLoaded(arr);
-      } else {
+    const r = ref(db, `users/${user.uid}/scenarios`);
+    const unsub = onValue(r, snap => {
+      try {
+        if(snap.exists()){
+          const arr = Object.entries(snap.val())
+            .filter(([, v]) => v && typeof v === "object")
+            .map(([id, v]) => ({...v,id}));
+          arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
+          setLoaded(arr);
+        } else {
+          setLoaded([]);
+        }
+      } catch(e) {
+        console.error("シナリオのパースに失敗しました", e);
         setLoaded([]);
       }
+      setLoading(false);
+    }, err => {
+      console.error("シナリオの取得に失敗しました", err);
       setLoading(false);
     });
     return() => unsub();
@@ -1174,13 +1184,23 @@ function ProfilePage({ onClose }) {
     if(!user)return;
     const r = ref(db,"rooms");
     const unsub = onValue(r,snap => {
-      if(snap.exists()){
-        const arr = Object.entries(snap.val())
-          .filter(([, v]) => v.gmUid === user.uid)
-          .map(([code, v]) => ({code,...v}));
-        arr.sort((a, b) => (b.createdAt||0)-(a.createdAt||0));
-        setRooms(arr);
-      } else setRooms([]);
+      try {
+        if(snap.exists()){
+          const arr = Object.entries(snap.val())
+            .filter(([, v]) => v && typeof v === "object" && v.gmUid === user.uid)
+            .map(([code, v]) => ({code,...v}));
+          arr.sort((a, b) => (b.createdAt||0)-(a.createdAt||0));
+          setRooms(arr);
+        } else {
+          setRooms([]);
+        }
+      } catch(e) {
+        console.error("部屋一覧のパースに失敗しました", e);
+        setRooms([]);
+      }
+      setRoomsLoading(false);
+    }, err => {
+      console.error("部屋一覧の取得に失敗しました", err);
       setRoomsLoading(false);
     });
     return() => unsub();
@@ -1190,7 +1210,7 @@ function ProfilePage({ onClose }) {
   useEffect(()=> {
     if(!user)return;
     const r = ref(db,`grownChars/${user.uid}`);
-    const unsub = onValue(r,snap => { setGrownChars(snap.exists() ? snap.val() : {}); });
+    const unsub = onValue(r,snap => { setGrownChars(snap.exists() ? snap.val() : {}); }, err => console.error("成長キャラの取得に失敗", err));
     return() => unsub();
   },[user]);
 
@@ -1198,7 +1218,7 @@ function ProfilePage({ onClose }) {
   useEffect(()=> {
     if(!user)return;
     const r = ref(db,`users/${user.uid}/achievements`);
-    const unsub = onValue(r,snap => { setAchievements(snap.exists() ? snap.val() : {}); });
+    const unsub = onValue(r,snap => { setAchievements(snap.exists() ? snap.val() : {}); }, err => console.error("実績の取得に失敗", err));
     return() => unsub();
   },[user]);
 
@@ -1327,7 +1347,7 @@ function ProfilePage({ onClose }) {
             <div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>作成した部屋はありません</div>
           )}
           {rooms.map(room => {
-            const plCount = Object.values(room.players||{}).filter(p => p.role==="pl").length;
+            const plCount = Object.values(room.players||{}).filter(p => p && p.role==="pl").length;
             const date = room.createdAt ? new Date(room.createdAt).toLocaleDateString("ja-JP") : "—";
             return(
               <div key={room.code} style={{
@@ -1348,7 +1368,7 @@ function ProfilePage({ onClose }) {
                     </div>
                     {plCount>0&&(
                       <div style={{marginTop:5,display:"flex",gap:4,flexWrap:"wrap"}}>
-                        {Object.values(room.players||{}).filter(p => p.role==="pl").map(p => (
+                        {Object.values(room.players||{}).filter(p => p && p.role==="pl").map(p => (
                           <span key={p.uid} style={{fontSize:9,color:C.textFaint}}>
                             {p.name}{p.charName?` (${p.charName})`:""}
                           </span>
@@ -1381,7 +1401,10 @@ function ProfilePage({ onClose }) {
           {Object.keys(grownChars).length===0&&(
             <div style={{fontSize:10,color:C.textFaint,padding:"16px 0"}}>成長したキャラクターはまだいません</div>
           )}
-          {Object.entries(grownChars).sort((a,b)=>(b[1].updatedAt||b[1].createdAt||0)-(a[1].updatedAt||a[1].createdAt||0)).map(([iid,g])=>{
+          {Object.entries(grownChars)
+            .filter(([, g]) => g && typeof g === "object")
+            .sort((a,b)=>(b[1].updatedAt||b[1].createdAt||0)-(a[1].updatedAt||a[1].createdAt||0))
+            .map(([iid,g])=>{
             const date = (g.updatedAt||g.createdAt) ? new Date(g.updatedAt||g.createdAt).toLocaleDateString("ja-JP") : "—";
             const enh = (g.enhancementsUsed||[]).map(e=>ENH_LABEL[e]||e);
             return(
@@ -1476,11 +1499,23 @@ export function ScenarioSelector({ value, onChange }) {
     if(!user)return;
     const r = ref(db,`users/${user.uid}/scenarios`);
     const unsub = onValue(r, snap => {
-      if(snap.exists()){
-        const arr = Object.entries(snap.val()).map(([id, v]) => ({...v,id}));
-        arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
-        setScenarios(arr);
-      } else setScenarios([]);
+      try {
+        if(snap.exists()){
+          const arr = Object.entries(snap.val())
+            .filter(([, v]) => v && typeof v === "object")
+            .map(([id, v]) => ({...v,id}));
+          arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
+          setScenarios(arr);
+        } else {
+          setScenarios([]);
+        }
+      } catch(e) {
+        console.error("シナリオのパースに失敗しました", e);
+        setScenarios([]);
+      }
+    }, err => {
+      console.error("シナリオの取得に失敗しました", err);
+      setScenarios([]);
     });
     return() => unsub();
   },[user]);

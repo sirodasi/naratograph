@@ -621,7 +621,9 @@ export function SceneEditor({ gs, upd, sceneData, setSceneData, showModeToggle =
         <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>🎬 シーンプリセット</div>
           <button onClick={savePreset} style={{ width: "100%", padding: "5px", fontSize: 10, cursor: "pointer", borderRadius: 3, background: "rgba(200,160,64,0.14)", border: `1px solid ${C.goldDim}`, color: C.gold }}>💾 現在のシーンを保存</button>
-          {Object.entries(presets).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)).map(([id, pr]) => (
+          {Object.entries(presets)
+            .filter(([, pr]) => pr && typeof pr === "object")
+            .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)).map(([id, pr]) => (
             <div key={id} style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 4 }}>
               <button onClick={() => loadPreset(pr)} title="このシーンを読み込む" style={{ flex: 1, padding: "4px 7px", fontSize: 10, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, color: C.text, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>▶ {pr.name}</button>
               <button onClick={() => deletePreset(id, pr.name)} style={{ width: 20, height: 22, flexShrink: 0, background: "rgba(192,57,43,0.2)", border: "1px solid #5a1a1a", color: C.red, cursor: "pointer", borderRadius: 2, fontSize: 10, padding: 0 }}>✕</button>
