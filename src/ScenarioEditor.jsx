@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, push, remove, get } from "firebase/database";
+import { ref, onValue, set, push, remove, get, query, orderByChild, equalTo, limitToLast } from "firebase/database";
 import { updateProfile } from "firebase/auth";
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
@@ -1062,10 +1062,10 @@ function ScenarioList({ onSelect, onEdit, selectedId, items }) {
   useEffect(()=> {
     if(items)return; // items 指定時は外部（ビルトイン等）なので Firebase は読まない
     if(!user)return;
-    const r = ref(db, `users/${user.uid}/scenarios`);
-    const unsub = onValue(r, snap => {
+    const r = query(ref(db, "rooms"), orderByChild("gmUid"), equalTo(user.uid), limitToLast(20));
+    const unsub = onValue(r,snap => {
       if(snap.exists()){
-        const arr = Object.entries(snap.val()).map(([id, v]) => ({...v,id}));
+        const arr = Object.entries(snap.val()).map(([code, v]) => ({code,...v}));
         arr.sort((a, b) => (b.updatedAt||0)-(a.updatedAt||0));
         setLoaded(arr);
       } else {
