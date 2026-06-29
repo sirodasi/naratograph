@@ -4,6 +4,7 @@ import { db, auth } from "./firebase";
 import { ref, onValue, set, update, get, onChildAdded, onDisconnect, remove, serverTimestamp } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
+import { useUrlParams } from "./useUrlParams";
 import { BackstoryScreen, EpilogueView, SceneStage, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
@@ -1680,16 +1681,14 @@ const LoadingScreen = ({ message, color = "#3a4a5a" }) => (
 
 export default function App() {
   const [user, setUser]           = useState(undefined);
-  const [roomCode, setRoomCode]   = useState(null);
   const [roomPhase, setRoomPhase] = useState(null);
+
+  const [urlParams] = useUrlParams();
+  const roomCode = urlParams.get("room")?.toUpperCase() || null;
 
   useEffect(() => {
     motion.init();  // 演出抑制の <html> 属性反映 + OS設定変化の監視
     fontScale.init();  // 文字サイズ（body zoom）の反映
-
-    const params = new URLSearchParams(window.location.search);
-    const r = params.get("room");
-    if (r) setRoomCode(r.toUpperCase());
 
     const unsub = onAuthStateChanged(auth, u => setUser(u || null));
     return () => unsub();
@@ -1700,20 +1699,17 @@ export default function App() {
     const roomRef = ref(db, `rooms/${roomCode}`);
     const unsub   = onValue(roomRef, snap => {
       if (!snap.exists()) {
-        // ルームが存在しない（セッション終了で削除 or 不正URL）→ ロビーへ戻る
         try {
-          const url = new URL(window.location.href);
-          url.searchParams.delete("room");
-          window.history.replaceState({}, "", url);
+          const p = new URLSearchParams(window.location.search);
+          p.delete("room");
+          const qs = p.toString() ? "?" + p.toString() : "";
+          window.history.replaceState(null, "", window.location.pathname + qs);
+          window.dispatchEvent(new Event("popstate"));
         } catch { /* noop */ }
-        setRoomCode(null);
         setRoomPhase(null);
         return;
       }
       setRoomPhase(snap.val().phase || "prep");
-    }, err => {
-      console.error("ルーム状態の取得に失敗しました:", err);
-      setRoomPhase("error"); // エラーハンドリングを追加
     });
     return () => unsub();
   }, [roomCode]);

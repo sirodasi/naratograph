@@ -8,6 +8,7 @@ import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
 import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
 import { ACHIEVEMENTS } from "./data/achievements";
 import { getBuiltinScenarios } from "./scenarios";
+import { useUrlParams } from "./useUrlParams";
 
 // コード同梱のビルトインシナリオ（静的。glob 集約済み）
 const BUILTIN_SCENARIOS = getBuiltinScenarios();
@@ -1159,7 +1160,10 @@ export function BgmPresetEditor({ uid }) {
 
 // ── Profile Page ──────────────────────────────────────
 function ProfilePage({ onClose }) {
-  const [view, setView] = useState("account"); // account | scenarios | builtin | rooms | grown | achievements
+  const [urlParams, updateUrl] = useUrlParams();
+  const view = urlParams.get("pview") || "account"; // account | scenarios | builtin | rooms | grown | achievements
+  const setView = (v) => updateUrl({ pview: v === "account" ? null : v });
+
   const [detailSc, setDetailSc] = useState(null); // 収録シナリオ詳細モーダル
   const [editTarget, setEditTarget] = useState(null);
   const [rooms, setRooms] = useState([]);

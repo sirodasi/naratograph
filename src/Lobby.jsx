@@ -5,6 +5,7 @@ import { signInWithPopup, onAuthStateChanged, signOut, updateProfile } from "fir
 import ProfilePage, { ScenarioSelector, BgmPresetEditor } from "./ScenarioEditor";
 import spriteImg from "./assets/sprite.png";
 import { useIsMobile } from "./useIsMobile";
+import { useUrlParams } from "./useUrlParams";
 import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
 import { C, btn, iStyle } from "./styles/colors";
 
@@ -160,11 +161,14 @@ function UsernameSetup({ user, onDone }) {
 // ─── Lobby ───────────────────────────────────────────────────────
 
 function Lobby({ user, displayName, onProfile }) {
-  const [view, setView]       = useState("top");
+  const [urlParams, updateUrl] = useUrlParams();
+  const view = urlParams.get("view") || "top";
+  const setView = (v) => updateUrl({ view: v === "top" ? null : v });
+
   const [joinCode, setJoinCode] = useState("");
   const [err, setErr]         = useState("");
   const [loading, setLoading] = useState(false);
-  const [createScenario, setCreateScenario] = useState(null); // 部屋作成前に確定するシナリオ
+  const [createScenario, setCreateScenario] = useState(null);
 
   const createRoom = async () => {
     if (!isAllowedGm(user)) { setErr("このアカウントには部屋の作成（GM）権限がありません。"); return; }
@@ -181,8 +185,7 @@ function Lobby({ user, displayName, onProfile }) {
         players: { [user.uid]: { uid: user.uid, name: displayName, role: "gm", ready: false } },
         state: null, scene: null,
       });
-      window.history.pushState({}, "", `?room=${code}`);
-      window.location.reload();
+      updateUrl({ room: code, view: null });
     } catch (e) {
       setErr(e.message);
     }
@@ -198,8 +201,7 @@ function Lobby({ user, displayName, onProfile }) {
       const snap = await get(ref(db, `rooms/${code}`));
       if (!snap.exists()) { setErr("部屋が見つかりません"); setLoading(false); return; }
       await update(ref(db, `rooms/${code}/players/${user.uid}`), { uid: user.uid, name: displayName, role: "pl", ready: false });
-      window.history.pushState({}, "", `?room=${code}`);
-      window.location.reload();
+      updateUrl({ room: code, view: null });
     } catch (e) {
       setErr(e.message);
     }
@@ -302,12 +304,16 @@ const CUSTOM_INIT = {
 
 function PrepRoom({ roomCode, user, isGm }) {
   const isMobile = useIsMobile();
+  const [urlParams, updateUrl] = useUrlParams();
+  const step = urlParams.get("step") || "charSelect";
+  const setStep = (s) => updateUrl({ step: s === "charSelect" ? null : s });
+  const showProfile = urlParams.get("profile") === "1";
+  const setShowProfile = (v) => updateUrl({ profile: v ? "1" : null });
+
   const [room, setRoom]                   = useState(null);
-  const [step, setStep]                   = useState("charSelect");
-  const [showProfile, setShowProfile]     = useState(false);
   const [selectedChar, setSelectedChar]   = useState(null);
-  const [selectedGrownId, setSelectedGrownId] = useState(null); // 成長インスタンスを選択中ならそのID（未成長は null）
-  const [myGrownChars, setMyGrownChars]   = useState({}); // { instanceId: { charId, charName, ds, tags, enhancementsUsed, specialBond, ... } }
+  const [selectedGrownId, setSelectedGrownId] = useState(null);
+  const [myGrownChars, setMyGrownChars]   = useState({});
   const [selectedSkillId, setSelectedSkillId] = useState(null);
   const [diceResult, setDiceResult]       = useState(null);
   const [diceAnim, setDiceAnim]           = useState(false);
@@ -339,11 +345,6 @@ function PrepRoom({ roomCode, user, isGm }) {
       } catch { /* noop */ }
     })();
   }, [user.uid]);
-
-  // セッション開始後はリロードして SessionApp へ遷移
-  useEffect(() => {
-    if (room?.phase === "explore") window.location.reload();
-  }, [room?.phase]);
 
   const toggleExtraRule = (key) => {
     if (!isGm) return;
@@ -858,16 +859,15 @@ function PrepRoom({ roomCode, user, isGm }) {
 export default function LobbyRoot() {
   const [user, setUser]               = useState(undefined);
   const [displayName, setDisplayName] = useState(null);
-  const [roomFromUrl, setRoomFromUrl] = useState(null);
+  
+  const [urlParams, updateUrl] = useUrlParams();
+  const roomFromUrl = urlParams.get("room")?.toUpperCase() || null;
+  const showProfile = urlParams.get("profile") === "1";
+
   const [roomPhase, setRoomPhase]     = useState(null); // "prep" | "explore" | null
   const [isGm, setIsGm]               = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const r = params.get("room");
-    if (r) setRoomFromUrl(r.toUpperCase());
-
     const unsub = onAuthStateChanged(auth, u => {
       setUser(u || null);
       if (!u) return;
@@ -916,6 +916,6 @@ export default function LobbyRoot() {
     return null;
   }
 
-  if (showProfile) return <ProfilePage onClose={() => setShowProfile(false)} />;
-  return <Lobby user={user} displayName={displayName} onProfile={() => setShowProfile(true)} />;
+  if (showProfile) return <ProfilePage onClose={() => updateUrl({ profile: null })} />;
+  return <Lobby user={user} displayName={displayName} onProfile={() => updateUrl({ profile: "1" })} />;
 }
