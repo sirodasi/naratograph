@@ -5429,10 +5429,15 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
         dbGet(dbRef(db, `grownChars/${uid}`)),
       ]);
       const unlocked = achSnap.exists() ? achSnap.val() : {};
-      const grown = grownSnap.exists() ? grownSnap.val() : {};
+      
+      // 成長キャラデータの型チェックを追加
+      let grown = grownSnap.exists() ? grownSnap.val() : {};
+      if (typeof grown !== "object" || grown === null) grown = {};
+      const validGrown = Object.values(grown).filter(g => g && typeof g === "object");
+      
       // 成長キャラから派生する通算値（強化達成数の最大・親密度10）
-      const maxEnh = Math.max(0, ...Object.values(grown).map(g => (g.enhancementsUsed || []).length));
-      const intimacy10 = Object.values(grown).some(g => (g.specialBond?.intimacy || 0) >= 10);
+      const maxEnh = Math.max(0, ...validGrown.map(g => (g.enhancementsUsed || []).length));
+      const intimacy10 = validGrown.some(g => (g.specialBond?.intimacy || 0) >= 10);
       // 通算集計（このルームは1回だけ）
       let life = statsSnap.exists() ? statsSnap.val() : {};
       const already = procSnap.exists();

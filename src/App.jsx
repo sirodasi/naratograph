@@ -829,10 +829,11 @@ function SessionApp({ roomCode, user }) {
     const unsub   = onValue(roomRef, snap => {
       if (!snap.exists()) return;
       const r = snap.val();
+      if (!r || typeof r !== "object") return;
       setRoom(r);
       const myPlayer = r.players?.[user.uid];
       if (myPlayer && !mode) setMode(myPlayer.role === "gm" ? "gm" : "pl");
-    });
+    }, err => console.error("部屋情報の取得に失敗:", err));
     return () => unsub();
   }, [roomCode, user.uid, mode]);
 
@@ -845,17 +846,24 @@ function SessionApp({ roomCode, user }) {
     const unsubGs = onValue(gsRef, snap => {
       clearTimeout(timeout);
       if (snap.exists()) {
-        const val = snap.val();
-        setGs(_prev => ({
-          ...DEFAULT_GS, ...val,
-          resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
-          items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
-          pcs:    (val.pcs || []).map(normalizePc),
-          scenarioData: normalizeScenario(val.scenarioData) ?? null,
-          quests: val.quests || [],
-          clues:  val.clues  || [],
-          log:    val.log    || [],
-        }));
+        try {
+          const val = snap.val() || {};
+          const toArray = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
+
+          setGs(_prev => ({
+            ...DEFAULT_GS, ...val,
+            resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
+            items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
+            // .mapでクラッシュしないよう、確実に配列化してから処理する
+            pcs:    toArray(val.pcs).filter(Boolean).map(normalizePc),
+            scenarioData: normalizeScenario(val.scenarioData) ?? null,
+            quests: toArray(val.quests),
+            clues:  toArray(val.clues),
+            log:    toArray(val.log),
+          }));
+        } catch (e) {
+          console.error("ゲームステートのパースエラー:", e);
+        }
       } else if (mode === "gm" && isParticipantRef.current) {
         get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
           const r     = roomSnap.exists() ? roomSnap.val() : null;
@@ -870,7 +878,11 @@ function SessionApp({ roomCode, user }) {
         });
       }
       setSynced(true);
-    }, () => { clearTimeout(timeout); setSynced(true); });
+    }, err => { 
+      clearTimeout(timeout); 
+      setSynced(true); 
+      console.error("ゲームステートの監視エラー:", err); 
+    });
 
     // scene 本体（id＋座標）と sceneAssets（画像 id→data URL）を別購読し、合成して setSceneData。
     const rehydrate = () => { if (rawSceneRef.current) setSceneData(hydrateScene(rawSceneRef.current, sceneAssetsRef.current)); };
@@ -1699,6 +1711,9 @@ export default function App() {
         return;
       }
       setRoomPhase(snap.val().phase || "prep");
+    }, err => {
+      console.error("ルーム状態の取得に失敗しました:", err);
+      setRoomPhase("error"); // エラーハンドリングを追加
     });
     return () => unsub();
   }, [roomCode]);
