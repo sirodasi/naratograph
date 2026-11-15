@@ -47,3 +47,20 @@ export function hydrateScene(scene, assets = {}) {
     fx: scene.fx ?? {},
   };
 }
+
+// scene（dehydrate 済み）が参照しているアセット id の一覧（data URL / http URL / 空は除く）。
+export function collectSceneAssetIds(scene) {
+  const ids = new Set();
+  const add = (v) => { if (typeof v === "string" && v && !v.startsWith("data:") && !/^https?:/.test(v) && !v.startsWith("blob:")) ids.add(v); };
+  if (!scene) return [];
+  add(scene.bg);
+  (scene.portraits || []).forEach(p => { add(p?.img); (p?.faces || []).forEach(add); });
+  return [...ids];
+}
+
+// inline の data URL を含む（＝アセット分離前の旧形式）か
+export function hasInlineImages(scene) {
+  if (!scene) return false;
+  const isData = (v) => typeof v === "string" && v.startsWith("data:");
+  return isData(scene.bg) || (scene.portraits || []).some(p => isData(p?.img) || (p?.faces || []).some(isData));
+}

@@ -318,7 +318,7 @@ describe('スペルカード: ランダム + アフターエフェクト', () =>
     expect(hint.needsDice).toBe(true);
     expect(hint.diceCount).toBe(1);
     // ダイス結果=3 → セル3配置 → 隣接=[2,6]に+1
-    const { defGrid } = applyRandomResult(emptyGrid(), [3], { afterList: hint.afterList });
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [3], { afterList: hint.afterList });
     expect(defGrid[2]).toBe(1); // セル3 (random)
     expect(defGrid[1]).toBe(1); // セル2 (隣接)
     expect(defGrid[5]).toBe(1); // セル6 (隣接)
@@ -328,7 +328,7 @@ describe('スペルカード: ランダム + アフターエフェクト', () =>
     const def = getSpellCardEffect('爆符「メガフレア」');
     const hint = applyStep(def.steps[0], emptyGrid(), emptyGrid(), 1, 4);
     // ダイス結果=4 → セル4に1配置 + add_to_placed +3 → 計4
-    const { defGrid } = applyRandomResult(emptyGrid(), [4], { afterList: hint.afterList });
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [4], { afterList: hint.afterList });
     expect(defGrid[3]).toBe(4);
   });
 
@@ -337,7 +337,7 @@ describe('スペルカード: ランダム + アフターエフェクト', () =>
     const hint = applyStep(def.steps[0], emptyGrid(), emptyGrid(), 1, 4);
     expect(hint.diceCount).toBe(2);
     // ダイス結果=[1,3] → セル1,3配置 → vertical of those = [4,6]
-    const { defGrid } = applyRandomResult(emptyGrid(), [1, 3], { afterList: hint.afterList });
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [1, 3], { afterList: hint.afterList });
     expect(defGrid[0]).toBe(1); // セル1
     expect(defGrid[2]).toBe(1); // セル3
     expect(defGrid[3]).toBe(1); // セル4
@@ -348,7 +348,7 @@ describe('スペルカード: ランダム + アフターエフェクト', () =>
     const def = getSpellCardEffect('龍符「龍紋弾」');
     const hint = applyStep(def.steps[0], emptyGrid(), emptyGrid(), 1, 4);
     // ダイス結果=[1,1] → セル1に2配置 + double_each(unique=[1])+1 → 計3
-    const { defGrid } = applyRandomResult(emptyGrid(), [1, 1], { afterList: hint.afterList });
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [1, 1], { afterList: hint.afterList });
     expect(defGrid[0]).toBe(3);
   });
 
@@ -358,7 +358,7 @@ describe('スペルカード: ランダム + アフターエフェクト', () =>
     // ダイス=[1,1,3] → defGrid: セル1×2, セル3×1
     // after の remove_attacker_mirror で atkGrid: セル1,3から-1 → [1,0,1,0,0,0]
     const { defGrid: afterDef, placedCells } = applyRandomResult(
-      emptyGrid(), [1, 1, 3], { afterList: [] }
+      emptyGrid(), emptyGrid(), [1, 1, 3], { afterList: [] }
     );
     const { atkGrid: finalAtk } = applyAfterEffects(hint.afterList, afterDef, [2, 0, 2, 0, 0, 0], placedCells);
     expect(afterDef[0]).toBe(2);
@@ -445,7 +445,7 @@ describe('スペルカード: 特殊ランダム派生', () => {
     expect(hint.diceCount).toBe(4);
     expect(hint.specialType).toBe('clear_then_double');
     // ダイス=[1,4] → 各セルを2に置き直し
-    const { defGrid } = applyRandomResult([3, 0, 0, 5, 0, 0], [1, 4], { specialType: 'clear_then_double' });
+    const { defGrid } = applyRandomResult([3, 0, 0, 5, 0, 0], emptyGrid(), [1, 4], { specialType: 'clear_then_double' });
     expect(defGrid[0]).toBe(2); // 3→2
     expect(defGrid[3]).toBe(2); // 5→2
   });
@@ -457,22 +457,18 @@ describe('スペルカード: 特殊ランダム派生', () => {
     expect(hint.diceCount).toBe(2);
     expect(hint.specialType).toBe('exclude_fill');
     // ダイス=[2,5] → 2,5以外の[1,3,4,6]に×1
-    const { defGrid } = applyRandomResult(emptyGrid(), [2, 5], { specialType: 'exclude_fill', fillCount: 1 });
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [2, 5], { specialType: 'exclude_fill', fillCount: 1 });
     expect(defGrid).toEqual([1, 0, 1, 1, 0, 1]);
   });
 
-  it('「フェイクアポロ」: 3D振り→各マス除去→上下左右隣接ユニーク+1', () => {
+  it('「フェイクアポロ」: 3D振り→各マスから1つ除去→上下左右隣接に+1（重複可）', () => {
     const def = getSpellCardEffect('「フェイクアポロ」');
     const hint = applyStep(def.steps[0], [2, 1, 3, 0, 1, 0], emptyGrid(), 1, 4);
     expect(hint.specialType).toBe('clear_neighbors');
-    // ダイス=[1,3,5] → 1,3,5除去 → 隣接unique=[2,4,6]→+1
-    const { defGrid } = applyRandomResult([2, 1, 3, 0, 1, 0], [1, 3, 5], { specialType: 'clear_neighbors' });
-    expect(defGrid[0]).toBe(0); // 1除去
-    expect(defGrid[2]).toBe(0); // 3除去
-    expect(defGrid[4]).toBe(0); // 5除去
-    expect(defGrid[1]).toBe(2); // セル2: 1+1
-    expect(defGrid[3]).toBe(1); // セル4: 0+1
-    expect(defGrid[5]).toBe(1); // セル6: 0+1
+    // カード文: 選ばれたマスの弾幕を1つずつ取り除き、上下左右の隣接マスに1つずつ配置（重複して配置できる）
+    // 1: 2→1, [2,4]+1 / 3: 3→2, [2,6]+1 / 5: 1→0, [2,4,6]+1
+    const { defGrid } = applyRandomResult([2, 1, 3, 0, 1, 0], emptyGrid(), [1, 3, 5], { specialType: 'clear_neighbors' });
+    expect(defGrid).toEqual([1, 4, 2, 2, 0, 2]);
   });
 });
 

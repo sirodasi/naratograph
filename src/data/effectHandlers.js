@@ -46,7 +46,7 @@ export function removeBullets(grid, cells, count = 1) {
  * @param {number[]} placedCells - このステップで配置したセル番号リスト
  * @returns {{ defGrid: number[], atkGrid: number[] }}
  */
-export function applyAfterEffect(afterDef, defGrid, atkGrid, placedCells, atkPos, defPos) {
+export function applyAfterEffect(afterDef, defGrid, atkGrid, placedCells, atkPos, _defPos) {
   const count = afterDef.count ?? 1;
   let def = [...defGrid];
   let atk = [...atkGrid];

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, push, remove, get } from "firebase/database";
+import { ref, onValue, set, push, remove, get, query, orderByChild, equalTo } from "firebase/database";
 import { updateProfile } from "firebase/auth";
 import { btn } from "./styles/colors";
 import { OFFICIAL_DANMAKU_SKILLS, SPOTS } from "./data/gameData";
@@ -9,6 +9,7 @@ import { SPELL_CARD_EFFECTS } from "./data/spellCardEffects";
 import { ACHIEVEMENTS } from "./data/achievements";
 import { getBuiltinScenarios } from "./scenarios";
 import { useUrlParams } from "./useUrlParams";
+import { useIsAllowedGm } from "./useIsAllowedGm";
 
 // コード同梱のビルトインシナリオ（静的。glob 集約済み）
 const BUILTIN_SCENARIOS = getBuiltinScenarios();
@@ -1174,6 +1175,7 @@ function ProfilePage({ onClose }) {
   const [grownChars, setGrownChars] = useState({}); // { instanceId: { charId, charName, ds, tags, enhancementsUsed, specialBond, ... } }
   const [achievements, setAchievements] = useState({}); // { [id]: { at } }
   const user = auth.currentUser;
+  const canGm = useIsAllowedGm(user);
 
   useEffect(()=> {
     if(!user)return;
@@ -1186,7 +1188,9 @@ function ProfilePage({ onClose }) {
   // 自分が建てた部屋を取得
   useEffect(()=> {
     if(!user)return;
-    const r = ref(db,"rooms");
+    // rooms 全体は読めない（ルールで拒否）＆全部屋DLになるため、gmUid で絞ったクエリにする。
+    // ルール側で query.orderByChild==='gmUid' && query.equalTo===auth.uid のときだけ許可＋.indexOn。
+    const r = query(ref(db,"rooms"), orderByChild("gmUid"), equalTo(user.uid));
     const unsub = onValue(r,snap => {
       try {
         if(snap.exists()){
@@ -1305,6 +1309,16 @@ function ProfilePage({ onClose }) {
             <div style={{marginBottom:6,fontSize:9,color:C.textFaint}}>Googleアカウント</div>
             <div style={{fontSize:11,color:C.textDim,marginBottom:16,padding:"6px 8px",background:"rgba(255,255,255,0.02)",borderRadius:3,border:`1px solid ${C.border}`}}>
               {user?.email||"—"}
+            </div>
+
+            <div style={{marginBottom:6,fontSize:9,color:C.textFaint}}>ユーザーID（GM 権限の付与に使用）</div>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4}}>
+              <code style={{flex:1,fontSize:10,color:C.textDim,padding:"6px 8px",background:"rgba(255,255,255,0.02)",borderRadius:3,border:`1px solid ${C.border}`,overflowWrap:"anywhere"}}>{user?.uid||"—"}</code>
+              <button onClick={() => navigator.clipboard?.writeText(user?.uid||"").catch(()=>{})}
+                style={{...btn(C.goldBg,C.goldDim,C.gold,{padding:"5px 10px",flexShrink:0,fontSize:10})}}>コピー</button>
+            </div>
+            <div style={{fontSize:9,color:canGm?C.green:C.textFaint,marginBottom:16}}>
+              {canGm ? "✓ GM 権限あり（部屋を作成できます）" : "GM 権限なし（Firebase の admins/{このID} に true を設定すると付与されます）"}
             </div>
 
             <div style={{marginBottom:6,fontSize:9,color:C.textFaint}}>セッション表示名</div>

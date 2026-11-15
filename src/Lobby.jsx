@@ -1,24 +1,23 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy } from "react";
 import { db, auth, googleProvider } from "./firebase";
 import { ref, onValue, set, update, get } from "firebase/database";
 import { signInWithPopup, onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
-import ProfilePage, { ScenarioSelector, BgmPresetEditor } from "./ScenarioEditor";
-import spriteImg from "./assets/sprite.png";
+// プロフィール・シナリオ編集は使う人が限られ大きいので遅延読み込み（App 側の Suspense が受ける）
+const ProfilePage      = lazy(() => import("./ScenarioEditor"));
+const ScenarioSelector = lazy(() => import("./ScenarioEditor").then(m => ({ default: m.ScenarioSelector })));
+const BgmPresetEditor  = lazy(() => import("./ScenarioEditor").then(m => ({ default: m.BgmPresetEditor })));
+import { CharSprite } from "./CharSprite";
 import { useIsMobile } from "./useIsMobile";
+import { useIsAllowedGm } from "./useIsAllowedGm";
+import { publicScenario, stripUndefined } from "./gsSync";
 import { useUrlParams } from "./useUrlParams";
 import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
 import { C, btn, iStyle } from "./styles/colors";
 
-export const SPRITE_SRC  = spriteImg;
-export const CELL        = 120;
-export const SPRITE_COLS = 10;
+export { SPRITE_SRC, CELL, SPRITE_COLS, CharSprite } from "./CharSprite"; // 互換のため再 export
 
 export { CHARACTERS, PERSONALITY_SKILLS };
 
-// GM（部屋の作成）を許可するアカウント（Google認証済みメール・小文字）。
-// 現状は内部利用のためここで制限。外部公開時は Firebase セキュリティルールでの強制も推奨。
-export const ALLOWED_GM_EMAILS = ["sora1225n@gmail.com"];
-export const isAllowedGm = (user) => !!user?.email && ALLOWED_GM_EMAILS.includes(user.email.toLowerCase());
 
 // ─── ロビー共通コンポーネント ─────────────────────────────────────
 
@@ -50,31 +49,6 @@ function LobbyCard({ color = C.gold, children, style = {}, onClick }) {
 
 function rollD6()  { return Math.floor(Math.random() * 6) + 1; }
 function _rollD66() { const a = rollD6(), b = rollD6(); return Math.min(a, b) * 10 + Math.max(a, b); }
-
-// ─── CharSprite ──────────────────────────────────────────────────
-
-export function CharSprite({ spriteRow, spriteCol, size = 80, style = {} }) {
-  if (spriteRow < 0 || spriteCol < 0) {
-    return (
-      <div style={{ width: size, height: size, borderRadius: 4, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.4, flexShrink: 0, ...style }}>
-        🌸
-      </div>
-    );
-  }
-  const scale = size / CELL;
-  return (
-    <div style={{ width: size, height: size, overflow: "hidden", flexShrink: 0, borderRadius: 4, ...style }}>
-      <div style={{
-        width:              CELL * SPRITE_COLS * scale,
-        height:             CELL * 6 * scale,
-        backgroundImage:    `url(${SPRITE_SRC})`,
-        backgroundSize:     `${CELL * SPRITE_COLS * scale}px ${CELL * 6 * scale}px`,
-        backgroundPosition: `${-spriteCol * CELL * scale}px ${-spriteRow * CELL * scale}px`,
-        backgroundRepeat:   "no-repeat",
-      }} />
-    </div>
-  );
-}
 
 // ─── LoginScreen ─────────────────────────────────────────────────
 
@@ -165,13 +139,14 @@ function Lobby({ user, displayName, onProfile }) {
   const view = urlParams.get("view") || "top";
   const setView = (v) => updateUrl({ view: v === "top" ? null : v });
 
+  const canGm = useIsAllowedGm(user);
   const [joinCode, setJoinCode] = useState("");
   const [err, setErr]         = useState("");
   const [loading, setLoading] = useState(false);
   const [createScenario, setCreateScenario] = useState(null);
 
   const createRoom = async () => {
-    if (!isAllowedGm(user)) { setErr("このアカウントには部屋の作成（GM）権限がありません。"); return; }
+    if (!canGm) { setErr("このアカウントには部屋の作成（GM）権限がありません。"); return; }
     if (!createScenario) { setErr("先にシナリオを選択してください。"); return; }
     setLoading(true);
     setErr("");
@@ -180,11 +155,13 @@ function Lobby({ user, displayName, onProfile }) {
       await set(ref(db, `rooms/${code}`), {
         gmUid: user.uid, gmName: displayName, createdAt: Date.now(),
         scenario: createScenario.name, scenarioId: createScenario.id,
-        scenarioData: createScenario, limit: createScenario.limit || "3日目の夜",
+        scenarioData: publicScenario(createScenario), limit: createScenario.limit || "3日目の夜", // 答え等は roomSecrets へ
         phase: "prep",
         players: { [user.uid]: { uid: user.uid, name: displayName, role: "gm", ready: false } },
         state: null, scene: null,
       });
+      // シナリオ全文は GM だけが読める roomSecrets に置く（rooms/{code} は参加者全員が読めるため）
+      await set(ref(db, `roomSecrets/${code}/gm/scenarioData`), stripUndefined(createScenario));
       updateUrl({ room: code, view: null });
     } catch (e) {
       setErr(e.message);
@@ -200,7 +177,12 @@ function Lobby({ user, displayName, onProfile }) {
     try {
       const snap = await get(ref(db, `rooms/${code}`));
       if (!snap.exists()) { setErr("部屋が見つかりません"); setLoading(false); return; }
-      await update(ref(db, `rooms/${code}/players/${user.uid}`), { uid: user.uid, name: displayName, role: "pl", ready: false });
+      const roomVal = snap.val() || {};
+      const existing = roomVal.players?.[user.uid];
+      // 再参加（別端末・リロード等）では既存の役割・準備状態を上書きしない（GM が PL に降格する事故を防ぐ）
+      if (!existing && roomVal.gmUid !== user.uid) {
+        await update(ref(db, `rooms/${code}/players/${user.uid}`), { uid: user.uid, name: displayName, role: "pl", ready: false });
+      }
       updateUrl({ room: code, view: null });
     } catch (e) {
       setErr(e.message);
@@ -225,7 +207,7 @@ function Lobby({ user, displayName, onProfile }) {
       {view === "top" && (
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
           {/* 部屋作成（GM）は許可アカウントのみ表示 */}
-          {isAllowedGm(user) && (
+          {canGm && (
             <LobbyCard color={C.red} onClick={() => setView("create")} style={{ minWidth: 180, animation: "lbFadeUp 0.45s 0.20s both" }}>
               <div style={{ textAlign: "center", padding: "24px 32px" }}>
                 <div style={{ fontSize: 22, color: C.red, marginBottom: 10 }}>⚙</div>
@@ -391,6 +373,8 @@ function PrepRoom({ roomCode, user, isGm }) {
       growthSpellUnlocked:   used.includes("spell"),
       specialBond:           grown?.specialBond || null,
       grownInstanceId:       selectedGrownId || null,
+      // 成長セレモニー用の既存記録スナップショット（GM は他人の grownChars を読めないため PC に持たせる）
+      grownBase: grown ? { tags: grown.tags || [], enhancementsUsed: used, createdAt: grown.createdAt || null } : null,
     });
     setStep("skillSelect");
   };
@@ -511,8 +495,9 @@ function PrepRoom({ roomCode, user, isGm }) {
                   scenario:     sc.name,
                   scenarioId:   sc.id,
                   limit:        sc.limit || "3日目の夜",
-                  scenarioData: sc,
+                  scenarioData: publicScenario(sc), // 答え等は roomSecrets へ
                 });
+                set(ref(db, `roomSecrets/${roomCode}/gm/scenarioData`), stripUndefined(sc)).catch(console.error);
               }} />
             </div>
           )}

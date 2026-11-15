@@ -1,13 +1,23 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
-import { ref, onValue, set, update, get, onChildAdded, onDisconnect, remove, serverTimestamp } from "firebase/database";
+import { ref, onValue, set, update, get, onChildAdded, onDisconnect, remove, serverTimestamp, runTransaction } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
-import LobbyRoot, { CharSprite, CHARACTERS, PERSONALITY_SKILLS } from "./Lobby";
+import { CharSprite } from "./CharSprite";
+import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
 import { useUrlParams } from "./useUrlParams";
-import { BackstoryScreen, EpilogueView, SceneStage, BattleView, BonusPhaseView, SessionEndView, RightPanel, ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./SessionView";
+import { ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./session/shared";
+import { BackstoryScreen, EpilogueView, SceneStage } from "./session/scene";
+
+// コード分割: ロビーとセッションの大きな画面は必要になるまで読み込まない（初回表示を軽くする）
+const LobbyRoot      = lazy(() => import("./Lobby"));
+const BattleView     = lazy(() => import("./session/battle").then(m => ({ default: m.BattleView })));
+const RightPanel     = lazy(() => import("./session/rightPanel").then(m => ({ default: m.RightPanel })));
+const BonusPhaseView = lazy(() => import("./session/phases").then(m => ({ default: m.BonusPhaseView })));
+const SessionEndView = lazy(() => import("./session/phases").then(m => ({ default: m.SessionEndView })));
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
+import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests } from "./gsSync";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
 import { sfx } from "./audio";
@@ -18,7 +28,6 @@ import { bgm } from "./bgm";
 import {
   SPOTS, EDGES, NEWSPAPER,
   AREA_COLORS, CYCLES, CYCLE_COLORS,
-  OFFICIAL_DANMAKU_SKILLS,
 } from "./data/gameData";
 import { SPOT_DETAILS } from "./data/spots";
 import { applyAbilityPassiveStats, getActiveAbility, getBaseSpots } from "./data/abilityEffects";
@@ -89,75 +98,15 @@ function getSpot(id) {
   return SPOTS.find(s => s.id === id) ?? SPOTS.find(s => s.roll == id) ?? null;
 }
 
-// シナリオデータの互換性チェックと正規化（旧仕様の dsType/dsName 等を nested ds に変換）
-export function normalizeScenario(s) {
-  if (!s) return s;
-  const clone = { ...s };
-  clone.finalBattleEnemies = (s.finalBattleEnemies || []).map(en => {
-    if (!en) return en;
-    if (en.ds) return en; // 既に正規化済み
-    const type = en.dsType || (en.dsName ? "official" : (en.dsCustomName || en.dsDesc ? "custom" : "none"));
-    const name = en.dsName || en.dsCustomName || "";
-    const desc = en.dsDesc || (type === "official" ? (OFFICIAL_DANMAKU_SKILLS.find(x => x.name === en.dsName)?.desc || "") : en.dsDesc || "");
-    return { ...en, ds: { type, name, desc, customName: en.dsCustomName || "" } };
-  });
-  clone.quests = (s.quests || []).map(q => {
-    if (!q) return q;
-    const en = q.enemy;
-    if (!en) return q;
-    if (en.ds) return q;
-    const type = en.dsType || (en.dsName ? "official" : (en.dsCustomName || en.dsDesc ? "custom" : "none"));
-    const name = en.dsName || en.dsCustomName || "";
-    const desc = en.dsDesc || (type === "official" ? (OFFICIAL_DANMAKU_SKILLS.find(x => x.name === en.dsName)?.desc || "") : en.dsDesc || "");
-    const newEn = { ...en, ds: { type, name, desc, customName: en.dsCustomName || "" } };
-    return { ...q, enemy: newEn };
-  });
-  return clone;
-}
+// normalizeScenario は gsSync.js へ移動（既存 import 互換のため再 export）
+export { normalizeScenario };
 
 // ─── 定数 ────────────────────────────────────────────────────────
 
 const MAP_NATURAL_W = 1200;
 const MAP_NATURAL_H = 849;
 
-const DEFAULT_GS = {
-  sessionPhase: "intro",
-  day: 1,
-  cycleIdx: 0,
-  clues: [],
-  newspaper: null,
-  newspaperDone: false,
-  cluePlaced: false,
-  reiryokuDone: false,
-  resources: { やる気: [1, 3], 残り人数: [2, 5], スペルカード: [1, 5], グレイズ: [0, 5], 霊力: [0, 20], 攻撃力: [1, 5] },
-  items: { お酒: 0, 小銭: 0, お守り: 0, Pアイテム: 0, 残機のかけら: 0, スペカのかけら: 0 },
-  quests: [],
-  log: [],
-  pcs: [],
-  sceneMode: false,
-  sceneText: "",
-  banner: null,
-  actedPcs: [],
-  dice: { rolling: false, results: [], label: "" },
-  diceHistory: [],
-  bgm: { explore: "", battle: "", end: "" },
-  currentScene: null,
-};
-
 const DEFAULT_SCENE = { bg: null, portraits: [] };
-
-// Firebase は値に undefined を含むと set が例外を投げる（"contains undefined in property ..."）。
-// 空オブジェクト/配列を書くと除去される影響で、次回の読み戻しが undefined になり、それを再書込すると失敗する。
-// 書込直前にオブジェクトのキーから undefined を再帰的に除去して防御する（ローカル state は元のまま）。
-function stripUndefined(v) {
-  if (Array.isArray(v)) return v.map(stripUndefined).filter(x => x !== undefined);
-  if (v && typeof v === "object") {
-    const out = {};
-    for (const k in v) if (v[k] !== undefined) out[k] = stripUndefined(v[k]);
-    return out;
-  }
-  return v;
-}
 
 // ─── カスタムフック ──────────────────────────────────────────────
 
@@ -533,15 +482,24 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
   );
 }
 
+// SessionApp が購読する部屋のメタ情報（rooms/{code}/{key}）
+const ROOM_META_KEYS = ["gmUid", "players", "config", "scenarioData", "limit", "phase"];
+
 // ─── SessionApp ──────────────────────────────────────────────────
-const LOG_CAP = 400; // gs.log の最大保持件数（無限肥大を防ぐ。全文は終了時にエクスポート）
 
 function SessionApp({ roomCode, user }) {
   const [mode, setMode]             = useState(null);
-  const [gs, setGs]                 = useState(DEFAULT_GS);
+  const [gsRaw, setGs]              = useState(DEFAULT_GS); // Firebase の公開 gs（秘匿情報なし）
   const [sceneData, setSceneData]   = useState(DEFAULT_SCENE);
   const [synced, setSynced]         = useState(false);
   const [room, setRoom]             = useState(null);
+  // シナリオ秘匿: GM のみ roomSecrets/{code}/gm/scenarioData（答え・敵・未登場クエスト）を購読し、表示用 gs に重ねる。
+  const amGm = !!room && room.gmUid === user.uid;
+  const [gmScenario, setGmScenario] = useState(null);
+  const gs = useMemo(
+    () => (amGm && gmScenario && !gsRaw.scenarioRevealed) ? mergeScenarioSecret(gsRaw, gmScenario) : gsRaw,
+    [amGm, gmScenario, gsRaw],
+  );
   const [pendingAction, setPendingAction] = useState(null);
   const [questBanner, setQuestBanner]         = useState(null);
   const [cycleOverlay, setCycleOverlay]       = useState(null);
@@ -825,18 +783,29 @@ function SessionApp({ roomCode, user }) {
     if (cb && pr) cb(pr.results);
   };
 
+  // 部屋のメタ情報だけを項目ごとに購読する。rooms/{code} 全体を購読すると、state・描写画像（sceneAssets）・
+  // 退避ログまで受け取り、gs が変わるたびに room も作り直されて再描画が増えるため。
   useEffect(() => {
-    const roomRef = ref(db, `rooms/${roomCode}`);
-    const unsub   = onValue(roomRef, snap => {
-      if (!snap.exists()) return;
-      const r = snap.val();
-      if (!r || typeof r !== "object") return;
-      setRoom(r);
-      const myPlayer = r.players?.[user.uid];
-      if (myPlayer && !mode) setMode(myPlayer.role === "gm" ? "gm" : "pl");
-    }, err => console.error("部屋情報の取得に失敗:", err));
-    return () => unsub();
-  }, [roomCode, user.uid, mode]);
+    const acc = {};
+    const seen = new Set();
+    const unsubs = ROOM_META_KEYS.map(k => onValue(ref(db, `rooms/${roomCode}/${k}`), snap => {
+      acc[k] = snap.val();
+      seen.add(k);
+      if (seen.size < ROOM_META_KEYS.length || !acc.gmUid) return; // 全項目の初回受信を待つ／gmUid 無し＝部屋削除
+      setRoom({ ...acc });
+    }, err => console.error(`部屋情報(${k})の取得に失敗:`, err)));
+    return () => unsubs.forEach(u => u());
+  }, [roomCode]);
+
+  useEffect(() => {
+    if (!room) return;
+    const myPlayer = room.players?.[user.uid];
+    // GM 判定は役割フィールドではなく部屋の gmUid で行う（players/{uid}/role は本人が書ける場所のため）
+    const isRoomGm = room.gmUid === user.uid;
+    if (myPlayer && !mode) setMode(isRoomGm ? "gm" : "pl");
+    // 参加済み PL は GM 画面を開けない（GM 本人は PL 共有画面を別端末で開く用途があるので両方可）
+    if (myPlayer && !isRoomGm && mode === "gm") setMode("pl");
+  }, [room, user.uid, mode]);
 
   useEffect(() => {
     if (!mode) return;
@@ -848,26 +817,14 @@ function SessionApp({ roomCode, user }) {
       clearTimeout(timeout);
       if (snap.exists()) {
         try {
-          const val = snap.val() || {};
-          const toArray = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
-
-          setGs(_prev => ({
-            ...DEFAULT_GS, ...val,
-            resources: { ...DEFAULT_GS.resources, ...(val.resources || {}) },
-            items:     { ...DEFAULT_GS.items,     ...(val.items     || {}) },
-            // .mapでクラッシュしないよう、確実に配列化してから処理する
-            pcs:    toArray(val.pcs).filter(Boolean).map(normalizePc),
-            scenarioData: normalizeScenario(val.scenarioData) ?? null,
-            quests: toArray(val.quests),
-            clues:  toArray(val.clues),
-            log:    toArray(val.log),
-          }));
+          const next = normalizeGs(snap.val());
+          if (next) setGs(next);
         } catch (e) {
           console.error("ゲームステートのパースエラー:", e);
         }
       } else if (mode === "gm" && isParticipantRef.current) {
-        get(ref(db, `rooms/${roomCode}`)).then(roomSnap => {
-          const r     = roomSnap.exists() ? roomSnap.val() : null;
+        Promise.all(["players", "scenarioData", "limit"].map(k => get(ref(db, `rooms/${roomCode}/${k}`)))).then(([pl, sd, lim]) => {
+          const r     = { players: pl.val(), scenarioData: sd.val(), limit: lim.val() };
           const initGs = {
             ...DEFAULT_GS,
             sessionPhase: "intro",
@@ -875,7 +832,7 @@ function SessionApp({ roomCode, user }) {
             scenarioData: normalizeScenario(r?.scenarioData) ?? null,
             pcs:          buildPcList(r),
           };
-          set(gsRef, initGs).catch(console.error);
+          runTransaction(gsRef, cur => (cur === null ? stripUndefined(sanitizeGsForWrite(initGs)) : undefined)).catch(console.error);
         });
       }
       setSynced(true);
@@ -890,6 +847,7 @@ function SessionApp({ roomCode, user }) {
     const unsubScene = onValue(sceneRef, snap => {
       rawSceneRef.current = snap.exists() ? snap.val() : null;
       if (rawSceneRef.current) rehydrate();
+      else setSceneData(DEFAULT_SCENE); // scene ノード削除時に古い描写が残らないように
     });
     // アセットは内容ハッシュ id ＝不変なので onChildAdded で増分のみ取得（全量再DLを避ける）。
     const assetsRef = ref(db, `rooms/${roomCode}/sceneAssets`);
@@ -900,25 +858,6 @@ function SessionApp({ roomCode, user }) {
 
     return () => { clearTimeout(timeout); unsubGs(); unsubScene(); unsubAssets(); };
   }, [mode, gsPath, scenePath, roomCode]);
-
-  function normalizePc(p) {
-    const charData = CHARACTERS.find(c => c.id === p.charId) ?? null;
-    const personality = p.ps ?? (p.skillId ? {
-      id:   p.skillId,
-      name: p.skillName ?? PERSONALITY_SKILLS[p.skillId]?.name ?? "",
-      type: PERSONALITY_SKILLS[p.skillId]?.type ?? null,
-      desc: PERSONALITY_SKILLS[p.skillId]?.desc ?? null,
-    } : null);
-
-    return {
-      ...p,
-      as:  p.as  ?? charData?.as  ?? null,
-      ds:  p.ds  ?? charData?.ds  ?? null,
-      ps: personality,
-      // currentSpot が空文字/未設定の既存データを救済（探索フェーズで "" だと移動・表示が壊れる）
-      currentSpot: p.currentSpot || "11",
-    };
-  }
 
   function buildPcList(r) {
     if (!r?.players) return [];
@@ -963,6 +902,7 @@ function SessionApp({ roomCode, user }) {
           growthAbilityUnlocked: p.growthAbilityUnlocked ?? false,
           specialBond: p.specialBond ?? null, // 成長で獲得した特別な絆 { target, targetUid, intimacy }
           grownInstanceId: p.grownInstanceId ?? null, // 成長キャラのインスタンスID（未成長は null）
+          grownBase: p.grownBase ?? null, // 既存成長記録のスナップショット { tags, enhancementsUsed, createdAt }（成長セレモニー用）
           resources:   INIT_RESOURCES(),
           items:       INIT_ITEMS(),
           baseSpotId,
@@ -972,25 +912,77 @@ function SessionApp({ roomCode, user }) {
       });
   }
 
+  // gs の更新は runTransaction で行う。
+  // 以前は「ローカルで計算した gs 全体を set」していたため、GM と PL がほぼ同時に操作すると
+  // 後勝ちで先の更新が消えた。トランザクションは競合時にサーバー値で fn を再実行するので消えない。
+  // applyLocally（既定）により onValue が楽観的な値で即時発火し、UI は従来どおり即時反映される。
+  // ※ fn は競合時に複数回呼ばれ得るので純関数であること（副作用は upd の外で行う）。
   const upd = useCallback((fn) => {
     if (!isParticipantRef.current) return; // 閲覧専用（未参加クライアント）は state を書き込まない
-    let fired = false;
-    setGs(prev => {
-      let next = typeof fn === "function" ? fn(prev) : fn;
-      // ログ肥大防止: 上限を超えたら古いものを落とす（prepend なので末尾が古い。全文は終了時にエクスポート）。
-      if (next?.log?.length > LOG_CAP) next = { ...next, log: next.log.slice(0, LOG_CAP) };
-      if (!fired) {
-        fired = true;
-        // アンドゥ: ログが増えた＝意味のある操作 の直前状態を保存（ダイス演出等のログ無し更新は無視）
-        if ((next?.log?.length || 0) > (prev?.log?.length || 0)) {
-          undoStackRef.current = [...undoStackRef.current.slice(-19), prev];
-          setUndoCount(undoStackRef.current.length);
-        }
-        set(ref(db, gsPath), stripUndefined(next)).catch(console.error);
+    let last = null; // 最後に実行された計算（＝コミットされた計算）
+    runTransaction(ref(db, gsPath), raw => {
+      const prev = normalizeGs(raw);
+      if (!prev) return raw; // キャッシュ未取得/未作成。サーバー値と食い違えば SDK が実データで再実行する
+      last = { prev, ...computeGsUpdate(prev, fn) };
+      return stripUndefined(last.next);
+    }).then(({ committed }) => {
+      if (!committed || !last) return;
+      // アンドゥ: ログが増えた＝意味のある操作 の直前状態を保存（ダイス演出等のログ無し更新は無視）
+      if (last.logGrew) {
+        undoStackRef.current = [...undoStackRef.current.slice(-19), last.prev];
+        setUndoCount(undoStackRef.current.length);
       }
-      return next;
+      // ログ上限超過分を退避（終了時の .txt 出力で全文を復元）
+      if (last.archived) update(ref(db, `rooms/${roomCode}/logArchive`), last.archived).catch(console.error);
+    }).catch(e => console.error("ゲームステートの更新に失敗:", e));
+  }, [gsPath, roomCode]);
+
+  // ─── シナリオ秘匿（GM クライアントのみ） ─────────────────────────
+  const secretScenarioPath = `roomSecrets/${roomCode}/gm/scenarioData`;
+  useEffect(() => {
+    if (!amGm) { setGmScenario(null); return; }
+    const unsub = onValue(ref(db, secretScenarioPath),
+      snap => setGmScenario(snap.exists() ? normalizeScenario(snap.val()) : null),
+      err => console.error("秘匿シナリオの取得に失敗:", err));
+    return () => unsub();
+  }, [amGm, secretScenarioPath]);
+
+  // 旧形式の部屋（rooms/{code}/scenarioData に全文が入っている）を秘匿形式へ移行する
+  const migratedRef = useRef(false);
+  useEffect(() => {
+    if (!amGm || migratedRef.current) return;
+    const sd = room?.scenarioData;
+    if (!sd || !(sd.quests || sd.finalBattleEnemies)) return;
+    migratedRef.current = true;
+    (async () => {
+      try {
+        const cur = await get(ref(db, secretScenarioPath));
+        if (!cur.exists()) await set(ref(db, secretScenarioPath), stripUndefined(sd));
+        await set(ref(db, `rooms/${roomCode}/scenarioData`), stripUndefined(publicScenario(sd)));
+      } catch (e) { console.error("シナリオ秘匿への移行に失敗:", e); migratedRef.current = false; }
+    })();
+  }, [amGm, room?.scenarioData, roomCode, secretScenarioPath]);
+
+  // クエスト解決 → 真相の付与・次クエストの解放（全文を知っている GM だけが行う）
+  useEffect(() => {
+    if (!amGm || mode !== "gm" || !gmScenario?.quests || gsRaw.scenarioRevealed) return;
+    if (!reconcileQuests(gsRaw.quests, gmScenario.quests)) return;
+    upd(p => {
+      const next = reconcileQuests(p.quests, gmScenario.quests);
+      return next ? { ...p, quests: next } : p;
     });
-  }, [gsPath]);
+  }, [amGm, mode, gmScenario, gsRaw.quests, gsRaw.scenarioRevealed, upd]);
+
+  // 終幕で全文公開（成長セレモニーの弾幕スキル候補などに敵データが必要。以降は秘匿しない）
+  useEffect(() => {
+    if (!amGm || mode !== "gm" || !gmScenario || gsRaw.scenarioRevealed) return;
+    if (gsRaw.sessionPhase !== "epilogue" && gsRaw.sessionPhase !== "end") return;
+    upd(p => {
+      if (p.scenarioRevealed) return p;
+      const merged = mergeScenarioSecret(p, gmScenario);
+      return { ...merged, scenarioRevealed: true };
+    });
+  }, [amGm, mode, gmScenario, gsRaw.scenarioRevealed, gsRaw.sessionPhase, upd]);
 
   // 直近の操作を1つ取り消す（GMのみ）。直前状態を復元してFirebaseへ反映。
   const undo = useCallback(() => {
@@ -1450,7 +1442,7 @@ function SessionApp({ roomCode, user }) {
         ) : gs.battle?.active ? (
           <div style={{ width: "100%", height: "100%", animation: "battleFadeIn 0.48s ease both" }}>
             <BattleView
-              gs={gs} upd={upd} user={user} isGm={mode === "gm"} sceneData={sceneData}
+              gs={gs} upd={upd} user={user} isGm={mode === "gm"} sceneData={sceneData} room={room} roomCode={roomCode}
               animateDice={animateDice}
               diceResult={gs.dice?.results} diceAnim={gs.dice?.rolling} diceLabel={gs.dice?.label}
             />
@@ -1696,7 +1688,8 @@ export default function App() {
 
   useEffect(() => {
     if (!roomCode) return;
-    const roomRef = ref(db, `rooms/${roomCode}`);
+    // phase だけを購読（部屋全体を購読すると state・画像まで受け取るため）。phase が無い＝部屋削除済み。
+    const roomRef = ref(db, `rooms/${roomCode}/phase`);
     const unsub   = onValue(roomRef, snap => {
       if (!snap.exists()) {
         try {
@@ -1709,16 +1702,21 @@ export default function App() {
         setRoomPhase(null);
         return;
       }
-      setRoomPhase(snap.val().phase || "prep");
+      setRoomPhase(snap.val() || "prep");
     });
     return () => unsub();
   }, [roomCode]);
 
   if (user === undefined)   return <LoadingScreen message="接続中…" />;
-  if (!user || !roomCode)   return <LobbyRoot />;
-  if (roomPhase === null)   return <LoadingScreen message="部屋情報を取得中…" />;
   if (roomPhase === "error") return <LoadingScreen message="ルームが見つかりません。セッション終了済みか、URLをご確認ください。" color="#e07060" />;
-  if (roomPhase === "prep") return <LobbyRoot />;
+  if (user && roomCode && roomPhase === null) return <LoadingScreen message="部屋情報を取得中…" />;
 
-  return <SessionApp roomCode={roomCode} user={user} />;
+  // 遅延読み込み中の画面（Lobby / セッションの各画面）はここで受ける
+  return (
+    <Suspense fallback={<LoadingScreen message="読み込み中…" />}>
+      {(!user || !roomCode || roomPhase === "prep")
+        ? <LobbyRoot />
+        : <SessionApp roomCode={roomCode} user={user} />}
+    </Suspense>
+  );
 }
