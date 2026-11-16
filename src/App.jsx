@@ -9,6 +9,7 @@ import { useUrlParams } from "./useUrlParams";
 import { ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./session/shared";
 import { BackstoryScreen, EpilogueView, SceneStage } from "./session/scene";
 import { GmRequestOverlay } from "./session/gmPanel";
+import { getCustom } from "./customRules";
 
 // コード分割: ロビーとセッションの大きな画面は必要になるまで読み込まない（初回表示を軽くする）
 const LobbyRoot      = lazy(() => import("./Lobby"));
@@ -464,6 +465,30 @@ function MapView({ gs, sceneData, isGm, onSpotClick, user, setSceneData }) {
                 fontSize: 9, color: "#ce93d8", boxShadow: "0 1px 3px rgba(0,0,0,0.8)",
               }}>手</div>
             </div>
+          );
+        });
+      })()}
+
+      {/* 独自コマ（異変再現など）レイヤー: スポットの上側に色付きの小コマで表示（GM の「独自」タブで配置） */}
+      {mapBounds.width > 0 && (() => {
+        const cust = getCustom(gs);
+        if (!cust.mapTokens.length) return null;
+        const bySpot = {};
+        cust.mapTokens.forEach(t => { (bySpot[t.spot] = bySpot[t.spot] || []).push(t); });
+        return cust.mapTokens.map(t => {
+          const spot = SPOTS.find(s => s.id === t.spot);
+          const kind = cust.tokens.find(k => k.id === t.kind);
+          if (!spot || !kind) return null;
+          const mates = bySpot[t.spot];
+          const idx = mates.findIndex(x => x.id === t.id);
+          const px = (spot.x / 100) * mapBounds.width + (idx - (mates.length - 1) / 2) * 14;
+          const py = (spot.y / 100) * mapBounds.height - baseSize / 2 - 10;
+          return (
+            <div key={t.id} title={kind.name} style={{
+              position: "absolute", left: px, top: py, transform: "translate(-50%, -50%)", zIndex: 22, pointerEvents: "auto",
+              width: 12, height: 12, borderRadius: "50%", background: kind.color || "#e8a0b8",
+              border: "1.5px solid rgba(255,255,255,0.85)", boxShadow: `0 0 6px ${kind.color || "#e8a0b8"}, 0 1px 3px rgba(0,0,0,0.8)`,
+            }} />
           );
         });
       })()}

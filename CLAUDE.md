@@ -152,6 +152,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `diceHistory[]` | Roll history `{ label, results[], max, t }`; written by `animateDice` on roll-confirm (prepend, capped at 50). Surfaced in `RightPanel`'s 進行 tab (collapsible) and exported by `SessionEndView`. |
 | `bgm` | GM-set BGM track URLs `{ explore, battle, end }`. Each client plays the phase-appropriate track locally (see BGM section). |
 | `gmRequests[]` | GM → PL requests (dice / choice / notice), see "GM intervention tools". Capped at `MAX_REQUESTS` (12). |
+| `custom` | GM-built custom elements (異変再現 etc.): stat/item/table/token/state/rule **definitions** + global stat values + placed map tokens. See "Custom elements". |
 
 ### Major Components
 
@@ -178,6 +179,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `scenePanel.jsx` | `ScenePanel` |
 | `rightPanel.jsx` | `RightPanel` |
 | `gmPanel.jsx` | GM intervention UI: `GmToolsPanel` (RightPanel "GM" tab; collapsible above `BattleRightPanel` during battle), `GmRequestOverlay` (PL-side cards, rendered by `SessionApp`), `GmPcEditor` (PCCard GM編集). Imported directly by App — must not import lazily loaded session modules. |
+| `customPanel.jsx` | Custom-element UI: `CustomRulesEditor` (RightPanel GM「独自」tab), `CustomBoard` (rule board + global/battle stats, top of 進行 tab and above `BattleRightPanel`, visible to all), `CustomPcSection` (PCCard). |
 
 **Code splitting**: App lazy-loads `Lobby` (which lazy-loads `ScenarioEditor`), `BattleView`, `RightPanel`, `BonusPhaseView`, `SessionEndView`; a single `<Suspense>` in the root `App` covers them. Keep `shared.jsx`/`scene.jsx` free of imports from the lazily loaded modules or they get pulled into the initial chunk.
 
@@ -289,6 +291,19 @@ Policy: instead of adding a ScenarioEditor feature for every scenario-specific r
 - **Requests** (`gs.gmRequests[] = { id, kind: "dice"|"choice"|"notice", title, text, targets[uid], dice?: { count, mode: "nd6"|"d66", target? }, options?, responses: { [uid]: { dice?, cheers?, confirmed?, choice?, ack?, byGm? } } }`). `GmRequestOverlay` (fixed bottom card, every screen incl. battle; collapsible) shows each PL their unanswered requests (`pendingFor`). Dice **with a target** is a 行為判定 (`evalJudgment`: max ≥ target, all-1 fumble, any-6 special, 不運 honoured): after rolling, eligible cheerers (same spot, `cheerOptions` = normal bonds + special bond; **not** the fragile/人を狂わす variants) get a 応援 card on their own screen; `addCheerDice` appends dice + consumes the slot; the judge presses 確定 (`confirmDice`). Without a target the roll is final immediately. The GM monitor can roll/confirm/choose **on behalf** of offline PLs, and closes (removes) requests. `getCheerBonds`/`getSpecialBondCheer` were moved here from ScenePanel (shared).
 - **Ad-hoc battle** (`startAdhocBattle`): enemies picked from `scenarioEnemies(gs.scenarioData)` (GM's merged view: quest enemies, extra enemies, final/optional) and/or created on the spot; participants chosen; `battle = { adhoc: true, title, participantPcUids, scenePcUid?, resumeScene?, … }` (`mass` if >1 enemy or PC). The running `currentScene` is stashed in `battle.resumeScene`; **every battle close goes through `closeBattlePatch(p)`** (finishBattle + GM 強制終了) which restores it. Ad-hoc battles don't change `sessionPhase`, don't solve quests or mark PCs acted; lives-0 recovery applies to every non-final battle.
 - **PC GM編集** (`GmPcEditor`, under PCCard's GM編集 toggle): 変調付与, 絆 add/remove + 応援欄 (`bondUsed`) toggle, forced move, 行動済み toggle, `abilityUse` reset, resource max ±.
+
+### Custom elements (独自要素 — 異変再現 support, A-1)
+
+Official 異変再現 (expansion rules) and GM-made ones keep adding new stats / items / tables / tokens / states. Rather than coding each, the GM **defines generic parts in-session** and runs them by hand (nothing auto-triggers). Pure logic in [src/customRules.js](src/customRules.js) (tested in `customRules.test.js`), UI in `src/session/customPanel.jsx` (`customPanel.test.jsx`).
+
+- **Definitions** live in `gs.custom` (`stats`, `cats`, `items`, `tables`, `tokens`, `states`, `rules`, plus `global` values and placed `mapTokens`). Always read via `getCustom(gs)` (Firebase array guards). `removeDef` also cleans up referencing values/instances/tokens/states.
+- **Values**: stat `scope` is `pc` (→ `pc.custom.vals[id]`), `global` (→ `gs.custom.global[id]`) or `battle` (→ `gs.battle.customVals[id]`, naturally reset when a new battle object is built; edits ignored outside battle). `setStat`/`adjustStat` clamp to min/max; unset = `init`.
+- **Items**: instances `pc.custom.items = [{ iid, def, used? }]`; category `cap` is a soft limit (over-cap is allowed but logged ⚠ — the rules say "choose one to discard"). Owner (`PCCard` `myUid`) can use/toggle 使用済/discard/pass to a same-spot PC; GM can do all and give from the tab.
+- **Tables** (`d6`/`2d6`/`d66`, rows `{min,max,text}` parsed from "1-2 赤" lines): rolled by the GM, logged; a result whose text equals a custom item name gets a 渡す button.
+- **Map tokens**: kinds `{ name, color, unique }`; `placeTokens` honours `unique` (one per spot); random placement excludes `dream`. Rendered in `MapView` (App.jsx) as small colored dots above spots.
+- **States**: `pc.custom.states = [stateId]`, toggled by the GM (PCCard or tab).
+- **Time control**: `setClock` (resets acted/scene/reiryoku; newspaper on day change), `repeatCycle` (same cycle again, no return / やる気 loss — 永夜異変), `setLimit` (`gs.limit`).
+- **Not yet (A-2)**: battle-field editing (bullets add/remove/clear, field tokens, hit cancel, extra evade step for ラストスペル, temporary danmaku-skill grant). **Later**: B = 異変再現 presets (bundle `gs.custom` definitions, save under `users/{uid}`), C = code hooks for official ones (弾幕撮影 battle variant etc.). 完全憑依 (one player, two PCs) needs a dedicated PC-model change and is out of scope.
 
 ### Quest Resolution Types
 

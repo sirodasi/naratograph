@@ -12,6 +12,7 @@ import { ScenePanel } from "./scenePanel";
 import { PCCard } from "./pcCard";
 import { SceneEditor } from "./scene";
 import { GmToolsPanel } from "./gmPanel";
+import { CustomRulesEditor, CustomBoard } from "./customPanel";
 import { getRequests } from "../gmTools";
 
 // ─── RightPanel ───────────────────────────────────────────────────
@@ -147,7 +148,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const ma = isGm ? getMainAction() : null;
 
   const TABS = isGm
-    ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["gm", `GM${getRequests(gs).length ? `(${getRequests(gs).length})` : ""}`], ["log", "ログ"]]
+    ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["gm", `GM${getRequests(gs).length ? `(${getRequests(gs).length})` : ""}`], ["custom", "独自"], ["log", "ログ"]]
     : [["progress", "進行"],["pcs", "PC一覧"], ["log", "ログ"]];
 
   // ── キーボードショートカット（GM操作の高速化） ──────────────────────
@@ -245,6 +246,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {showBattleGmTools && <div style={{ marginTop: 6 }}><GmToolsPanel gs={gs} upd={upd} getSpot={getSpot} /></div>}
             </div>
           )}
+          <CustomBoard gs={gs} upd={upd} isGm={isGm} />
           <BattleRightPanel
             gs={gs}
             upd={upd}
@@ -382,6 +384,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
               {tab === "progress" && (
                 <div>
+                  <CustomBoard gs={gs} upd={upd} isGm={isGm} />
                   {/* 任意ダイス（GM裁定・自作判定用） */}
                   <div style={{ marginBottom: 8, padding: 6, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
                     <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>🎲 任意ダイス</div>
@@ -545,6 +548,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                           SPOTS={SPOTS}
                           room={room}
                           isOnline={!!presence[pc.uid]?.online}
+                          myUid={user?.uid}
                         />
                       ))
                   }
@@ -560,6 +564,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
               {tab === "gm" && isGm && (
                 <GmToolsPanel gs={gs} upd={upd} getSpot={getSpot} />
+              )}
+
+              {tab === "custom" && isGm && (
+                <CustomRulesEditor gs={gs} upd={upd} SPOTS={SPOTS} getSpot={getSpot} />
               )}
 
               {tab === "log" && (() => {
