@@ -12,7 +12,7 @@ import { ScenePanel } from "./scenePanel";
 import { PCCard } from "./pcCard";
 import { SceneEditor } from "./scene";
 import { GmToolsPanel } from "./gmPanel";
-import { CustomRulesEditor, CustomBoard } from "./customPanel";
+import { CustomRulesEditor, CustomBoard, GmFieldEditor } from "./customPanel";
 import { getRequests } from "../gmTools";
 
 // ─── RightPanel ───────────────────────────────────────────────────
@@ -246,6 +246,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               {showBattleGmTools && <div style={{ marginTop: 6 }}><GmToolsPanel gs={gs} upd={upd} getSpot={getSpot} /></div>}
             </div>
           )}
+          {isGm && <GmFieldEditor gs={gs} upd={upd} />}
           <CustomBoard gs={gs} upd={upd} isGm={isGm} />
           <BattleRightPanel
             gs={gs}

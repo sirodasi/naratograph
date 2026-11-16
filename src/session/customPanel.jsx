@@ -2,6 +2,7 @@
 //   CustomRulesEditor … GM の「独自」タブ（定義の作成と運用：時間操作・ステータス・アイテム・表・コマ・状態・ルール掲示）
 //   CustomBoard       … 全員に見える掲示（ルール文・全体共有/戦闘中のステータス）
 //   CustomPcSection   … PC カード内（PC個別ステータス・独自の状態・独自アイテム）
+//   GmFieldEditor     … 弾幕ごっこ中の GM 盤面編集（弾幕・独自コマ・被弾無効・追加の回避ステップ・一時スキル）
 import { useState } from "react";
 import { C, iStyle } from "../styles/colors";
 import { CYCLES } from "../data/gameData";
@@ -11,6 +12,10 @@ import {
   tableValue, lookupTable, logTableRoll, itemByName, placeTokens, removeToken, clearTokens,
   tokenCandidates, toggleState, setClock, repeatCycle, setLimit, parseLimit, postRule, pcCustom,
 } from "../customRules";
+import {
+  adjustBullets, placeBulletsByDice, clearField, moveEntity, adjustLives, cancelHit, startExtraEvade,
+  getFieldTokens, placeFieldToken, takeFieldTokens, fieldTokenAlerts, grantSkill, revokeSkill, OFFICIAL_DS_NAMES,
+} from "../gmBattle";
 
 const newId = (pre) => `${pre}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const d6 = () => Math.floor(Math.random() * 6) + 1;
@@ -585,5 +590,177 @@ function StateSection({ c, gs, upd }) {
         <button disabled={!name.trim()} onClick={add} style={tiny(C.gold)}>追加</button>
       </div>
     </Fold>
+  );
+}
+
+// ─── 弾幕ごっこ中の GM 盤面編集 ──────────────────────────────────
+// 盤面に置いた独自コマの「踏んだ／弾幕が置かれた」通知は折りたたみ中も常に表示する
+export function GmFieldEditor({ gs, upd }) {
+  const b = gs.battle || {};
+  const c = getCustom(gs);
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState("");
+  const [randN, setRandN] = useState(1);
+  const [tokKind, setTokKind] = useState("");
+  const [tokCell, setTokCell] = useState("rand");
+  const [skill, setSkill] = useState("");
+  const [evadeSide, setEvadeSide] = useState("pc");
+  const [evadeN, setEvadeN] = useState(6);
+  const [evadeLabel, setEvadeLabel] = useState("ラストスペル");
+
+  const battlePcs = (gs.pcs || []).filter(pc => !b.participantPcUids || b.participantPcUids.includes(pc.uid));
+  const npcs = b.participants?.npcs || [];
+  const entities = [
+    ...battlePcs.map(pc => ({ id: pc.uid, name: pc.charName, isPc: true, e: pc })),
+    ...npcs.map(n => ({ id: n.id, name: n.name, isPc: false, e: n })),
+  ];
+  const tid = target && entities.some(x => x.id === target) ? target : (b.pcCombatant || entities[0]?.id || "");
+  const cur = entities.find(x => x.id === tid);
+  const grid = b.grids?.[tid] || [0, 0, 0, 0, 0, 0];
+  const pos = b.positions?.[tid];
+
+  const alerts = fieldTokenAlerts(b);
+  const kindName = (id) => c.tokens.find(k => k.id === id)?.name || "コマ";
+  const opponentOf = (id) => entities.find(x => x.id === id)?.isPc ? b.npcCombatant : b.pcCombatant;
+  const nameOf = (id) => entities.find(x => x.id === id)?.name || "？";
+  const isHitCheck = b.phase === "pc_hit_check" || b.phase === "npc_hit_check";
+  const canEvade = !!(b.pcCombatant && b.npcCombatant);
+  const grants = Object.entries(b.grantedDs || {}).flatMap(([id, list]) => (Array.isArray(list) ? list : Object.values(list || {})).map(sk => ({ id, sk })));
+  const cellTokens = (cell) => getFieldTokens(b).filter(t => t.owner === tid && t.cell === cell);
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {alerts.map(a => {
+        const opp = opponentOf(a.owner);
+        const ids = a.tokens.map(t => t.id);
+        const kinds = [...new Set(a.tokens.map(t => kindName(t.kind)))].join("・");
+        return (
+          <div key={`${a.owner}:${a.cell}`} style={{ ...box, borderColor: C.gold, background: "rgba(212,168,56,0.08)" }}>
+            <div style={{ fontSize: 10, color: C.gold, marginBottom: 4 }}>
+              ⚠ {nameOf(a.owner)} のフィールド {a.cell}番マスの【{kinds}】×{a.tokens.length}：{a.standing ? "駒がこのマスにいる" : "弾幕が置かれた"}
+            </div>
+            <div style={row}>
+              <button onClick={() => upd(p => takeFieldTokens(p, ids, "collect", a.owner))} style={tiny(C.gold)}>{nameOf(a.owner)} が獲得</button>
+              {opp && <button onClick={() => upd(p => takeFieldTokens(p, ids, "collect", opp))} style={tiny(C.gold)}>{nameOf(opp)} が獲得</button>}
+              <button onClick={() => upd(p => takeFieldTokens(p, ids, "remove"))} style={tiny(C.red)}>取り除く</button>
+            </div>
+          </div>
+        );
+      })}
+
+      <button onClick={() => setOpen(v => !v)} style={{ width: "100%", padding: 5, fontSize: 10, cursor: "pointer", borderRadius: 4, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, color: C.red }}>
+        🎯 盤面編集（GM） {open ? "▲" : "▼"}
+      </button>
+      {open && (
+        <div style={{ ...box, marginTop: 6 }}>
+          {isHitCheck && (
+            <button onClick={() => window.confirm("この被弾を無効にして次へ進めますか？（霊撃など）") && upd(p => cancelHit(p))} style={{ ...tiny(C.blue), width: "100%", padding: 5, marginBottom: 8, fontSize: 10 }}>
+              🛡 {nameOf(b.phase === "pc_hit_check" ? b.pcCombatant : b.npcCombatant)} の被弾を無効にする
+            </button>
+          )}
+
+          <div style={label}>対象のフィールド</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
+            {entities.map(x => (
+              <span key={x.id} onClick={() => setTarget(x.id)} style={{ padding: "2px 7px", fontSize: 9, cursor: "pointer", borderRadius: 10, border: `1px solid ${x.id === tid ? (x.isPc ? C.blue : C.red) : C.border}`, color: x.id === tid ? (x.isPc ? C.blue : C.red) : C.textFaint }}>{x.name}</span>
+            ))}
+          </div>
+
+          {cur && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3, marginBottom: 6 }}>
+                {[1, 2, 3, 4, 5, 6].map(cell => {
+                  const toks = cellTokens(cell);
+                  return (
+                    <div key={cell} style={{ padding: 4, borderRadius: 3, border: `1px solid ${pos === cell ? (cur.isPc ? C.blue : C.red) : C.border}`, background: pos === cell ? "rgba(255,255,255,0.04)" : "transparent", fontSize: 9, color: C.textDim }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: C.textFaint }}>{cell}</span>
+                        {pos === cell ? <span style={{ color: cur.isPc ? C.blue : C.red }}>駒</span>
+                          : <span onClick={() => upd(p => moveEntity(p, tid, cell))} title="駒をこのマスへ移動" style={{ cursor: "pointer", color: C.textFaint }}>→駒</span>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3, margin: "2px 0" }}>
+                        <button onClick={() => upd(p => adjustBullets(p, tid, cell, -1))} style={tiny()}>−</button>
+                        <span style={{ color: grid[cell - 1] ? C.red : C.textFaint, minWidth: 10, textAlign: "center", fontWeight: "bold" }}>{grid[cell - 1] || 0}</span>
+                        <button onClick={() => upd(p => adjustBullets(p, tid, cell, +1))} style={tiny()}>＋</button>
+                      </div>
+                      {toks.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                          {toks.map(t => <span key={t.id} onClick={() => upd(p => takeFieldTokens(p, [t.id], "remove"))} title="クリックで取り除く" style={{ fontSize: 8, cursor: "pointer", color: c.tokens.find(k => k.id === t.kind)?.color || C.sakura }}>◆{kindName(t.kind)}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={row}>
+                <button onClick={() => window.confirm(`${cur.name} のフィールドの弾幕を全て取り除きますか？`) && upd(p => clearField(p, tid))} style={tiny(C.red)}>弾幕を全消去</button>
+                ランダムに<input type="number" min={1} max={12} value={randN} onChange={e => setRandN(e.target.value)} style={{ ...num, width: 34 }} />個
+                <button onClick={() => { const n = Math.max(1, Math.min(12, parseInt(randN) || 1)); const dice = Array.from({ length: n }, d6); upd(p => placeBulletsByDice(p, tid, dice)); }} style={tiny(C.red)}>配置</button>
+              </div>
+              <div style={row}>
+                残り人数 {cur.e.resources?.残り人数?.cur ?? 0}
+                <button onClick={() => upd(p => adjustLives(p, tid, -1))} style={tiny()}>−</button>
+                <button onClick={() => upd(p => adjustLives(p, tid, +1))} style={tiny()}>＋</button>
+              </div>
+
+              <div style={label}>独自コマを置く（種類は「独自」タブのマップの独自コマを流用）</div>
+              {c.tokens.length === 0 ? <div style={{ fontSize: 9, color: C.textFaint }}>コマの種類がありません（「独自」タブで作成）</div> : (
+                <div style={row}>
+                  <select value={tokKind} onChange={e => setTokKind(e.target.value)} style={sel}>
+                    <option value="">種類...</option>
+                    {c.tokens.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                  </select>
+                  <select value={tokCell} onChange={e => setTokCell(e.target.value)} style={sel}>
+                    <option value="rand">ランダムなマス</option>
+                    {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}番マス</option>)}
+                  </select>
+                  <button disabled={!tokKind} onClick={() => { const cell = tokCell === "rand" ? d6() : parseInt(tokCell); const id = newId("ft"); upd(p => placeFieldToken(p, tid, cell, tokKind, id)); }} style={tiny(C.gold)}>置く</button>
+                </div>
+              )}
+
+              <div style={label}>このラウンドだけ弾幕スキルを修得させる（アビリティカードの「装備」等）</div>
+              <div style={row}>
+                <select value={skill} onChange={e => setSkill(e.target.value)} style={sel}>
+                  <option value="">弾幕スキル...</option>
+                  {OFFICIAL_DS_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <button disabled={!skill} onClick={() => upd(p => grantSkill(p, tid, skill))} style={tiny(C.gold)}>{cur.name} に付与</button>
+              </div>
+            </>
+          )}
+          {grants.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 4 }}>
+              {grants.map(g => <span key={`${g.id}:${g.sk}`} onClick={() => upd(p => revokeSkill(p, g.id, g.sk))} title="クリックで外す" style={{ padding: "1px 6px", fontSize: 9, borderRadius: 8, cursor: "pointer", border: `1px solid ${C.gold}`, color: C.gold }}>{nameOf(g.id)}《{g.sk}》✕</span>)}
+            </div>
+          )}
+
+          <div style={label}>追加の回避ステップ（ラストスペル等。回避側のフィールドに弾幕を置き、回避後はラウンド終了判定へ）</div>
+          {!canEvade ? <div style={{ fontSize: 9, color: C.textFaint }}>対戦者が決まってから使えます</div> : (
+            <>
+              <div style={row}>
+                回避側
+                {["pc", "npc"].map(side => (
+                  <span key={side} onClick={() => setEvadeSide(side)} style={{ padding: "1px 7px", fontSize: 9, cursor: "pointer", borderRadius: 10, border: `1px solid ${evadeSide === side ? C.gold : C.border}`, color: evadeSide === side ? C.gold : C.textFaint }}>
+                    {nameOf(side === "pc" ? b.pcCombatant : b.npcCombatant)}
+                  </span>
+                ))}
+              </div>
+              <div style={row}>
+                <input value={evadeLabel} onChange={e => setEvadeLabel(e.target.value)} placeholder="名前" style={{ ...inp, width: 90 }} />
+                <input type="number" min={0} max={12} value={evadeN} onChange={e => setEvadeN(e.target.value)} style={{ ...num, width: 34 }} />D で配置
+                <button onClick={() => {
+                  const isPc = evadeSide === "pc";
+                  const n = Math.max(0, Math.min(12, parseInt(evadeN) || 0));
+                  const dice = Array.from({ length: n }, d6);
+                  const lbl = evadeLabel.trim() || "追加の回避ステップ";
+                  if (!window.confirm(`${lbl}：${nameOf(isPc ? b.pcCombatant : b.npcCombatant)} のフィールドに ${n}D の弾幕を置き、回避ステップを始めますか？`)) return;
+                  upd(p => startExtraEvade(p, isPc, dice, lbl));
+                }} style={tiny(C.red)}>開始</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

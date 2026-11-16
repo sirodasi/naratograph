@@ -179,7 +179,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `scenePanel.jsx` | `ScenePanel` |
 | `rightPanel.jsx` | `RightPanel` |
 | `gmPanel.jsx` | GM intervention UI: `GmToolsPanel` (RightPanel "GM" tab; collapsible above `BattleRightPanel` during battle), `GmRequestOverlay` (PL-side cards, rendered by `SessionApp`), `GmPcEditor` (PCCard GM編集). Imported directly by App — must not import lazily loaded session modules. |
-| `customPanel.jsx` | Custom-element UI: `CustomRulesEditor` (RightPanel GM「独自」tab), `CustomBoard` (rule board + global/battle stats, top of 進行 tab and above `BattleRightPanel`, visible to all), `CustomPcSection` (PCCard). |
+| `customPanel.jsx` | Custom-element UI: `CustomRulesEditor` (RightPanel GM「独自」tab), `CustomBoard` (rule board + global/battle stats, top of 進行 tab and above `BattleRightPanel`, visible to all), `CustomPcSection` (PCCard), `GmFieldEditor` (GM battle-field editing, above `CustomBoard` during battle). |
 
 **Code splitting**: App lazy-loads `Lobby` (which lazy-loads `ScenarioEditor`), `BattleView`, `RightPanel`, `BonusPhaseView`, `SessionEndView`; a single `<Suspense>` in the root `App` covers them. Keep `shared.jsx`/`scene.jsx` free of imports from the lazily loaded modules or they get pulled into the initial chunk.
 
@@ -292,9 +292,9 @@ Policy: instead of adding a ScenarioEditor feature for every scenario-specific r
 - **Ad-hoc battle** (`startAdhocBattle`): enemies picked from `scenarioEnemies(gs.scenarioData)` (GM's merged view: quest enemies, extra enemies, final/optional) and/or created on the spot; participants chosen; `battle = { adhoc: true, title, participantPcUids, scenePcUid?, resumeScene?, … }` (`mass` if >1 enemy or PC). The running `currentScene` is stashed in `battle.resumeScene`; **every battle close goes through `closeBattlePatch(p)`** (finishBattle + GM 強制終了) which restores it. Ad-hoc battles don't change `sessionPhase`, don't solve quests or mark PCs acted; lives-0 recovery applies to every non-final battle.
 - **PC GM編集** (`GmPcEditor`, under PCCard's GM編集 toggle): 変調付与, 絆 add/remove + 応援欄 (`bondUsed`) toggle, forced move, 行動済み toggle, `abilityUse` reset, resource max ±.
 
-### Custom elements (独自要素 — 異変再現 support, A-1)
+### Custom elements (独自要素 — 異変再現 support, A-1/A-2)
 
-Official 異変再現 (expansion rules) and GM-made ones keep adding new stats / items / tables / tokens / states. Rather than coding each, the GM **defines generic parts in-session** and runs them by hand (nothing auto-triggers). Pure logic in [src/customRules.js](src/customRules.js) (tested in `customRules.test.js`), UI in `src/session/customPanel.jsx` (`customPanel.test.jsx`).
+Official 異変再現 (expansion rules) and GM-made ones keep adding new stats / items / tables / tokens / states. Rather than coding each, the GM **defines generic parts in-session** and runs them by hand (nothing auto-triggers). Pure logic in [src/customRules.js](src/customRules.js) (tested in `customRules.test.js`) and [src/gmBattle.js](src/gmBattle.js) (battle field), UI in `src/session/customPanel.jsx` (`customPanel.test.jsx`, `gmFieldEditor.test.jsx`).
 
 - **Definitions** live in `gs.custom` (`stats`, `cats`, `items`, `tables`, `tokens`, `states`, `rules`, plus `global` values and placed `mapTokens`). Always read via `getCustom(gs)` (Firebase array guards). `removeDef` also cleans up referencing values/instances/tokens/states.
 - **Values**: stat `scope` is `pc` (→ `pc.custom.vals[id]`), `global` (→ `gs.custom.global[id]`) or `battle` (→ `gs.battle.customVals[id]`, naturally reset when a new battle object is built; edits ignored outside battle). `setStat`/`adjustStat` clamp to min/max; unset = `init`.
@@ -303,7 +303,14 @@ Official 異変再現 (expansion rules) and GM-made ones keep adding new stats /
 - **Map tokens**: kinds `{ name, color, unique }`; `placeTokens` honours `unique` (one per spot); random placement excludes `dream`. Rendered in `MapView` (App.jsx) as small colored dots above spots.
 - **States**: `pc.custom.states = [stateId]`, toggled by the GM (PCCard or tab).
 - **Time control**: `setClock` (resets acted/scene/reiryoku; newspaper on day change), `repeatCycle` (same cycle again, no return / やる気 loss — 永夜異変), `setLimit` (`gs.limit`).
-- **Not yet (A-2)**: battle-field editing (bullets add/remove/clear, field tokens, hit cancel, extra evade step for ラストスペル, temporary danmaku-skill grant). **Later**: B = 異変再現 presets (bundle `gs.custom` definitions, save under `users/{uid}`), C = code hooks for official ones (弾幕撮影 battle variant etc.). 完全憑依 (one player, two PCs) needs a dedicated PC-model change and is out of scope.
+- **Battle-field editing (A-2)** — pure logic in [src/gmBattle.js](src/gmBattle.js) (`gmBattle.test.js`), UI `GmFieldEditor` (`gmFieldEditor.test.jsx`), GM-only, collapsible above the battle panel:
+  - bullets ± per cell / random N (dice → cells) / clear field (霊撃), move a piece, 残り人数 ± (PC and NPC).
+  - **Hit cancel** (`cancelHit`): only in `pc_hit_check`/`npc_hit_check` (before damage); jumps to `afterDefense`.
+  - **Field tokens** `battle.fieldTokens = [{ id, owner, cell, kind }]` (kinds reuse `gs.custom.tokens`), drawn on `BattleGrid` via the `tokens` prop. `fieldTokenAlerts` (piece standing on it / bullets placed on it — チェリー / UFO) are shown to the GM even when collapsed, with 獲得 (owner or opponent) / 取り除く.
+  - **Extra evade step** (`startExtraEvade`, ラストスペル): places dice-rolled bullets on a combatant's field, sets `pc|npc_evade_intro` and `battle.extraEvade = { entityId, returnTo: "round_end_check" }`. `afterDefensePhase` in BattleView now delegates to `gmBattle.afterDefense`, which returns `extraEvade.returnTo` when set, so the evade/hit/recovery path ends at round_end_check instead of the next shot.
+  - **Temporary danmaku skill** (`grantSkill`, アビリティカード「装備」): `battle.grantedDs[entityId] = [name]`. `hasOfficialSkill` also accepts `entity.battleGrantDs`; BattleView's `pcs`/`npcs`, the 使い魔 auto-support updaters and `BattleRightPanel` cards wrap entities with `withGrants(b, e)`. **Any new `hasOfficialSkill` call on an entity read from `p.pcs`/`participants` must wrap it with `withGrants`** or granted skills are ignored there.
+  - `handleCleanup` spreads `ROUND_RESET` (`grantedDs`, `extraEvade` → null); `fieldTokens` persist for the battle.
+- **Later**: B = 異変再現 presets (bundle `gs.custom` definitions, save under `users/{uid}`), C = code hooks for official ones (弾幕撮影 battle variant etc.). 完全憑依 (one player, two PCs) needs a dedicated PC-model change and is out of scope.
 
 ### Quest Resolution Types
 

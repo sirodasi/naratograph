@@ -10,11 +10,13 @@ import { getActiveAbility } from "../data/abilityEffects";
 import { applyStep, applyRandomResult, resolveCount, shiftNon25Horizontal } from "../data/effectHandlers";
 import { bumpAch } from "../data/achievements";
 import { closeBattlePatch } from "../gmTools";
+import { withGrants, afterDefense, getFieldTokens, ROUND_RESET } from "../gmBattle";
+import { getCustom } from "../customRules";
 import { db } from "../firebase";
 import { ref as dbRef, set as dbSet, remove as dbRemove, onValue } from "firebase/database";
 import { BAD_STATUS_TABLE, KURUWASU_BOND, PHASE_LABELS, SPECIAL_BOND_CHEER, SpellCard, buildBattleNpc, buildSpellCard, gainIntimacy, isBadStatusImmune } from "./shared";
 
-export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick, lives, maxLives, sc }) {
+export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick, lives, maxLives, sc, tokens = {} }) {
   const cells = [1, 2, 3, 4, 5, 6];
   const campColor = isNpc ? C.red : C.blue;
   const borderColor = isCombatant ? campColor : C.border;
@@ -89,6 +91,16 @@ export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead
             >
               <div style={{ position: "absolute", top: 2, left: 3, fontSize: 8, color: "rgba(255,255,255,0.18)" }}>{num}</div>
 
+              {/* 独自コマ（チェリー・UFO 等。GM が盤面編集で配置） */}
+              {(tokens[num] || []).length > 0 && (
+                <div style={{ position: "absolute", bottom: 2, left: 3, display: "flex", gap: 2, zIndex: 4 }} title={(tokens[num] || []).map(t => t.name).join("・")}>
+                  {tokens[num].slice(0, 5).map((t, i) => (
+                    <div key={i} style={{ width: 7, height: 7, transform: "rotate(45deg)", background: t.color, border: "1px solid rgba(255,255,255,0.8)", boxShadow: `0 0 4px ${t.color}` }} />
+                  ))}
+                  {tokens[num].length > 5 && <span style={{ fontSize: 7, color: "#fff" }}>+{tokens[num].length - 5}</span>}
+                </div>
+              )}
+
               {/* 駒のいないマス: 弾幕をドット雲で表示 */}
               {danmakuCount > 0 && !hasChar && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "center", padding: 3 }}>
@@ -146,6 +158,8 @@ export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead
 // ─── 弾幕スキルユーティリティ（BattleView / BattleRightPanel 共用） ─────
 export function hasOfficialSkill(entity, skillName) {
   if (!entity) return false;
+  // GM が付与した「このラウンドだけ修得している」弾幕スキル（gmBattle.withGrants が battleGrantDs を載せる）
+  if ((entity.battleGrantDs || []).includes(skillName) && OFFICIAL_DANMAKU_SKILLS.some(s => s.name === skillName)) return true;
   const dsName = (entity.ds && entity.ds.name) || entity.dsName
     || entity.skillName || (entity.ps && entity.ps.name) || null;
   if (!dsName) return false;
@@ -517,10 +531,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   const b = gs.battle || {};
 
   const allPcs = gs.pcs || [];
-  const pcs = b.participantPcUids
+  const pcs = (b.participantPcUids
     ? allPcs.filter(pc => b.participantPcUids.includes(pc.uid))
-    : allPcs;
-  const npcs = useMemo(() => b.participants?.npcs || [], [b.participants?.npcs]);
+    : allPcs).map(pc => withGrants(b, pc));
+  const npcs = useMemo(() => (b.participants?.npcs || []).map(n => withGrants({ grantedDs: b.grantedDs }, n)), [b.participants?.npcs, b.grantedDs]);
+  // 盤面の独自コマ: { [entityId]: { [cell]: [{ name, color }] } }
+  const fieldTokenMap = (() => {
+    const kinds = getCustom(gs).tokens;
+    const map = {};
+    getFieldTokens(b).forEach(t => {
+      const k = kinds.find(x => x.id === t.kind);
+      if (!k) return;
+      ((map[t.owner] = map[t.owner] || {})[t.cell] = map[t.owner][t.cell] || []).push({ name: k.name, color: k.color || "#e8a0b8" });
+    });
+    return map;
+  })();
 
   const alivePcs = pcs.filter(p => (p.resources?.残り人数?.cur || 0) > 0);
   const aliveNpcs = npcs.filter(n => (n.resources?.残り人数?.cur || 0) > 0);
@@ -557,7 +582,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   useEffect(() => {
     if (b.phase === "pc_shot_intro" && b.pcFamiliarAction === "skip_to_support") {
       upd(p => {
-        const pc = p.pcs.find(x => x.uid === p.battle.pcCombatant);
+        const pc = withGrants(p.battle, p.pcs.find(x => x.uid === p.battle.pcCombatant));
         if (!pc || !hasOfficialSkill(pc, "使い魔")) return p;
         return {
           ...p,
@@ -567,7 +592,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
       });
     } else if (b.phase === "npc_shot_intro" && b.npcFamiliarAction === "skip_to_support") {
       upd(p => {
-        const npc = p.battle.participants.npcs.find(n => n.id === p.battle.npcCombatant);
+        const npc = withGrants(p.battle, p.battle.participants.npcs.find(n => n.id === p.battle.npcCombatant));
         if (!npc || !hasOfficialSkill(npc, "使い魔")) return p;
         return {
           ...p,
@@ -1697,14 +1722,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     return [...new Set([...base, ...(extras[pos] || [])])];
   };
 
-  const afterDefensePhase = (isAttackerPc) => {
-    const attackerIsFirst = b.startOrder === "npc" ? !isAttackerPc : isAttackerPc;
-    if (attackerIsFirst) {
-      return isAttackerPc ? "npc_shot_intro" : "pc_shot_intro";
-    } else {
-      return "round_end_check";
-    }
-  };
+  // 回避側の処理後のフェイズ。GM が発生させた追加の回避ステップ中なら、その戻り先（gmBattle.afterDefense）
+  const afterDefensePhase = (isAttackerPc) => afterDefense(b, isAttackerPc);
 
   const getEvadeDiceCount = (isPc) => {
     const combatant = isPc ? combatantPc : combatantNpc;
@@ -2162,7 +2181,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           pcManualSpell: null,
           npcManualSpell: null,
           tempSelectedPc: null,
-          tempSelectedNpc: null
+          tempSelectedNpc: null,
+          ...ROUND_RESET,
         },
         log: [`📋 ラウンド ${currentB.round} 終了。弾幕が減衰しました。`, ...suntanLogs, ...p.log]
       };
@@ -4030,6 +4050,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
               isNpc={true}
               isCombatant={isCombatant}
               grid={b.grids?.[n.id]}
+              tokens={fieldTokenMap[n.id]}
               pos={b.positions?.[n.id]}
               isDead={n.resources.残り人数?.cur <= 0}
               highlightCells={highlights}
@@ -4269,6 +4290,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
               name={p.charName}
               isCombatant={isCombatant}
               grid={b.grids?.[p.uid]}
+              tokens={fieldTokenMap[p.uid]}
               pos={currentPos}
               highlightCells={isMyTurn ? highlights : []}
               isDead={(p.resources?.残り人数?.cur || 0) <= 0}
@@ -4517,7 +4539,8 @@ export function BattleRightPanel({ gs, upd, user, isGm, animateDice }) {
   };
 
   // ─── NPC ステータスカード ───
-  const renderNpcCard = (npc, isCurrent) => {
+  const renderNpcCard = (npc0, isCurrent) => {
+    const npc = withGrants(b, npc0);
     const npcId = npc.id;
     const graze = npc.resources?.グレイズ?.cur ?? 0;
     return (
@@ -4594,7 +4617,8 @@ export function BattleRightPanel({ gs, upd, user, isGm, animateDice }) {
   };
 
   // ─── PC ステータスカード ───
-  const renderPcCard = (pc, isCurrent) => {
+  const renderPcCard = (pc0, isCurrent) => {
+    const pc = withGrants(b, pc0);
     const pcUid = pc.uid;
     const graze = pc.resources?.グレイズ?.cur ?? 0;
     return (
