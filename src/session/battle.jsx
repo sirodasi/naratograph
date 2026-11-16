@@ -9,6 +9,7 @@ import { C, btnFull } from "../styles/colors";
 import { getActiveAbility } from "../data/abilityEffects";
 import { applyStep, applyRandomResult, resolveCount, shiftNon25Horizontal } from "../data/effectHandlers";
 import { bumpAch } from "../data/achievements";
+import { closeBattlePatch } from "../gmTools";
 import { db } from "../firebase";
 import { ref as dbRef, set as dbSet, remove as dbRemove, onValue } from "firebase/database";
 import { BAD_STATUS_TABLE, KURUWASU_BOND, PHASE_LABELS, SPECIAL_BOND_CHEER, SpellCard, buildBattleNpc, buildSpellCard, gainIntimacy, isBadStatusImmune } from "./shared";
@@ -3582,6 +3583,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     const isFinal    = b.isFinal ?? (b.type === "mass" && !b.questId);
     const questId    = b.questId;
     const relatedQ   = questId ? (gs.quests || []).find(q => String(q.id) === String(questId)) : null;
+    const isAdhoc    = !!b.adhoc;
 
     const finishBattle = () => {
       upd(p => {
@@ -3593,8 +3595,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
         }
 
         // 決戦（最終決戦）後は勝敗にかかわらず終幕フェイズへ。通常クエスト戦は探索へ戻る。
-        const nextSessionPhase = isFinal ? "epilogue" : "explore";
-        const logLine = isVictory
+        // 臨時の弾幕ごっこ（GM 操作）はフェイズを変えない（導入中などに起きても元のフェイズへ戻る）
+        const nextSessionPhase = isFinal ? "epilogue" : isAdhoc ? p.sessionPhase : "explore";
+        const logLine = isAdhoc
+          ? (isVictory ? `🏆 弾幕ごっこ「${b.title || ""}」に勝利！` : `💀 弾幕ごっこ「${b.title || ""}」に敗北...`)
+          : isVictory
           ? (isFinal ? "🏆 最終決戦制覇！セッション終了！" : `🏆 弾幕ごっこ勝利！クエスト「${relatedQ?.name || ""}」が解決されました。`)
           : (isFinal ? "💀 最終決戦敗北...セッション終了。" : "💀 弾幕ごっこ敗北...探索フェイズへ戻ります。");
 
@@ -3607,7 +3612,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           ? [...new Set([...(p.actedPcs || []), ...finishedUids])]
           : (p.actedPcs || []);
 
-        const recoveredPcs = nextSessionPhase === "explore"
+        const recoveredPcs = !isFinal
           ? p.pcs.map(x => {
               const lives = x.resources?.残り人数?.cur ?? 0;
               return lives === 0
@@ -3615,7 +3620,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                 : x;
             })
           : p.pcs;
-        const recoveredNames = nextSessionPhase === "explore"
+        const recoveredNames = !isFinal
           ? p.pcs.filter(x => (x.resources?.残り人数?.cur ?? 0) === 0).map(x => x.charName)
           : [];
         const recoveryLogs = recoveredNames.map(n => `🔵 ${n} の残り人数が0のため1に回復した`);
@@ -3650,7 +3655,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           quests: nextQuests,
           sessionPhase: nextSessionPhase,
           actedPcs: nextActedPcs,
-          battle: { ...p.battle, active: false },
+          ...closeBattlePatch(p), // 臨時の弾幕ごっこで中断したシーンを戻す
           log: [logLine, ...kairikiLogs, ...recoveryLogs, ...p.log]
         };
       });
@@ -4853,7 +4858,7 @@ export function BattleRightPanel({ gs, upd, user, isGm, animateDice }) {
 
       {isGm && (
         <button 
-          onClick={() => window.confirm("終了しますか？") && upd(p => ({ ...p, battle: { ...p.battle, active: false } }))}
+          onClick={() => window.confirm("終了しますか？") && upd(p => ({ ...p, ...closeBattlePatch(p), log: [`⚔ GM: 弾幕ごっこを強制終了した`, ...p.log] }))}
           style={{ ...btnFull("none", C.redBorder, C.red), marginTop: 10, fontSize: 9, flexShrink: 0 }}
         >対戦を強制終了</button>
       )}

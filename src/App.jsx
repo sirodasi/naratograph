@@ -8,6 +8,7 @@ import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
 import { useUrlParams } from "./useUrlParams";
 import { ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./session/shared";
 import { BackstoryScreen, EpilogueView, SceneStage } from "./session/scene";
+import { GmRequestOverlay } from "./session/gmPanel";
 
 // コード分割: ロビーとセッションの大きな画面は必要になるまで読み込まない（初回表示を軽くする）
 const LobbyRoot      = lazy(() => import("./Lobby"));
@@ -1565,6 +1566,9 @@ function SessionApp({ roomCode, user }) {
           </div>
         </div>
       )}
+
+      {/* GM からの要求（ダイス・選択・告知）と応援できる判定。自分の PC がいる参加者にのみ表示 */}
+      {isParticipant && mode !== "gm" && <GmRequestOverlay gs={gs} upd={upd} user={user} />}
 
       {/* 空を飛ぶ: 表ロール後の振り直しプロンプト（操作中の保持者にのみ表示） */}
       {pendingReroll && (

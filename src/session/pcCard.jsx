@@ -6,6 +6,7 @@ import { EDGES } from "../data/gameData";
 import { C, btnFull } from "../styles/colors";
 import { getAbilityEffect, applyAbilityPassiveStats } from "../data/abilityEffects";
 import { achAddTo } from "../data/achievements";
+import { GmPcEditor } from "./gmPanel";
 import { BAD_STATUS_TABLE, INIT_ITEMS, INIT_RESOURCES, ITEM_DATA, ITEM_NAMES, PS_ONCE_FLAG, SKILL_TYPE_COLOR, SpellCard, buildSpellCard, gainIntimacy, getSpotByD66 } from "./shared";
 
 // 発動可能スキルの強調：ブロック枠（左アクセント＋淡い地＋内側グロー）と発動ボタン
@@ -1149,6 +1150,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
               })}
             </div>
           </div>
+
+          {isGm && gmEdit && <GmPcEditor pc={pc} gs={gs} upd={upd} SPOTS={SPOTS} getSpot={getSpot} />}
 
           <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>スキル</div>
           

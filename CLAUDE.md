@@ -151,6 +151,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `log[]` | Session event log (prepend new entries: `[newMsg, ...p.log]`) |
 | `diceHistory[]` | Roll history `{ label, results[], max, t }`; written by `animateDice` on roll-confirm (prepend, capped at 50). Surfaced in `RightPanel`'s 進行 tab (collapsible) and exported by `SessionEndView`. |
 | `bgm` | GM-set BGM track URLs `{ explore, battle, end }`. Each client plays the phase-appropriate track locally (see BGM section). |
+| `gmRequests[]` | GM → PL requests (dice / choice / notice), see "GM intervention tools". Capped at `MAX_REQUESTS` (12). |
 
 ### Major Components
 
@@ -176,6 +177,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `pcCard.jsx` | `PCCard`, `ActionRenderer`, `CharDetailModal`, `SkillActivateModal`, item modals |
 | `scenePanel.jsx` | `ScenePanel` |
 | `rightPanel.jsx` | `RightPanel` |
+| `gmPanel.jsx` | GM intervention UI: `GmToolsPanel` (RightPanel "GM" tab; collapsible above `BattleRightPanel` during battle), `GmRequestOverlay` (PL-side cards, rendered by `SessionApp`), `GmPcEditor` (PCCard GM編集). Imported directly by App — must not import lazily loaded session modules. |
 
 **Code splitting**: App lazy-loads `Lobby` (which lazy-loads `ScenarioEditor`), `BattleView`, `RightPanel`, `BonusPhaseView`, `SessionEndView`; a single `<Suspense>` in the root `App` covers them. Keep `shared.jsx`/`scene.jsx` free of imports from the lazily loaded modules or they get pulled into the initial chunk.
 
@@ -279,6 +281,14 @@ The canonical spell-card representation is **`{ name, desc }`** (PC, from `chara
 - **`no_sc_cost`** (幻想春花): handled in `consumeSpell` itself (returns `p` unchanged when present).
 
 **Still manual** (remaining): costs_rei is done; remaining are the post-dodge / on-hit / round-end timing effects (`random_3d_after_first_dodge`, `mirror_graze_gain`, `cancel_hp_reduction`, etc.) and the move-selection effects (`enemy_move_adjacent`, `self_move_*`, `pre_self_move_adjacent`, `optional_*`).
+
+### GM intervention tools (GM 操作)
+
+Policy: instead of adding a ScenarioEditor feature for every scenario-specific rule (custom tables, ambushes, branching events), the GM handles them **at the table** with generic tools. Pure logic lives in [src/gmTools.js](src/gmTools.js) (updaters `p => next`, randomness rolled by the caller and passed in; tested in `gmTools.test.js`), UI in `src/session/gmPanel.jsx` (tested in `gmPanel.test.jsx`). Nothing is auto-applied — tools produce results/logs and the GM rules on them.
+
+- **Requests** (`gs.gmRequests[] = { id, kind: "dice"|"choice"|"notice", title, text, targets[uid], dice?: { count, mode: "nd6"|"d66", target? }, options?, responses: { [uid]: { dice?, cheers?, confirmed?, choice?, ack?, byGm? } } }`). `GmRequestOverlay` (fixed bottom card, every screen incl. battle; collapsible) shows each PL their unanswered requests (`pendingFor`). Dice **with a target** is a 行為判定 (`evalJudgment`: max ≥ target, all-1 fumble, any-6 special, 不運 honoured): after rolling, eligible cheerers (same spot, `cheerOptions` = normal bonds + special bond; **not** the fragile/人を狂わす variants) get a 応援 card on their own screen; `addCheerDice` appends dice + consumes the slot; the judge presses 確定 (`confirmDice`). Without a target the roll is final immediately. The GM monitor can roll/confirm/choose **on behalf** of offline PLs, and closes (removes) requests. `getCheerBonds`/`getSpecialBondCheer` were moved here from ScenePanel (shared).
+- **Ad-hoc battle** (`startAdhocBattle`): enemies picked from `scenarioEnemies(gs.scenarioData)` (GM's merged view: quest enemies, extra enemies, final/optional) and/or created on the spot; participants chosen; `battle = { adhoc: true, title, participantPcUids, scenePcUid?, resumeScene?, … }` (`mass` if >1 enemy or PC). The running `currentScene` is stashed in `battle.resumeScene`; **every battle close goes through `closeBattlePatch(p)`** (finishBattle + GM 強制終了) which restores it. Ad-hoc battles don't change `sessionPhase`, don't solve quests or mark PCs acted; lives-0 recovery applies to every non-final battle.
+- **PC GM編集** (`GmPcEditor`, under PCCard's GM編集 toggle): 変調付与, 絆 add/remove + 応援欄 (`bondUsed`) toggle, forced move, 行動済み toggle, `abilityUse` reset, resource max ±.
 
 ### Quest Resolution Types
 

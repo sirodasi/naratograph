@@ -7,3 +7,4 @@ export * from "./session/phases";
 export * from "./session/pcCard";
 export * from "./session/scenePanel";
 export * from "./session/rightPanel";
+export * from "./session/gmPanel";

@@ -11,6 +11,8 @@ import { BattleRightPanel } from "./battle";
 import { ScenePanel } from "./scenePanel";
 import { PCCard } from "./pcCard";
 import { SceneEditor } from "./scene";
+import { GmToolsPanel } from "./gmPanel";
+import { getRequests } from "../gmTools";
 
 // ─── RightPanel ───────────────────────────────────────────────────
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doReiryoku, setPendingAction, SPOTS, presence = {}, width = 300, undo, undoCount = 0 }) {
@@ -40,6 +42,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const [fontLevel, setFontLevel] = useState(fontScale.level); // 0標準/1大/2特大
   const cycleFont = () => setFontLevel(fontScale.cycle());
   const [showBgm, setShowBgm] = useState(false);
+  const [showBattleGmTools, setShowBattleGmTools] = useState(false); // 弾幕ごっこ中の GM 操作（折りたたみ）
   const [bgmMuted, setBgmMuted] = useState(bgm.muted);
   const [bgmVol, setBgmVol] = useState(bgm.volume);
 
@@ -144,7 +147,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const ma = isGm ? getMainAction() : null;
 
   const TABS = isGm
-    ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["log", "ログ"]]
+    ? [["progress", "進行"],["pcs", "PC一覧"], ["scene", "描写"], ["gm", `GM${getRequests(gs).length ? `(${getRequests(gs).length})` : ""}`], ["log", "ログ"]]
     : [["progress", "進行"],["pcs", "PC一覧"], ["log", "ログ"]];
 
   // ── キーボードショートカット（GM操作の高速化） ──────────────────────
@@ -233,6 +236,15 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
 
       <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
         {gs.battle?.active ? (
+          <>
+          {isGm && (
+            <div style={{ marginBottom: 8 }}>
+              <button onClick={() => setShowBattleGmTools(v => !v)} style={btnFull("rgba(255,255,255,0.02)", C.border, C.red, { fontSize: 10, padding: "5px" })}>
+                🛠 GM操作（要求・臨時の弾幕ごっこ）{getRequests(gs).length ? `［${getRequests(gs).length}］` : ""} {showBattleGmTools ? "▲" : "▼"}
+              </button>
+              {showBattleGmTools && <div style={{ marginTop: 6 }}><GmToolsPanel gs={gs} upd={upd} getSpot={getSpot} /></div>}
+            </div>
+          )}
           <BattleRightPanel
             gs={gs}
             upd={upd}
@@ -241,6 +253,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             getSpot={getSpot}
             animateDice={animateDice}
           />
+          </>
         ) : (
           <>
             {gs.currentScene?.phase === "quest_setup" && gs.currentScene?.pcUid !== user.uid && !isGm && (
@@ -543,6 +556,10 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
                   <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 8 }}>描写モード</div>
                   <SceneEditor gs={gs} upd={upd} sceneData={sceneData} setSceneData={setSceneData} user={user} />
                 </div>
+              )}
+
+              {tab === "gm" && isGm && (
+                <GmToolsPanel gs={gs} upd={upd} getSpot={getSpot} />
               )}
 
               {tab === "log" && (() => {

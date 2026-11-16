@@ -1,5 +1,6 @@
 // SessionView から分割: 探索シーンの行動パネル（ScenePanel）
 import { useState } from "react";
+import { getCheerBonds, getSpecialBondCheer } from "../gmTools";
 import { CharSprite } from "../CharSprite";
 import { CHARACTERS } from "../data/characters";
 import { SPOT_DETAILS } from "../data/spots";
@@ -278,19 +279,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
   // 《〇〇への絆》を持つPCは、〇〇が同スポットにいるとき〇〇の行為判定にダイス+1できる。
   // 絆は1度使うと bondUsed[絆名] で消費され、同じ絆を再獲得する処理で回復する。
   // 我儘: 自分の判定なら全ての絆を自身絆として使える。怠け者: 自身絆で自分の判定に応援。
-  const getCheerBonds = (cheerer, judgePc) => {
-    const usedOf = (b) => cheerer.bondUsed?.[b];
-    if (cheerer.uid === judgePc.uid) {
-      if (cheerer.ps?.name === "我儘") {
-        return (cheerer.bonds || []).filter(b => !usedOf(b));  // 我儘: 全絆を自身絆扱い
-      }
-      // 自身絆は2形式ある（怠け者=「〇〇自身への絆」/ボーナスアクション=「〇〇への絆」）
-      const selfBonds = [`${judgePc.charName}自身への絆`, `${judgePc.charName}への絆`];
-      return selfBonds.filter(sb => (cheerer.bonds || []).includes(sb) && !usedOf(sb));
-    }
-    const bondName = `${judgePc.charName}への絆`;
-    return (cheerer.bonds || []).includes(bondName) && !usedOf(bondName) ? [bondName] : [];
-  };
+  // getCheerBonds / getSpecialBondCheer は gmTools.js（ダイス要求の応援と共通）
 
   // 魂の弱い所に入り込む程度の能力（オート）: 使用済み（黒い応援欄）の絆でも応援できる。
   // ただしこの応援を行った行為判定が失敗するとファンブルになる（=fragile）。
@@ -312,13 +301,6 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
     if ((cheerer.bonds || []).includes(bondName)) return [];        // 絆を持つなら通常応援
     if (cheerer.kuruwasuUsed?.[judgePc.uid]) return [];             // この相手には使用済み
     return [KURUWASU_BOND];
-  };
-
-  // 特別な絆（成長）による応援: judgePc を対象に持ち、応援欄(used)が空なら応援できる（親密度10で2ダイス）
-  const getSpecialBondCheer = (cheerer, judgePc) => {
-    const sb = cheerer.specialBond;
-    if (!sb || sb.targetUid !== judgePc.uid || cheerer.uid === judgePc.uid || sb.used) return [];
-    return [SPECIAL_BOND_CHEER];
   };
 
   // judgePc の行為判定に対する応援UI。onCheer(cheererUid, bondName, fragile) を渡す。
@@ -644,7 +626,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
               3: { title: "あれ？行き過ぎてしまったかも。", desc: "ダイスを1つ振り、今いるスポットから出目の分だけ離れたスポット1つを選んで移動する。" },
               4: { title: "道に迷ってしまった。", desc: "D66を振って出た目と同じ番号のスポットに移動する。" },
               5: { title: "問題なし。", desc: "今いるスポットから6スポット分離れた距離までにある任意のスポットに移動する。" },
-              6: { title: "「あなたは食べてもいい人類？」", desc: "通りがかりの妖怪に襲われた！\n（※今回は「問題なし」と同様に、6マス以内への移動として処理します）" },
+              6: { title: "「あなたは食べてもいい人類？」", desc: "通りがかりの妖怪に襲われた！\n（※襲撃は GM が「GM」タブの「臨時の弾幕ごっこ」で開始できます。戦闘後このシーンに戻るので、続けて「問題なし」と同様に6マス以内へ移動します）" },
             }[sc.happeningDice];
             const proceed = () => {
               const d = sc.happeningDice;
