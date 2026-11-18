@@ -113,6 +113,7 @@ roomSecrets/{roomCode}/       ← OUTSIDE rooms/ because a readable parent canno
 admins/{uid}: true            ← GM (room creation) allow-list; set by hand in the console; user can read own entry
 users/{uid}/scenePresets/{id} ← scene presets (image fields hold asset ids)
 users/{uid}/presetAssets/{id} ← preset image bytes (data URL), content-hash keyed, shared across presets
+users/{uid}/ihenPresets/{id}  ← GM-made 異変再現 presets { name, desc, defs, createdAt, updatedAt } (owner read/write via the generic users/$uid rule)
 ```
 
 **Subscriptions**: never `onValue(rooms/{code})` as a whole (it drags in state, scene assets and the log archive). The root `App` watches only `rooms/{code}/phase` (missing ⇒ room deleted); `SessionApp` subscribes to `ROOM_META_KEYS` (`gmUid, players, config, scenarioData, limit, phase`) individually and builds `room` once all have arrived.
@@ -292,7 +293,7 @@ Policy: instead of adding a ScenarioEditor feature for every scenario-specific r
 - **Ad-hoc battle** (`startAdhocBattle`): enemies picked from `scenarioEnemies(gs.scenarioData)` (GM's merged view: quest enemies, extra enemies, final/optional) and/or created on the spot; participants chosen; `battle = { adhoc: true, title, participantPcUids, scenePcUid?, resumeScene?, … }` (`mass` if >1 enemy or PC). The running `currentScene` is stashed in `battle.resumeScene`; **every battle close goes through `closeBattlePatch(p)`** (finishBattle + GM 強制終了) which restores it. Ad-hoc battles don't change `sessionPhase`, don't solve quests or mark PCs acted; lives-0 recovery applies to every non-final battle.
 - **PC GM編集** (`GmPcEditor`, under PCCard's GM編集 toggle): 変調付与, 絆 add/remove + 応援欄 (`bondUsed`) toggle, forced move, 行動済み toggle, `abilityUse` reset, resource max ±.
 
-### Custom elements (独自要素 — 異変再現 support, A-1/A-2)
+### Custom elements (独自要素 — 異変再現 support, A-1/A-2/B)
 
 Official 異変再現 (expansion rules) and GM-made ones keep adding new stats / items / tables / tokens / states. Rather than coding each, the GM **defines generic parts in-session** and runs them by hand (nothing auto-triggers). Pure logic in [src/customRules.js](src/customRules.js) (tested in `customRules.test.js`) and [src/gmBattle.js](src/gmBattle.js) (battle field), UI in `src/session/customPanel.jsx` (`customPanel.test.jsx`, `gmFieldEditor.test.jsx`).
 
@@ -310,7 +311,11 @@ Official 異変再現 (expansion rules) and GM-made ones keep adding new stats /
   - **Extra evade step** (`startExtraEvade`, ラストスペル): places dice-rolled bullets on a combatant's field, sets `pc|npc_evade_intro` and `battle.extraEvade = { entityId, returnTo: "round_end_check" }`. `afterDefensePhase` in BattleView now delegates to `gmBattle.afterDefense`, which returns `extraEvade.returnTo` when set, so the evade/hit/recovery path ends at round_end_check instead of the next shot.
   - **Temporary danmaku skill** (`grantSkill`, アビリティカード「装備」): `battle.grantedDs[entityId] = [name]`. `hasOfficialSkill` also accepts `entity.battleGrantDs`; BattleView's `pcs`/`npcs`, the 使い魔 auto-support updaters and `BattleRightPanel` cards wrap entities with `withGrants(b, e)`. **Any new `hasOfficialSkill` call on an entity read from `p.pcs`/`participants` must wrap it with `withGrants`** or granted skills are ignored there.
   - `handleCleanup` spreads `ROUND_RESET` (`grantedDs`, `extraEvade` → null); `fieldTokens` persist for the battle.
-- **Later**: B = 異変再現 presets (bundle `gs.custom` definitions, save under `users/{uid}`), C = code hooks for official ones (弾幕撮影 battle variant etc.). 完全憑依 (one player, two PCs) needs a dedicated PC-model change and is out of scope.
+- **異変再現 presets (B)** — a preset is `{ name, desc, defs: { stats, cats, items, tables, tokens, states, rules }, clock? }`. Built-ins (春雪/永夜/弾幕撮影/宝船を追って/月虹の市場) live in [src/data/ihenPresets.js](src/data/ihenPresets.js); rule texts and card descriptions there are **own-words summaries, not transcriptions of the book** — keep it that way. GM-made ones are saved to `users/{uid}/ihenPresets/{id}` from the current `gs.custom` (`presetFromGs`, values/placed tokens excluded). UI: `PresetSection` at the top of the 「独自」 tab (`CustomRulesEditor` needs `user`).
+  - `applyPreset(p, preset, key, { pcCount, withClock })` copies every def into `gs.custom` with id **`${key}__${baseId}`** (`PRESET_SEP`; item `cat` refs remapped too), so several presets coexist, re-applying overwrites defs but keeps values, and `unapplyPreset(p, key)` removes exactly that preset's defs (and, via `removeDef`, their values/instances/tokens/states). `gs.custom.applied = [{ key, name }]`. Built-in keys are the preset `key`; saved ones are `u${firebaseId}`.
+  - Stat `initFromPcCount: true` (刻符ノルマ) seeds the global value with the PC count on first apply. `clock` (永夜: 1日目の夜, limit 1日目の夜) is applied only when the GM keeps the checkbox on.
+  - Tests: `ihenPresets.test.jsx` (logic, data integrity — table results must match item names, the D66 table covers all 21 values, 【装備】 skills are official names — and the UI with an in-memory `firebase/database` mock).
+- **Later**: C = code hooks for official ones (弾幕撮影 battle variant etc.). 完全憑依 (one player, two PCs) needs a dedicated PC-model change and is out of scope.
 
 ### Quest Resolution Types
 

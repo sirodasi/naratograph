@@ -358,3 +358,86 @@ export function postRule(p, rule) {
   const next = upsertDef(p, "rules", { id: rule.id, title: rule.title.trim(), text: (rule.text || "").trim() });
   return isNew ? { ...next, log: logOf(p, `📜 GM: ルール「${rule.title.trim()}」を掲示した`) } : next;
 }
+
+// ─── 異変再現プリセット（B） ─────────────────────────────────────
+// プリセット = 定義一式（ステータス・分類・アイテム・表・コマ種類・状態・ルール文）＋任意の時刻設定。
+//   { name, desc, defs: { stats, cats, items, tables, tokens, states, rules }, clock?: { day, cycleIdx, limitDay, limitCycleIdx } }
+// 組み込み（公式）は src/data/ihenPresets.js、GM の自作は users/{uid}/ihenPresets/{id}。
+// 適用時は各定義の id を「key__元の id」にして gs.custom へ入れるので、複数のプリセットを同時に使っても衝突せず、
+// 同じプリセットを再適用すると同じ id に上書き（値は保持）、解除でそのプリセット由来の定義だけを消せる。
+export const PRESET_SEP = "__";
+export const baseId = (id) => String(id).split(PRESET_SEP).pop();
+const PRESET_KINDS = DEF_KINDS; // stats, cats, items, tables, tokens, states, rules
+
+// Firebase から読んだ（空配列が消えた・疎配列がオブジェクトになった）プリセットを整える
+export function normalizePreset(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const defs = {};
+  PRESET_KINDS.forEach(k => { defs[k] = toArray(raw.defs?.[k]).filter(Boolean); });
+  defs.tables = defs.tables.map(t => ({ ...t, rows: toArray(t.rows).filter(Boolean) }));
+  return { ...raw, name: raw.name || "（名称なし）", desc: raw.desc || "", defs };
+}
+
+export const presetSummary = (preset) => {
+  const d = normalizePreset(preset)?.defs || {};
+  const parts = [["stats", "ステータス"], ["items", "アイテム"], ["tables", "表"], ["tokens", "コマ"], ["states", "状態"], ["rules", "ルール"]]
+    .map(([k, n]) => d[k]?.length ? `${n}${d[k].length}` : null).filter(Boolean);
+  return parts.join("・") || "空";
+};
+
+export const appliedPresets = (gs) => toArray(gs?.custom?.applied).filter(Boolean);
+
+// 現在の gs.custom の定義をプリセットとして書き出す（値・配置済みコマは含めない）
+export function presetFromGs(gs, name, desc = "") {
+  const c = getCustom(gs);
+  const defs = {};
+  PRESET_KINDS.forEach(k => {
+    defs[k] = c[k].map(d => {
+      const out = { ...d, id: baseId(d.id) };
+      if (k === "items" && d.cat) out.cat = baseId(d.cat);
+      return out;
+    });
+  });
+  return { name: String(name || "").trim() || "（名称なし）", desc: String(desc || "").trim(), defs };
+}
+
+// opts: { pcCount, withClock }
+export function applyPreset(p, preset0, key, opts = {}) {
+  const preset = normalizePreset(preset0);
+  if (!preset || !key) return p;
+  const pid = (id) => `${key}${PRESET_SEP}${baseId(id)}`;
+  let next = p;
+  PRESET_KINDS.forEach(k => {
+    preset.defs[k].forEach(d => {
+      const def = { ...d, id: pid(d.id) };
+      if (k === "items" && d.cat) def.cat = pid(d.cat);
+      delete def.initFromPcCount;
+      next = upsertDef(next, k, def);
+    });
+  });
+  // 初期値が「PC の人数」の全体共有ステータス（刻符ノルマ等）。既に値があれば触らない（再適用で上書きしない）
+  const global = { ...getCustom(next).global };
+  preset.defs.stats.forEach(s => {
+    if (s.scope === "global" && s.initFromPcCount && global[pid(s.id)] == null) global[pid(s.id)] = Math.max(0, opts.pcCount || 0);
+  });
+  const applied = [...appliedPresets(next).filter(a => a.key !== key), { key, name: preset.name }];
+  next = withCustom(next, { global, applied });
+  if (opts.withClock && preset.clock) {
+    const { day, cycleIdx, limitDay, limitCycleIdx } = preset.clock;
+    if (day) next = setClock(next, day, cycleIdx ?? 0);
+    if (limitDay) next = setLimit(next, limitDay, limitCycleIdx ?? 3);
+  }
+  return { ...next, log: [`📜 GM: 異変再現「${preset.name}」を適用した`, ...(next.log || [])] };
+}
+
+// そのプリセット由来の定義（と値・所持品・コマ・状態）をまとめて外す
+export function unapplyPreset(p, key) {
+  const name = appliedPresets(p).find(a => a.key === key)?.name;
+  const prefix = `${key}${PRESET_SEP}`;
+  let next = p;
+  PRESET_KINDS.forEach(k => {
+    getCustom(next)[k].filter(d => String(d.id).startsWith(prefix)).forEach(d => { next = removeDef(next, k, d.id); });
+  });
+  next = withCustom(next, { applied: appliedPresets(next).filter(a => a.key !== key) });
+  return { ...next, log: [`📜 GM: 異変再現「${name || key}」を解除した`, ...(p.log || [])] };
+}

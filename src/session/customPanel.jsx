@@ -3,7 +3,11 @@
 //   CustomBoard       … 全員に見える掲示（ルール文・全体共有/戦闘中のステータス）
 //   CustomPcSection   … PC カード内（PC個別ステータス・独自の状態・独自アイテム）
 //   GmFieldEditor     … 弾幕ごっこ中の GM 盤面編集（弾幕・独自コマ・被弾無効・追加の回避ステップ・一時スキル）
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { db } from "../firebase";
+import { ref as dbRef, get as dbGet, set as dbSet, remove as dbRemove } from "firebase/database";
+import { stripUndefined } from "../gsSync";
+import { IHEN_PRESETS } from "../data/ihenPresets";
 import { C, iStyle } from "../styles/colors";
 import { CYCLES } from "../data/gameData";
 import {
@@ -11,6 +15,7 @@ import {
   giveItem, removeItem, toggleItemUsed, transferItem, parseTableRows, rowsToText, tableDiceCount,
   tableValue, lookupTable, logTableRoll, itemByName, placeTokens, removeToken, clearTokens,
   tokenCandidates, toggleState, setClock, repeatCycle, setLimit, parseLimit, postRule, pcCustom,
+  DEF_KINDS, normalizePreset, presetSummary, appliedPresets, presetFromGs, applyPreset, unapplyPreset,
 } from "../customRules";
 import {
   adjustBullets, placeBulletsByDice, clearField, moveEntity, adjustLives, cancelHit, startExtraEvade,
@@ -167,7 +172,7 @@ export function CustomPcSection({ pc, gs, upd, isGm, myUid }) {
 }
 
 // ─── GM の「独自」タブ ───────────────────────────────────────────
-export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot }) {
+export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot, user }) {
   const c = getCustom(gs);
   const spotName = (id) => getSpot?.(id)?.name || id;
   return (
@@ -176,6 +181,7 @@ export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot }) {
         異変再現やシナリオ独自のステータス・アイテム・表・コマ・状態をここで作り、セッション中に手動で運用します。
         掲示したルールと全体共有のステータスは全員の「進行」タブに表示されます。
       </div>
+      <PresetSection gs={gs} upd={upd} user={user} />
       <ClockSection gs={gs} upd={upd} />
       <RuleSection c={c} upd={upd} />
       <StatSection c={c} gs={gs} upd={upd} />
@@ -184,6 +190,126 @@ export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot }) {
       <TokenSection c={c} gs={gs} upd={upd} SPOTS={SPOTS} spotName={spotName} />
       <StateSection c={c} gs={gs} upd={upd} />
     </div>
+  );
+}
+
+// ─── 異変再現プリセット ───────────────────────────────────────────
+// 組み込み（公式・要約）と、GM が保存した自作（users/{uid}/ihenPresets）を適用／解除する。
+// 現在の独自要素の定義をまとめて自作プリセットとして保存できる（値・配置済みのコマは含めない）。
+function PresetSection({ gs, upd, user }) {
+  const [saved, setSaved] = useState(null); // null=読込中 / [{ id, ...preset }]
+  const [loadError, setLoadError] = useState(false);
+  const [withClock, setWithClock] = useState(true);
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [openDesc, setOpenDesc] = useState(null);
+  const applied = appliedPresets(gs);
+  const pcCount = (gs.pcs || []).length;
+  const hasDefs = DEF_KINDS.some(k => getCustom(gs)[k].length > 0);
+
+  const uid = user?.uid || null;
+  const [version, setVersion] = useState(0); // 保存・削除のたびに増やして再読込
+  const reload = () => setVersion(v => v + 1);
+  useEffect(() => {
+    if (!uid) return;
+    let alive = true;
+    dbGet(dbRef(db, `users/${uid}/ihenPresets`))
+      .then(snap => {
+        if (!alive) return;
+        const v = snap.val() || {};
+        setSaved(Object.entries(v).map(([id, raw]) => ({ id, ...normalizePreset(raw) })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+        setLoadError(false);
+      })
+      .catch(() => { if (alive) { setSaved([]); setLoadError(true); } });
+    return () => { alive = false; };
+  }, [uid, version]);
+
+  const apply = (preset, key) => {
+    const isApplied = applied.some(a => a.key === key);
+    const clockNote = preset.clock && withClock ? "\n時刻とリミットも設定します（行動済み・進行中のシーンはリセット）。" : "";
+    if (!window.confirm(`異変再現「${preset.name}」を${isApplied ? "再" : ""}適用しますか？${isApplied ? "\n（定義を上書きします。現在の値は保持されます）" : ""}${clockNote}`)) return;
+    upd(p => applyPreset(p, preset, key, { pcCount, withClock: withClock && !!preset.clock }));
+  };
+  const unapply = (a) => {
+    if (!window.confirm(`異変再現「${a.name}」を解除しますか？\nこのプリセットで追加したステータス・アイテム（PCの所持分も）・表・コマ・状態・ルールが全て消えます。`)) return;
+    upd(p => unapplyPreset(p, a.key));
+  };
+  const save = async () => {
+    if (!user?.uid || !name.trim() || busy) return;
+    setBusy(true);
+    try {
+      const id = newId("ip");
+      const now = Date.now();
+      await dbSet(dbRef(db, `users/${user.uid}/ihenPresets/${id}`), stripUndefined({ ...presetFromGs(gs, name, desc), createdAt: now, updatedAt: now }));
+      setName(""); setDesc("");
+      reload();
+    } catch (e) {
+      window.alert(`保存に失敗しました: ${e?.message || e}`);
+    } finally { setBusy(false); }
+  };
+  const del = async (sp) => {
+    if (!window.confirm(`保存したプリセット「${sp.name}」を削除しますか？（このセッションに適用済みの内容は残ります）`)) return;
+    try { await dbRemove(dbRef(db, `users/${user.uid}/ihenPresets/${sp.id}`)); reload(); }
+    catch (e) { window.alert(`削除に失敗しました: ${e?.message || e}`); }
+  };
+
+  const presetRow = (preset, key, extra = null) => {
+    const isApplied = applied.some(a => a.key === key);
+    return (
+      <div key={key} style={{ padding: 6, marginBottom: 4, border: `1px solid ${isApplied ? C.green : C.border}`, borderRadius: 3 }}>
+        <div style={row}>
+          <span onClick={() => setOpenDesc(openDesc === key ? null : key)} style={{ fontSize: 10, color: C.text, cursor: "pointer" }}>{preset.name}</span>
+          {isApplied && <span style={{ fontSize: 8, color: C.green }}>適用中</span>}
+          <span style={{ fontSize: 8, color: C.textFaint }}>{presetSummary(preset)}{preset.clock ? "・時刻" : ""}</span>
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: 3 }}>
+            <button onClick={() => apply(preset, key)} style={tiny(C.gold)}>{isApplied ? "再適用" : "適用"}</button>
+            {extra}
+          </span>
+        </div>
+        {openDesc === key && preset.desc && <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.5 }}>{preset.desc}</div>}
+      </div>
+    );
+  };
+
+  return (
+    <Fold title="📦 異変再現プリセット" count={applied.length || null} open>
+      <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.6, marginBottom: 6 }}>
+        異変再現は導入フェイズの終了時に発生します。適用すると、ステータス・アイテム・表・コマ・状態・ルール文がまとめて追加されます（処理は手動）。
+      </div>
+
+      {applied.length > 0 && (
+        <>
+          <div style={label}>適用中</div>
+          {applied.map(a => (
+            <div key={a.key} style={row}>
+              <span style={{ fontSize: 10, color: C.green }}>✔ {a.name}</span>
+              <button onClick={() => unapply(a)} style={{ ...tiny(C.red), marginLeft: "auto" }}>解除</button>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div style={label}>公式（ルール文は要約。細部は書籍で確認してください）</div>
+      {IHEN_PRESETS.map(pr => presetRow(pr, pr.key))}
+      <label style={{ fontSize: 9, color: C.textDim, display: "inline-flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
+        <input type="checkbox" checked={withClock} onChange={e => setWithClock(e.target.checked)} />
+        時刻・リミットの指定があるプリセットは時刻も設定する（永夜異変など）
+      </label>
+
+      <div style={label}>保存した自作プリセット</div>
+      {!uid && <div style={{ fontSize: 9, color: C.textFaint }}>ログイン中のみ利用できます</div>}
+      {uid && saved === null && <div style={{ fontSize: 9, color: C.textFaint }}>読み込み中…</div>}
+      {loadError && <div style={{ fontSize: 9, color: C.red }}>読み込みに失敗しました</div>}
+      {saved && saved.length === 0 && !loadError && empty}
+      {(saved || []).map(sp => presetRow(sp, `u${sp.id}`, <button onClick={() => del(sp)} style={tiny(C.red)}>削除</button>))}
+
+      <div style={label}>現在の独自要素をプリセットとして保存（値・配置済みのコマは含めない）</div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="プリセット名（例: 自作異変「〇〇」）" style={{ ...inp, marginBottom: 4 }} />
+      <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="説明（任意）" style={{ ...inp, marginBottom: 4 }} />
+      <button disabled={!name.trim() || !hasDefs || busy || !user?.uid} onClick={save} style={tiny(C.gold)}>{busy ? "保存中…" : "保存する"}</button>
+      {!hasDefs && <span style={{ fontSize: 8, color: C.textFaint, marginLeft: 6 }}>保存できる定義がありません</span>}
+    </Fold>
   );
 }
 

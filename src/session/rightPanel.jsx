@@ -568,7 +568,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
               )}
 
               {tab === "custom" && isGm && (
-                <CustomRulesEditor gs={gs} upd={upd} SPOTS={SPOTS} getSpot={getSpot} />
+                <CustomRulesEditor gs={gs} upd={upd} SPOTS={SPOTS} getSpot={getSpot} user={user} />
               )}
 
               {tab === "log" && (() => {
