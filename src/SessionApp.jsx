@@ -1146,7 +1146,7 @@ export default function SessionApp({ roomCode, user }) {
         if (attempt) await new Promise(r => setTimeout(r, 1500));
         try {
           const snap = await get(ref(db, `rooms/${roomCode}/questGate/revealed/${qid}`));
-          if (snap.val() === true) { if (!cancelled) fill(true); return; }
+          if (snap.val()) { if (!cancelled) fill(true); return; } // true（最初のクエスト・GM の確認）または opId（承認で解放）
         } catch (e) { console.error("クエストの公開記録の確認に失敗:", e); }
       }
       if (!cancelled) fill(false);
@@ -1206,19 +1206,29 @@ export default function SessionApp({ roomCode, user }) {
     return { patch, unlocked, undo: { opId, keys: Object.keys(patch) } };
   };
   // 公開記録を書く（失敗したら数秒おきにやり直す）。書けたら、解放したクエストの「確認待ち」を外して遊べるようにする
-  const commitGate = useCallback((patch, unlocked, attempt = 0) => {
-    update(ref(db, `rooms/${roomCode}/questGate`), patch).then(() => {
-      if (!unlocked.length) return;
-      const ids = new Set(unlocked.map(String));
-      upd(p => {
-        if (!(p.quests || []).some(q => q?.gatePending && ids.has(String(q.id)))) return p;
-        return { ...p, quests: p.quests.map(q => (q?.gatePending && ids.has(String(q.id))) ? (({ gatePending: _g, ...rest }) => rest)(q) : q) };
-      });
-    }).catch(e => {
-      console.error("クエストの公開記録の保存に失敗:", e);
+  // 取り消した承認の opId。保存のやり直しが、取り消した後に記録を作り直さないようにする
+  const cancelledOpsRef = useRef(new Set());
+  // 公開記録を書く。キーごとのトランザクションで「まだ記録が無いときだけ」書く（別タブが先に書いた承認は上書きしない）。
+  // 失敗したら数秒おきにやり直す（取り消された操作ならやめる）。書けたら、解放したクエストの「確認待ち」を外す（外す更新もやり直す）
+  const commitGate = useCallback((patch, unlocked, opId, attempt = 0) => {
+    if (cancelledOpsRef.current.has(opId)) return;
+    const retry = (what, fn) => (e) => {
+      console.error(`${what}に失敗:`, e);
       if (attempt === 0) window.alert("クエストの公開記録を保存できませんでした。保存できるまで自動でやり直します（その間、解放したクエストは「GM の確認待ち」になります）。");
-      if (attempt < 20) setTimeout(() => commitGate(patch, unlocked, attempt + 1), 3000);
-    });
+      setTimeout(fn, Math.min(30000, 3000 * (attempt + 1)));
+    };
+    Promise.all(Object.entries(patch).map(([k, v]) =>
+      runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur ? undefined : v))))
+      .then(async () => {
+        if (!unlocked.length) return;
+        const ids = new Set(unlocked.map(String));
+        const res = await upd(p => {
+          if (!(p.quests || []).some(q => q?.gatePending && ids.has(String(q.id)))) return p;
+          return { ...p, quests: p.quests.map(q => (q?.gatePending && ids.has(String(q.id))) ? (({ gatePending: _g, ...rest }) => rest)(q) : q) };
+        });
+        if (!res?.committed) throw new Error("確認待ちの解除がコミットされませんでした");
+      })
+      .catch(retry("クエストの公開記録の保存", () => commitGate(patch, unlocked, opId, attempt + 1)));
   }, [roomCode, upd]);
   const revealTruths = useCallback(async (ids) => {
     if (!amGm || !gmScenario?.quests || !ids?.length) return;
@@ -1238,7 +1248,7 @@ export default function SessionApp({ roomCode, user }) {
     }, { undoGateFor: (after) => gateForApproval(after, want, scQs, gate, opId).undo });
     if (!res?.committed) return;
     const { patch, unlocked } = gateForApproval(res.gs, want, scQs, gate, opId);
-    if (Object.keys(patch).length) commitGate(patch, unlocked);
+    if (Object.keys(patch).length) commitGate(patch, unlocked, opId);
   }, [amGm, gmScenario, questGate, upd, commitGate]);
   const autoReveal = !!room?.config?.autoRevealTruth;
   const pendingKey = pendingTruths.map(q => q.id).join(",");
@@ -1286,6 +1296,7 @@ export default function SessionApp({ roomCode, user }) {
     writeGmParts(entry.gmBefore, entry.gmAfter);
     // クエストの公開記録も、取り消す操作（真相の承認）で立てた分だけを外す。
     // 値がその操作の opId のままのときだけ外す（後から別の操作が書いた承認は残す）
+    if (entry.undoGate?.opId) cancelledOpsRef.current.add(entry.undoGate.opId); // この操作の公開記録の保存のやり直しを止める
     if (entry.undoGate?.opId && entry.undoGate.keys?.length) {
       entry.undoGate.keys.forEach(k => {
         const removeOwn = (attempt = 0) => runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur === entry.undoGate.opId ? null : undefined))
