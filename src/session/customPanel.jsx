@@ -196,7 +196,7 @@ export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot, user }) {
   const c = getCustom(gs);
   const spotName = (id) => getSpot?.(id)?.name || id;
   return (
-    <div>
+    <div data-touch-zoom>
       <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.6, marginBottom: 8 }}>
         異変再現やシナリオ独自のステータス・アイテム・表・コマ・状態をここで作り、セッション中に手動で運用します。
         掲示したルールと全体共有のステータスは全員の「進行」タブに表示されます。
@@ -910,7 +910,7 @@ export function GmFieldEditor({ gs, upd }) {
   const cellTokens = (cell) => getFieldTokens(b).filter(t => t.owner === tid && t.cell === cell);
 
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div data-touch-zoom style={{ marginBottom: 8 }}>
       {alerts.map(a => {
         const opp = opponentOf(a.owner);
         const ids = a.tokens.map(t => t.id);

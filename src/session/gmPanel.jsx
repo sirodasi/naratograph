@@ -1,17 +1,17 @@
 // GM 介入ツールの UI（GM 操作タブ）と、PL 側の要求カード（全画面共通のオーバーレイ）。
 // ロジックは src/gmTools.js（純関数）。ここは入力と表示だけを担う。
-// ※ App から直接 import されるため、遅延読み込みのモジュール（battle/rightPanel 等）を import しないこと。
+// ※ SessionApp から直接 import されるため、遅延読み込みのモジュール（battle/rightPanel 等）を import しないこと。
 import { useState } from "react";
 import { sfx } from "../audio";
 import { C, btnFull, iStyle } from "../styles/colors";
 import {
   REQUEST_KINDS, getRequests, addRequest, removeRequest, respondDice, addCheerDice, confirmDice,
-  respondChoice, ackNotice, isAnswered, pendingFor, describeDice, evalJudgment, cheerOptions,
+  respondChoice, ackNotice, isAnswered, pendingFor, describeDice, evalJudgment, cheerOptions, isFragileResp,
   scenarioEnemies, startAdhocBattle, BAD_STATUS_NAMES, gmAddBadStatus, gmAddBond, gmRemoveBond,
   gmToggleBondUsed, gmMovePc, gmToggleActed, gmResetAbilityUse, gmAdjustMax, tableResult, giveTableItem,
 } from "../gmTools";
 import { getCustom, itemByName, TABLE_DICE } from "../customRules";
-import { SPECIAL_BOND_CHEER } from "./shared";
+import { SPECIAL_BOND_CHEER, KURUWASU_BOND } from "./shared";
 
 const rollN = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 6) + 1);
 const newId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -22,9 +22,14 @@ const chip = (on, color = C.gold) => ({ padding: "3px 8px", fontSize: 9, cursor:
 const tiny = (color = C.textDim) => ({ padding: "2px 6px", fontSize: 9, cursor: "pointer", borderRadius: 3, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color });
 const num = { ...iStyle, width: 44, padding: "3px 4px", fontSize: 10 };
 
-const cheerLabel = (cheerer, bondName) => bondName === SPECIAL_BOND_CHEER
+const cheerLabel = (cheerer, bondName) => bondName === KURUWASU_BOND ? "絆なし"
+  : bondName === SPECIAL_BOND_CHEER
   ? `《${cheerer.specialBond?.target}への${cheerer.specialBond?.word || "敬意"}》`
   : `《${bondName}》`;
+// 失敗でファンブルになる応援（魂の弱い所／人を狂わす）は紫で区別する
+const cheerBtn = (o) => o.fragile
+  ? btnFull("rgba(156,39,176,0.15)", "#6a1b9a", C.purple, { width: "auto", fontSize: 9, padding: "3px 8px" })
+  : btnFull(C.blueBg, C.blueBorder, C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" });
 
 // 対象 PC の選択（チップ＋全員）
 function TargetPicker({ pcs, value, onChange }) {
@@ -46,7 +51,7 @@ export function GmToolsPanel({ gs, upd, getSpot }) {
   const requests = getRequests(gs);
 
   return (
-    <div>
+    <div data-touch-zoom>
       <RequestComposer pcs={pcs} upd={upd} tables={getCustom(gs).tables} gs={gs} />
       <div style={sectionTitle}>進行中の要求（{requests.length}）</div>
       {requests.length === 0 && <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 10 }}>なし</div>}
@@ -196,7 +201,11 @@ function AdhocBattleForm({ gs, upd, getSpot }) {
   const [custom, setCustom] = useState([]);       // その場で作った敵
   const [draft, setDraft] = useState(null);
   const sceneSpot = gs.currentScene ? (pcs.find(x => x.uid === gs.currentScene.pcUid)?.currentSpot) : null;
-  const [participants, setParticipants] = useState(() => gs.currentScene?.pcUid ? [gs.currentScene.pcUid] : []);
+  // 参加 PC: GM が選ぶまでは「いま進行中のシーンの PC」に追従する（タブを開いた時点の値で固定しない）
+  const scenePcUid = gs.currentScene?.pcUid || null;
+  const [chosen, setChosen] = useState(null); // null = シーンに追従
+  const participants = (chosen ?? (scenePcUid ? [scenePcUid] : [])).filter(u => pcs.some(x => x.uid === u));
+  const sameSpot = sceneSpot ? pcs.filter(x => x.currentSpot === sceneSpot).map(x => x.uid) : [];
   const [title, setTitle] = useState("");
 
   const enemies = [...picked.map(i => known[i]?.enemy).filter(Boolean), ...custom];
@@ -208,7 +217,7 @@ function AdhocBattleForm({ gs, upd, getSpot }) {
     if (!window.confirm(msg)) return;
     const spec = { enemies, participantPcUids: participants, title };
     const stamp = Date.now();
-    setPicked([]); setCustom([]); setTitle("");
+    setPicked([]); setCustom([]); setTitle(""); setChosen(null);
     upd(p => startAdhocBattle(p, spec, stamp));
   };
 
@@ -260,7 +269,13 @@ function AdhocBattleForm({ gs, upd, getSpot }) {
         </div>
       )}
       <div style={{ fontSize: 9, color: C.textDim, marginBottom: 3 }}>参加PC{sceneSpot ? `（シーンのスポット: ${getSpot?.(sceneSpot)?.name || sceneSpot}）` : ""}</div>
-      <TargetPicker pcs={pcs} value={participants} onChange={setParticipants} />
+      <TargetPicker pcs={pcs} value={participants} onChange={setChosen} />
+      {(chosen !== null || sameSpot.length > 1) && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 4 }}>
+          {sameSpot.length > 1 && <button onClick={() => setChosen(sameSpot)} style={tiny()}>シーンと同じスポットの全員</button>}
+          {chosen !== null && <button onClick={() => setChosen(null)} style={tiny()}>シーンの PC に戻す</button>}
+        </div>
+      )}
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="戦闘の名前（任意。ログと結果画面に出ます）" style={{ ...iStyle, fontSize: 10, marginBottom: 6 }} />
       <button onClick={start} disabled={!canStart} style={btnFull(canStart ? C.redBg : "rgba(255,255,255,0.02)", canStart ? C.redBorder : C.border, canStart ? C.red : C.textFaint, { fontSize: 11, cursor: canStart ? "pointer" : "not-allowed" })}>
         {gs.battle?.active ? "弾幕ごっこ中は開始できません" : "⚔ 弾幕ごっこを開始する"}
@@ -378,7 +393,7 @@ export function GmRequestOverlay({ gs, upd, user }) {
         // ダイス
         const dice = r.dice || [];
         const target = req.dice?.target;
-        const j = target && dice.length ? evalJudgment(dice, target, gs.unluckyPhase) : null;
+        const j = target && dice.length ? evalJudgment(dice, target, gs.unluckyPhase, isFragileResp(r)) : null;
         const helpers = target && dice.length ? cheerOptions(gs.pcs, me).filter(o => o.cheerer.uid !== me.uid) : [];
         const selfCheers = target && dice.length ? cheerOptions(gs.pcs, me).filter(o => o.cheerer.uid === me.uid) : [];
         const shown = rolling?.key === key ? rolling.faces : dice;
@@ -414,7 +429,7 @@ export function GmRequestOverlay({ gs, upd, user }) {
                 {selfCheers.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
                     {selfCheers.map((o, i) => (
-                      <button key={i} disabled={!!rolling} onClick={() => animateThen(key, o.diceN, res => upd(p => addCheerDice(p, req.id, me.uid, me.uid, o.bondName, res)))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>💪 {cheerLabel(o.cheerer, o.bondName)}で応援</button>
+                      <button key={i} disabled={!!rolling} onClick={() => animateThen(key, o.diceN, res => upd(p => addCheerDice(p, req.id, me.uid, me.uid, o.bondName, res, o.fragile)))} style={cheerBtn(o)}>💪 {cheerLabel(o.cheerer, o.bondName)}で応援</button>
                     ))}
                   </div>
                 )}
@@ -430,14 +445,14 @@ export function GmRequestOverlay({ gs, upd, user }) {
       {cheerables.map(({ req, judge, opts }) => {
         const r = req.responses[judge.uid];
         const key = `${req.id}:${judge.uid}`;
-        const j = evalJudgment(r.dice, req.dice.target, gs.unluckyPhase);
+        const j = evalJudgment(r.dice, req.dice.target, gs.unluckyPhase, isFragileResp(r));
         return (
           <div key={key} style={card(C.blue)}>
             <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 3 }}>応援できる判定</div>
             <div style={{ fontSize: 11, color: C.text, marginBottom: 4 }}>{judge.charName} の{req.title ? `「${req.title}」` : "判定"}（目標値 {req.dice.target}）: <span style={{ color: C.gold }}>{r.dice.join(",")}</span> → <span style={{ color: j.isFumble ? C.red : j.success ? C.green : C.textDim }}>{j.isFumble ? "ファンブル" : j.success ? "成功" : "失敗"}</span></div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {opts.map((o, i) => (
-                <button key={i} disabled={!!rolling} onClick={() => animateThen(key, o.diceN, res => upd(p => addCheerDice(p, req.id, judge.uid, me.uid, o.bondName, res)))} style={btnFull(C.blueBg, C.blueBorder, C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" })}>💪 {cheerLabel(o.cheerer, o.bondName)}で応援（+{o.diceN}D）</button>
+                <button key={i} disabled={!!rolling} onClick={() => animateThen(key, o.diceN, res => upd(p => addCheerDice(p, req.id, judge.uid, me.uid, o.bondName, res, o.fragile)))} style={cheerBtn(o)}>{o.fragile ? "🩸" : "💪"} {cheerLabel(o.cheerer, o.bondName)}で応援（+{o.diceN}D{o.fragile ? "・失敗でファンブル" : ""}）</button>
               ))}
             </div>
           </div>
@@ -462,7 +477,7 @@ export function GmPcEditor({ pc, gs, upd, SPOTS, getSpot }) {
   const addBond = (b) => { const v = (b || "").trim(); if (!v) return; setBondInput(""); upd(p => gmAddBond(p, pc.uid, v)); };
 
   return (
-    <div style={{ marginBottom: 10, padding: 6, border: `1px dashed ${C.redBorder}`, borderRadius: 4 }}>
+    <div data-touch-zoom style={{ marginBottom: 10, padding: 6, border: `1px dashed ${C.redBorder}`, borderRadius: 4 }}>
       <div style={{ fontSize: 9, color: C.red, letterSpacing: 1 }}>GM編集（状態）</div>
 
       <div style={label}>変調を付与</div>

@@ -2,7 +2,7 @@ import { vi, describe, it, expect } from 'vitest';
 
 vi.mock('../firebase', () => ({ db: {}, auth: {}, googleProvider: {} }));
 
-import { getDistances, normalizeScenario } from '../App';
+import { getDistances, normalizeScenario } from '../SessionApp';
 
 describe('getDistances (BFSによる最短距離)', () => {
   it('null/undefined start では空オブジェクト', () => {

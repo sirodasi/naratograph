@@ -1,7 +1,7 @@
 // ゲームステート（gs = rooms/{code}/state）同期の純粋ロジック。
 // React / Firebase に依存しないため単体テスト可能（src/__tests__/gsSync.test.js）。
 //
-// 書き込みは App.jsx の upd() が runTransaction で行う。トランザクションは競合時に
+// 書き込みは SessionApp.jsx の upd() が runTransaction で行う。トランザクションは競合時に
 // サーバー値で更新関数を再実行するため、更新関数は「現在の gs → 次の gs」の純関数である必要がある。
 // ここではその前後処理（正規化・ログ上限と退避・undefined 除去）を提供する。
 

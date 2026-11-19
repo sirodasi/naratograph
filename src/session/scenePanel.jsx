@@ -1,6 +1,6 @@
 // SessionView から分割: 探索シーンの行動パネル（ScenePanel）
 import { useState } from "react";
-import { getCheerBonds, getSpecialBondCheer } from "../gmTools";
+import { getCheerBonds, getSpecialBondCheer, getFragileCheerBonds, getKuruwasuCheer } from "../gmTools";
 import { CharSprite } from "../CharSprite";
 import { CHARACTERS } from "../data/characters";
 import { SPOT_DETAILS } from "../data/spots";
@@ -281,27 +281,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
   // 我儘: 自分の判定なら全ての絆を自身絆として使える。怠け者: 自身絆で自分の判定に応援。
   // getCheerBonds / getSpecialBondCheer は gmTools.js（ダイス要求の応援と共通）
 
-  // 魂の弱い所に入り込む程度の能力（オート）: 使用済み（黒い応援欄）の絆でも応援できる。
-  // ただしこの応援を行った行為判定が失敗するとファンブルになる（=fragile）。
-  const getFragileCheerBonds = (cheerer, judgePc) => {
-    if (cheerer.uid === judgePc.uid) return [];
-    const name = getActiveAbility(cheerer)?.name;
-    if (name !== "魂の弱い所に入り込む程度の能力" && name !== "魂の弱い所に入り込む程度の能力＋") return [];
-    const bondName = `${judgePc.charName}への絆`;
-    // すでに使用済み（bondUsed）の絆を持つ場合のみ（未使用なら通常応援で出る）
-    return ((cheerer.bonds || []).includes(bondName) && cheerer.bondUsed?.[bondName]) ? [bondName] : [];
-  };
-
-  // 人を狂わす程度の能力（サポート）: 絆を持たない相手にも応援できる（1フェイズ1回・kuruwasuUsedで近似）。失敗でファンブル。
-  const getKuruwasuCheer = (cheerer, judgePc) => {
-    if (cheerer.uid === judgePc.uid) return [];
-    const name = getActiveAbility(cheerer)?.name;
-    if (name !== "人を狂わす程度の能力" && name !== "人を狂わす程度の能力＋") return [];
-    const bondName = `${judgePc.charName}への絆`;
-    if ((cheerer.bonds || []).includes(bondName)) return [];        // 絆を持つなら通常応援
-    if (cheerer.kuruwasuUsed?.[judgePc.uid]) return [];             // この相手には使用済み
-    return [KURUWASU_BOND];
-  };
+  // 魂の弱い所／人を狂わすの応援（失敗でファンブル）も gmTools.js の getFragileCheerBonds / getKuruwasuCheer
 
   // judgePc の行為判定に対する応援UI。onCheer(cheererUid, bondName, fragile) を渡す。
   const renderCheerSection = (judgePc, onCheer) => {

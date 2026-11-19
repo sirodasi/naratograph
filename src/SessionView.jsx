@@ -1,5 +1,5 @@
 // SessionView は画面ごとのモジュール（src/session/*.jsx）へ分割した。
-// 既存の import（App.jsx・テスト等）互換のため、ここから全て再 export する。
+// 既存の import（SessionApp.jsx・テスト等）互換のため、ここから全て再 export する。
 export * from "./session/shared";
 export * from "./session/scene";
 export * from "./session/battle";

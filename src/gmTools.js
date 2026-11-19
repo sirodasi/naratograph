@@ -5,7 +5,8 @@
 //   ・臨時の弾幕ごっこを始める（終了後は中断したシーンへ戻る）
 // を行えるようにする。いずれも gs の更新関数（upd に渡す p => next）として書き、
 // トランザクションで再実行されても結果が変わらないよう、乱数は呼び出し側で振って引数で渡す。
-import { SPECIAL_BOND_CHEER, BAD_STATUS_TABLE, buildBattleNpc } from "./session/shared";
+import { SPECIAL_BOND_CHEER, KURUWASU_BOND, BAD_STATUS_TABLE, buildBattleNpc } from "./session/shared";
+import { getActiveAbility } from "./data/abilityEffects";
 import { TABLE_DICE, tableDiceCount, tableValue, lookupTable, itemByName, giveItem } from "./customRules";
 
 const toArray = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
@@ -85,15 +86,20 @@ export const d66Value = (dice) => Math.min(dice[0], dice[1]) * 10 + Math.max(dic
 
 // 行為判定の評価（探索/クエストと同じ基準）: 最大値≧目標で成功、全て1でファンブル、6を含めばスペシャル。
 // unlucky = 《自分も含めて不運にする程度の能力》（全て2以下でファンブル）
-export function evalJudgment(dice, target, unlucky = false) {
+// fragile = 失敗するとファンブルになる応援（魂の弱い所／人を狂わす）を受けた判定
+export function evalJudgment(dice, target, unlucky = false, fragile = false) {
   const arr = toArray(dice);
   if (!arr.length) return null;
   const max = Math.max(...arr);
-  const isFumble = arr.every(d => d === 1) || (unlucky && arr.every(d => d <= 2));
+  const baseFumble = arr.every(d => d === 1) || (unlucky && arr.every(d => d <= 2));
+  const isFumble = baseFumble || (fragile && max < target);
   const success = max >= target && !isFumble;
   const isSpecial = arr.includes(6) && !isFumble;
   return { max, success, isFumble, isSpecial };
 }
+
+// その判定が「失敗でファンブル」の応援を受けているか
+export const isFragileResp = (resp) => toArray(resp?.cheers).some(c => c?.fragile);
 
 export function describeDice(req, resp, unlucky = false) {
   const dice = toArray(resp?.dice);
@@ -105,7 +111,7 @@ export function describeDice(req, resp, unlucky = false) {
   if (req.dice?.mode === "d66") return `D66 → ${d66Value(dice)}（${dice.join(",")}）`;
   const base = `${dice.join(",")}${dice.length > 1 ? `（合計${dice.reduce((a, b) => a + b, 0)}）` : ""}`;
   if (!req.dice?.target) return base;
-  const j = evalJudgment(dice, req.dice.target, unlucky);
+  const j = evalJudgment(dice, req.dice.target, unlucky, isFragileResp(resp));
   const verdict = j.isFumble ? "ファンブル" : j.success ? (j.isSpecial ? "成功・スペシャル" : "成功") : (j.isSpecial ? "失敗（スペシャル）" : "失敗");
   return `${base} → ${verdict}`;
 }
@@ -136,17 +142,22 @@ export function giveTableItem(p, id, uid, iid) {
   return giveItem(marked, uid, item.id, iid, `表「${req.table.name}」`);
 }
 
-// 応援（判定後の振り足し）。cheerConsume は応援者に適用するパッチ（bondUsed 等）。
-export function addCheerDice(p, id, judgeUid, cheererUid, bondName, dice) {
+// 応援（判定後の振り足し）。応援者の絆の消費は cheerConsumePatch。
+// fragile = 失敗でファンブルになる応援（魂の弱い所／人を狂わす）。cheers に記録し、判定の評価に反映する。
+export function addCheerDice(p, id, judgeUid, cheererUid, bondName, dice, fragile = false) {
+  let added = false;
   const next = patchResponse(p, id, judgeUid, (cur) => {
     if (!toArray(cur.dice).length || cur.confirmed) return cur;
-    return { ...cur, dice: [...toArray(cur.dice), ...dice], cheers: [...toArray(cur.cheers), { by: cheererUid, bond: bondName }] };
+    added = true;
+    const cheer = { by: cheererUid, bond: bondName, ...(fragile ? { fragile: true } : {}) };
+    return { ...cur, dice: [...toArray(cur.dice), ...dice], cheers: [...toArray(cur.cheers), cheer] };
   });
-  if (!next) return p;
-  const pcs = next.pcs.map(x => x.uid !== cheererUid ? x : { ...x, ...cheerConsumePatch(x, bondName) });
+  if (!next || !added) return p;
+  const pcs = next.pcs.map(x => x.uid !== cheererUid ? x : { ...x, ...cheerConsumePatch(x, bondName, judgeUid) });
   const cheerer = p.pcs.find(x => x.uid === cheererUid);
-  const how = bondName === SPECIAL_BOND_CHEER ? `《${cheerer?.specialBond?.target}への${cheerer?.specialBond?.word || "敬意"}》で` : `《${bondName}》で`;
-  return { ...next, pcs, log: [`💪 ${cheerer?.charName} が${how}応援！ダイスを${dice.length}個振り足した（出目${dice.join(",")}）`, ...(p.log || [])] };
+  const how = bondName === KURUWASU_BOND ? "絆なしで"
+    : bondName === SPECIAL_BOND_CHEER ? `《${cheerer?.specialBond?.target}への${cheerer?.specialBond?.word || "敬意"}》で` : `《${bondName}》で`;
+  return { ...next, pcs, log: [`💪 ${cheerer?.charName} が${how}応援！ダイスを${dice.length}個振り足した（出目${dice.join(",")}）${fragile ? "（失敗でファンブル）" : ""}`, ...(p.log || [])] };
 }
 
 export function confirmDice(p, id, uid) {
@@ -197,19 +208,44 @@ export function getSpecialBondCheer(cheerer, judgePc) {
   return [SPECIAL_BOND_CHEER];
 }
 
-export const cheerConsumePatch = (x, bondName) =>
-  bondName === SPECIAL_BOND_CHEER
+// 魂の弱い所に入り込む程度の能力（オート）: 使用済み（黒い応援欄）の絆でも応援できる。失敗でファンブル。
+export function getFragileCheerBonds(cheerer, judgePc) {
+  if (cheerer.uid === judgePc.uid) return [];
+  const name = getActiveAbility(cheerer)?.name;
+  if (name !== "魂の弱い所に入り込む程度の能力" && name !== "魂の弱い所に入り込む程度の能力＋") return [];
+  const bondName = `${judgePc.charName}への絆`;
+  // すでに使用済み（bondUsed）の絆を持つ場合のみ（未使用なら通常応援で出る）
+  return ((cheerer.bonds || []).includes(bondName) && cheerer.bondUsed?.[bondName]) ? [bondName] : [];
+}
+
+// 人を狂わす程度の能力（サポート）: 絆を持たない相手にも応援できる（相手ごとに1回・kuruwasuUsed で近似）。失敗でファンブル。
+export function getKuruwasuCheer(cheerer, judgePc) {
+  if (cheerer.uid === judgePc.uid) return [];
+  const name = getActiveAbility(cheerer)?.name;
+  if (name !== "人を狂わす程度の能力" && name !== "人を狂わす程度の能力＋") return [];
+  if ((cheerer.bonds || []).includes(`${judgePc.charName}への絆`)) return []; // 絆を持つなら通常応援
+  if (cheerer.kuruwasuUsed?.[judgePc.uid]) return [];                        // この相手には使用済み
+  return [KURUWASU_BOND];
+}
+
+// 応援者の消費（絆なし応援は kuruwasuUsed[判定者]、特別な絆は specialBond.used、通常は bondUsed[絆名]）
+export const cheerConsumePatch = (x, bondName, judgeUid) =>
+  bondName === KURUWASU_BOND
+    ? { kuruwasuUsed: { ...(x.kuruwasuUsed || {}), [judgeUid]: true } }
+    : bondName === SPECIAL_BOND_CHEER
     ? { specialBond: { ...x.specialBond, used: true } }
     : { bondUsed: { ...(x.bondUsed || {}), [bondName]: true } };
 
-// 同スポットの PC による応援候補 [{ cheerer, bondName, diceN }]
+// 同スポットの PC による応援候補 [{ cheerer, bondName, diceN, fragile }]
 export function cheerOptions(pcs, judgePc) {
   const out = [];
   (pcs || []).forEach(cheerer => {
     if (cheerer.currentSpot !== judgePc.currentSpot) return;
-    getCheerBonds(cheerer, judgePc).forEach(bondName => out.push({ cheerer, bondName, diceN: 1 }));
+    getCheerBonds(cheerer, judgePc).forEach(bondName => out.push({ cheerer, bondName, diceN: 1, fragile: false }));
     getSpecialBondCheer(cheerer, judgePc).forEach(bondName =>
-      out.push({ cheerer, bondName, diceN: (cheerer.specialBond?.intimacy ?? 1) >= 10 ? 2 : 1 }));
+      out.push({ cheerer, bondName, diceN: (cheerer.specialBond?.intimacy ?? 1) >= 10 ? 2 : 1, fragile: false }));
+    getFragileCheerBonds(cheerer, judgePc).forEach(bondName => out.push({ cheerer, bondName, diceN: 1, fragile: true }));
+    getKuruwasuCheer(cheerer, judgePc).forEach(bondName => out.push({ cheerer, bondName, diceN: 1, fragile: true }));
   });
   return out;
 }

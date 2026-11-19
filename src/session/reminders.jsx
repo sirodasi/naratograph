@@ -1,7 +1,7 @@
 // タイミングのメモ（GM 向けリマインダー）の表示。
 // 「独自」タブで登録したメモ（gs.custom.reminders）を、そのタイミングが来たら GM の画面の左下に出す。
 // 検出は gs の変化を見て GM のクライアントだけで行い、gs には何も書かない（閉じた・チェックした状態もローカル）。
-// ※ App から直接 import されるため、遅延読み込みのモジュール（battle/rightPanel/customPanel 等）を import しないこと。
+// ※ SessionApp から直接 import されるため、遅延読み込みのモジュール（battle/rightPanel/customPanel 等）を import しないこと。
 import { useState, useEffect, useRef } from "react";
 import { C } from "../styles/colors";
 import { getCustom, timingSnapshot, detectTimings, remindersFor } from "../customRules";
