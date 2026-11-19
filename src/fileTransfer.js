@@ -13,10 +13,22 @@ export function downloadText(filename, text, mime = "application/json") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export const downloadJson = (filename, obj) => downloadText(filename, JSON.stringify(obj, null, 2));
+// 読み込みの上限。書き出しでも同じ上限を確かめ、読み込めないファイルを作らない
+export const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+// 上限を超える場合は知らせて書き出さず、false を返す
+export function downloadJson(filename, obj) {
+  const text = JSON.stringify(obj, null, 2);
+  if (new Blob([text]).size > MAX_FILE_BYTES) {
+    window.alert("内容が大きすぎるため書き出せません（2MB まで）。表やアイテムの説明を短くしてください。");
+    return false;
+  }
+  downloadText(filename, text);
+  return true;
+}
 
 // 選択されたファイルを文字列で読む（大きすぎるファイルは読まない）
-export function readFileText(file, maxBytes = 2 * 1024 * 1024) {
+export function readFileText(file, maxBytes = MAX_FILE_BYTES) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error("ファイルが選択されていません"));
     if (file.size > maxBytes) return reject(new Error("ファイルが大きすぎます"));

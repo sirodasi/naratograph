@@ -586,7 +586,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
         actedPcs: nextActedPcs,
         actedNpcs: nextActedNpcs
       },
-      log: [...resetLogs.reverse(), ...p.log]
+      log: [...[...resetLogs].reverse(), ...p.log] // 更新関数は再実行されるので、元の配列は並べ替えない
     }));
   }, [b.phase, alivePcs.length, aliveNpcs.length, unactedPcs.length, unactedNpcs.length, b.actedPcs, b.actedNpcs, upd]);
 
@@ -594,6 +594,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   useEffect(() => {
     if (b.phase === "pc_shot_intro" && b.pcFamiliarAction === "skip_to_support") {
       upd(p => {
+        // 複数のクライアントが同時に出しても1回だけ（トランザクション内で未処理かを確かめる）
+        if (p.battle?.phase !== "pc_shot_intro" || p.battle?.pcFamiliarAction !== "skip_to_support") return p;
         const pc = withGrants(p.battle, p.pcs.find(x => x.uid === p.battle.pcCombatant));
         if (!pc || !hasOfficialSkill(pc, "使い魔")) return p;
         return {
@@ -604,6 +606,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
       });
     } else if (b.phase === "npc_shot_intro" && b.npcFamiliarAction === "skip_to_support") {
       upd(p => {
+        if (p.battle?.phase !== "npc_shot_intro" || p.battle?.npcFamiliarAction !== "skip_to_support") return p;
         const npc = withGrants(p.battle, p.battle.participants.npcs.find(n => n.id === p.battle.npcCombatant));
         if (!npc || !hasOfficialSkill(npc, "使い魔")) return p;
         return {
@@ -647,11 +650,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     const BANNER_PHASES = { pc_shot_intro: "PC ショット", npc_shot_intro: "NPC ショット", pc_evade_intro: "PC 回避", npc_evade_intro: "NPC 回避", pc_dropout: "PC 脱落", npc_dropout: "NPC 脱落" };
     const label = BANNER_PHASES[b.phase];
     if (label) {
-      setPhaseBanner(label);
+      setPhaseBanner({ label, key: Date.now() }); // key で毎回アニメーションをやり直す
       sfx.phase(b.phase);
       const t = setTimeout(() => setPhaseBanner(null), 1600);
       return () => clearTimeout(t);
     }
+    setPhaseBanner(null); // バナーの無いフェイズへ進んだら消す（次のバナーが同じ要素で再生されないように）
     if (b.phase === "pc_hit_recovery" || b.phase === "npc_hit_recovery") sfx.phase(b.phase);
   }, [b.phase]);
 
@@ -793,9 +797,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
 
     const totalDice = randoms.reduce((sum, e) => sum + (e.count === -1 ? (customCount ?? 1) : e.count), 0);
     animateDice(totalDice, "スペルカード（ランダム配置）", res => {
-      const grid = [...(b.grids?.[defenderGridId] || [0,0,0,0,0,0])];
-      res.forEach(d => { grid[d - 1] = (grid[d - 1] || 0) + 1; });
-      cb({ [defenderGridId]: grid });
+      // 出目の分だけの差分（元の盤面は含めない。呼び出し側で現在の盤面に足す）
+      const delta = [0, 0, 0, 0, 0, 0];
+      res.forEach(d => { delta[d - 1] += 1; });
+      cb({ [defenderGridId]: delta });
     });
   };
 
@@ -917,7 +922,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
       // round_end: pcPendingSpell/npcPendingSpell として保存し、ラウンド終了時に applyPendingSpells で処理
       if (structured.timing === "round_end") {
         upd(p => ({
-          ...mergeConsumeWithBattle(p, { [isPcAttacker ? "pcPendingSpell" : "npcPendingSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } }),
+          // 効果はラウンド終了時でも、宣言（SC 消費）は今なので spellUsedBy に記録する（同じラウンドで2枚目を宣言できないように）
+          ...mergeConsumeWithBattle(p, { spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name }, [isPcAttacker ? "pcPendingSpell" : "npcPendingSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos } }),
           log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
         }));
         return;
@@ -1148,7 +1154,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     // effectTiming が round_end のものは grids に反映せず pendingSpell に保存
     if (spellCard.effectTiming === "round_end") {
       upd(p => ({
-        ...mergeConsumeWithBattle(p, { [isPcAttacker ? "pcPendingSpell" : "npcPendingSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } }),
+        ...mergeConsumeWithBattle(p, { spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name }, [isPcAttacker ? "pcPendingSpell" : "npcPendingSpell"]: { ...slimSpellForStorage(spellCard), attackerId, defenderId, attPos, defPos, defenderPos: defPos } }),
         log: [`🔮 ${attackerName}：${spellCard.name}！ (ラウンド終了時に効果)`, ...p.log],
       }));
       return;
@@ -1187,12 +1193,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     if (hasRandom) {
       // ランダム配置のダイスロール
       upd(p => consumeSpell(p));
+      const nonRandomDelta = updatedGrid.map((v, i) => v - (defenderGrid[i] || 0));
       resolveRandomEffects(spellCard.effects, defenderId, customCount, gridPatch => {
         upd(p => ({
           ...p,
           battle: {
             ...p.battle,
-            grids: { ...p.battle.grids, [defenderId]: updatedGrid.map((v, i) => v + (gridPatch[defenderId]?.[i] || 0)), },
+            // 現在の盤面に「非ランダム効果の差分＋出目の差分」を足す（振っている間の GM の編集も残す）
+            grids: { ...p.battle.grids, [defenderId]: (p.battle.grids?.[defenderId] || [0,0,0,0,0,0]).map((v, i) => Math.max(0, v + (nonRandomDelta[i] || 0) + (gridPatch[defenderId]?.[i] || 0))), },
             spellUsedBy: { ...(p.battle.spellUsedBy || {}), [attackerId]: spellCard.name },
           },
           log: [`🔮 ${attackerName}：${spellCard.name}！`, ...p.log],
@@ -1716,7 +1724,8 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   const npcPos = b.positions?.[b.npcCombatant];
   const npcDanmakuAtPos = b.grids?.[b.npcCombatant]?.[npcPos - 1] || 0;
 
-  const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur || 3;
+  // 回避力 0（スペル等で減った）はそのまま 0。値が無いときだけ既定の 3
+  const getDefaultEvadeDice = (entity) => entity?.resources?.回避力?.cur ?? 3;
 
   const getEvadeNeighbors = (pos, wallPass) => {
     const base = ADJACENT_MAP[pos] || [];
@@ -1875,9 +1884,12 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
     const oldPos = b.positions[combatantId];
     if (!getEvadeNeighbors(oldPos, b.wallPassBy === combatantId).includes(targetCellNum)) return;
-    const bulletsCleared = b.grids[combatantId][oldPos - 1] || 0;
 
     upd(p => {
+      // 消える弾幕・グレイズはトランザクション内の最新の盤面から数える（振っている間に GM が弾幕を足した等）
+      if (p.battle?.phase !== (isPc ? "pc_evade_move" : "npc_evade_move") || (isPc ? p.battle.pcCombatant : p.battle.npcCombatant) !== combatantId) return p;
+      if (p.battle.positions?.[combatantId] !== oldPos) return p;
+      const bulletsCleared = p.battle.grids[combatantId]?.[oldPos - 1] || 0;
       const newGrid = [...p.battle.grids[combatantId]];
       newGrid[oldPos - 1] = 0;
 
@@ -1927,6 +1939,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
           noEvasionLoss: nextNoEvasionLoss,
+          ...(nextDice > 0 ? {} : { extraEvade: null }),
           afterDodgeShot: adsNext,
           ...(pendingDodge ? { pendingDodgeRandom: pendingDodge } : {}),
           phase: isPc
@@ -1949,9 +1962,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   // （現在マスの弾幕除去・グレイズ獲得・回避力消費は通常の回避移動と同じ、コマだけ動かさない）
   const handleEvadeStay = (isPc) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
-    const pos = b.positions[combatantId];
-    const bulletsCleared = b.grids[combatantId][pos - 1] || 0;
     upd(p => {
+      if ((isPc ? p.battle?.pcCombatant : p.battle?.npcCombatant) !== combatantId) return p;
+      const pos = p.battle.positions?.[combatantId];
+      const bulletsCleared = p.battle.grids[combatantId]?.[pos - 1] || 0;
       const newGrid = [...p.battle.grids[combatantId]];
       newGrid[pos - 1] = 0;
       const entity = isPc ? p.pcs.find(x => x.uid === combatantId) : p.battle.participants.npcs.find(n => n.id === combatantId);
@@ -1973,6 +1987,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           grids: { ...p.battle.grids, [combatantId]: newGrid },
           currentEvadeDice: nextDice,
           noEvasionLoss: nextNoEvasionLoss,
+          ...(nextDice > 0 ? {} : { extraEvade: null }),
           phase: isPc ? (nextDice > 0 ? "pc_evade_intro" : afterDefensePhase(false)) : (nextDice > 0 ? "npc_evade_intro" : afterDefensePhase(true)),
         },
         log: [`🛡 ${entity.charName || entity.name} はその場にとどまって回避（グレイズ+${bulletsCleared}）。`, ...mirrorLogs, ...p.log],
@@ -1989,7 +2004,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
       battle: {
         ...p.battle,
         positions: { ...p.battle.positions, [combatantId]: targetCellNum },
-        phase: nextPhase,
+        phase: nextPhase, extraEvade: null,
         currentEvadeDice: isPc ? getDefaultEvadeDice(p.pcs.find(x => x.uid === combatantId)) : p.battle.currentEvadeDice
       },
       log: [`✨ ${isPc ? pcs.find(x => x.uid === combatantId)?.charName : npcs.find(n => n.id === combatantId)?.name} は ${targetCellNum}番マスに復帰した。`, ...p.log]
@@ -2137,6 +2152,22 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
         const pcHit = restoredPcs.find(x => x.uid === id);
         if (pcHit) { restoredPcs = restoredPcs.map(x => x.uid === id ? dec1(x) : x); suntanLogs.push(`☀ ${pcHit.charName}：太陽を盗んだ鴉のデメリットで残り人数-1`); }
         else { const np = restoredNpcs.find(n => n.id === id); if (np) { restoredNpcs = restoredNpcs.map(n => n.id === id ? dec1(n) : n); suntanLogs.push(`☀ ${np.name}：太陽を盗んだ鴉のデメリットで残り人数-1`); } }
+      }
+
+      // デメリットでどちらかの陣営が全滅したら、次のラウンドに進まず結果（cleanup の勝敗表示）にとどまる
+      if (suntanLogs.length) {
+        const uids = currentB.participantPcUids || restoredPcs.map(x => x.uid);
+        const alive = (e) => (e.resources?.残り人数?.cur || 0) > 0;
+        const pcsWiped = !restoredPcs.filter(x => uids.includes(x.uid)).some(alive);
+        const npcsWiped = !restoredNpcs.some(alive);
+        if (pcsWiped || npcsWiped) {
+          return {
+            ...p,
+            pcs: restoredPcs,
+            battle: { ...currentB, participants: { ...currentB.participants, npcs: restoredNpcs }, suntanPenalty: {}, phase: "cleanup" },
+            log: [...suntanLogs, ...p.log],
+          };
+        }
       }
 
       return {
@@ -2592,7 +2623,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     const attackerId = isPc ? b.pcCombatant : b.npcCombatant;
     const canProceed = isPc ? (isGm || user.uid === b.pcCombatant) : isGm;
     const buttonStyle = btnFull(C.blueBg, C.blueBorder, C.blue);
-    const canUseWideShot = hasOfficialSkill(attacker, "ワイドショット") && !isDanmakuUsed(attackerId, "ワイドショット");
+    const canUseWideShot = canProceed && hasOfficialSkill(attacker, "ワイドショット") && !isDanmakuUsed(attackerId, "ワイドショット");
     const attackerPos = b.positions?.[attackerId];
     const attackerCellEmpty = attackerPos ? (b.grids?.[attackerId]?.[attackerPos - 1] || 0) === 0 : true;
     const canUseHighSpeed = canProceed && hasOfficialSkill(attacker, "高速移動") && !isDanmakuUsed(attackerId, "高速移動") && attackerCellEmpty && !b.highSpeedSelect;
@@ -3333,11 +3364,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                       });
                       // 実績(不死鳥の証明): 決戦での不死身使用回数
                       if (isFinalB) pcs = bumpAch(pcs, defenderId, a => ({ ...a, immortalUses: (a.immortalUses || 0) + 1 }));
-                      return { ...p, pcs, battle: { ...p.battle, phase: next }, log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-${immortalCost}・攻撃力更新）`, ...p.log] };
+                      return { ...p, pcs, battle: { ...p.battle, phase: next, extraEvade: null }, log: [`🛡 ${combatantPc?.charName} の『不死身』が発動（霊力-${immortalCost}・攻撃力更新）`, ...p.log] };
                     });
                   } else {
                     upd(p => ({ ...p,
-                      battle: { ...p.battle, phase: next,
+                      battle: { ...p.battle, phase: next, extraEvade: null,
                         participants: { ...p.battle.participants, npcs: p.battle.participants.npcs.map(n => n.id !== defenderId ? n : { ...n, resources: { ...n.resources, 霊力: { ...n.resources.霊力, cur: n.resources.霊力.cur - immortalCost } } }) }
                       },
                       log: [`🛡 ${combatantNpc?.name} の『不死身』が発動（霊力-${immortalCost}）`, ...p.log]
@@ -3363,37 +3394,34 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                 const defenderId = targetId;
                 animateDice(2, "喰らいボム", (res) => {
                   upd(p => {
-                    // SCを1消費
-                    let pcs = p.pcs.map(x => x.uid !== defenderId ? x : {
-                      ...x,
-                      resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, x.resources.スペルカード.cur - 1) } }
-                    });
-                    // 実績記録
+                    // 使った側（PC / NPC）の SC を1消費し、その側の「このラウンド使用済み」を立てる
+                    const spend = (x) => ({ ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, (x.resources.スペルカード?.cur || 0) - 1) } } });
+                    let pcs = isPc ? p.pcs.map(x => x.uid !== defenderId ? x : spend(x)) : p.pcs;
+                    const npcs = isPc ? p.battle.participants?.npcs : (p.battle.participants?.npcs || []).map(n => n.id !== defenderId ? n : spend(n));
+                    // 実績記録（PC のみ）
                     const isFinalB = b.isFinal ?? (b.type === "mass" && !b.questId);
-                    if (isFinalB && Math.max(...res) >= targetValue) {
+                    if (isPc && isFinalB && Math.max(...res) >= targetValue) {
                       pcs = bumpAch(pcs, defenderId, a => ({ ...a, kuraibomuSuccess: true }));
                     }
-                    
+
                     // 現在の回避ダイスプールに追加
                     const newDice = [...(p.battle.evadeRoll?.dice || []), ...res];
-                    
+
                     return {
                       ...p,
                       pcs,
-                      battle: { 
-                        ...p.battle, 
-                        pcLastResort: true,
+                      battle: {
+                        ...p.battle,
+                        ...(isPc ? { pcLastResort: true } : { npcLastResort: true, participants: { ...p.battle.participants, npcs } }),
                         evadeRoll: { ...p.battle.evadeRoll, dice: newDice }
                       },
                       log: [`💜 ${target?.charName || target?.name} 喰らいボム！SC-1 (追加:${res.join(",")})`, ...p.log]
                     };
                   });
-                  // 状態更新後、少し待ってから再判定を確定させる（アニメーションの完了を待つため）
-                  setTimeout(() => {
-                    const combatant = isPc ? combatantPc : combatantNpc;
-                    const currentDice = [...(gs.battle?.evadeRoll?.dice || []), ...res];
-                    resolveEvadeApply(isPc, currentDice, targetValue, combatant);
-                  }, 100);
+                  // 振り足した出目で再判定を確定させる（遅延させない: 遅らせると戦闘終了後に古い戦闘へ書き込む恐れがある）
+                  const combatant = isPc ? combatantPc : combatantNpc;
+                  const currentDice = [...(gs.battle?.evadeRoll?.dice || []), ...res];
+                  resolveEvadeApply(isPc, currentDice, targetValue, combatant);
                 });
               }}
               style={btnFull("rgba(171,71,188,0.2)", "#7b1fa2", C.purple, { opacity: (target?.resources?.スペルカード?.cur || 0) >= 1 ? 1 : 0.35 })}>
@@ -3408,7 +3436,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
             <button onClick={() => {
               const isAttackerPc = b.phase === "npc_hit_check";
               const next = afterDefensePhase(isAttackerPc);
-              upd(p => ({ ...p, battle: { ...p.battle, phase: next,
+              upd(p => ({ ...p, battle: { ...p.battle, phase: next, extraEvade: null,
                 currentEvadeDice: next === "pc_evade_intro" ? getDefaultEvadeDice(combatantPc) : p.battle.currentEvadeDice
               } }));
             }} style={btnFull(C.blueBg, C.blueBorder, C.blue)}>
@@ -3973,9 +4001,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
 
       {/* フェーズチェンジバナー */}
       {phaseBanner && (
-        <div style={{ position: "absolute", top: "18%", left: "50%", zIndex: 20, pointerEvents: "none", animation: "phaseBannerAnim 1.6s forwards" }}>
+        <div key={phaseBanner.key} style={{ position: "absolute", top: "18%", left: "50%", zIndex: 20, pointerEvents: "none", animation: "phaseBannerAnim 1.6s forwards" }}>
           <div style={{ fontSize: 22, fontWeight: "bold", color: C.gold, letterSpacing: 8, whiteSpace: "nowrap", textShadow: `0 0 24px ${C.gold}, 0 0 48px ${C.gold}66` }}>
-            {phaseBanner}
+            {phaseBanner.label}
           </div>
           <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${C.gold}, transparent)`, marginTop: 6, opacity: 0.6 }} />
         </div>

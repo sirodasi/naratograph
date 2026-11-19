@@ -68,6 +68,7 @@ export function adjustLives(p, entityId, delta) {
 
 // ─── 回避・被弾の流れ ────────────────────────────────────────────
 // 回避側の処理が終わった後のフェイズ（battle.jsx の afterDefensePhase と同じ規則 + 追加の回避ステップ）
+// ※ 追加の回避ステップの記録（extraEvade）は、防御が終わる更新で必ず null にすること（次の通常の防御まで残さない）
 export function afterDefense(b, isAttackerPc) {
   if (b?.extraEvade?.returnTo) return b.extraEvade.returnTo;
   const attackerIsFirst = b?.startOrder === "npc" ? !isAttackerPc : isAttackerPc;
@@ -75,7 +76,8 @@ export function afterDefense(b, isAttackerPc) {
   return "round_end_check";
 }
 
-const evadeOf = (e) => e?.resources?.回避力?.cur || 3;
+// 回避力 0（スペル等で減った）はそのまま 0。値が無いときだけ既定の 3
+const evadeOf = (e) => e?.resources?.回避力?.cur ?? 3;
 
 // 当たり判定中の被弾を無効にして次へ進める（霊撃など「被弾が確定していても無効にする」効果）
 export function cancelHit(p, label = "") {
@@ -87,7 +89,7 @@ export function cancelHit(p, label = "") {
   const pc = (p.pcs || []).find(x => x.uid === b.pcCombatant);
   return {
     ...withBattle(p, {
-      phase: next, evadeRoll: null,
+      phase: next, evadeRoll: null, extraEvade: null,
       currentEvadeDice: next === "pc_evade_intro" ? evadeOf(pc) : b.currentEvadeDice,
     }),
     log: logOf(p, `🛡 GM: ${label ? `${label}：` : ""}${entityName(p, defenderId)} の被弾を無効にした`),

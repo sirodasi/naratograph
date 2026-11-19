@@ -89,7 +89,11 @@ export function removeDef(p, kind, id) {
   if (kind === "cats") {
     next = withCustom(next, { items: getCustom(next).items.map(it => it.cat === id ? { ...it, cat: null } : it) });
   }
-  if (kind === "tokens") next = withCustom(next, { mapTokens: c.mapTokens.filter(t => t.kind !== id) });
+  if (kind === "tokens") {
+    next = withCustom(next, { mapTokens: c.mapTokens.filter(t => t.kind !== id) });
+    const ft = toArray(next.battle?.fieldTokens).filter(Boolean);
+    if (ft.some(t => t.kind === id)) next = { ...next, battle: { ...next.battle, fieldTokens: ft.filter(t => t.kind !== id) } };
+  }
   if (kind === "states") {
     next = { ...next, pcs: (next.pcs || []).map(pc => {
       const pcc = pcCustom(pc);
@@ -200,11 +204,13 @@ export function toggleItemUsed(p, uid, iid) {
   };
 }
 
-export function transferItem(p, fromUid, toUid, iid) {
+export function transferItem(p, fromUid, toUid, iid, sameSpot = false) {
   if (fromUid === toUid) return p;
   const from = (p.pcs || []).find(x => x.uid === fromUid);
+  const to = (p.pcs || []).find(x => x.uid === toUid);
   const it = pcCustom(from).items.find(x => x.iid === iid);
-  if (!it || !(p.pcs || []).some(x => x.uid === toUid)) return p;
+  if (!it || !to) return p;
+  if (sameSpot && from.currentSpot !== to.currentSpot) return p;
   const def = getCustom(p).items.find(d => d.id === it.def);
   const pcs = (p.pcs || []).map(x => {
     if (x.uid === fromUid) return { ...x, custom: { ...x.custom, items: pcCustom(x).items.filter(y => y.iid !== iid) } };
@@ -242,8 +248,9 @@ export function lookupTable(table, value) {
 }
 
 // 表を振った結果をログに残す（rolls は呼び出し側で振った出目の配列の配列）。結果一覧を返すのは UI 側で計算する
-export function logTableRoll(p, tableId, rolls) {
-  const t = getCustom(p).tables.find(x => x.id === tableId);
+// table: 振った時点の表の写し（省略時は gs から探す）。画面の結果とログを一致させるため、呼び出し側は写しを渡す
+export function logTableRoll(p, tableId, rolls, table = null) {
+  const t = table || getCustom(p).tables.find(x => x.id === tableId);
   if (!t || !rolls?.length) return p;
   const parts = rolls.map(r => {
     const v = tableValue(t.dice, r);
@@ -323,14 +330,16 @@ export function setClock(p, day, cycleIdx) {
     ...p, day: d, cycleIdx: ci,
     actedPcs: [], currentScene: null, reiryokuDone: false,
     ...(dayChanged ? { newspaper: null, newspaperDone: false, cluePlaced: false } : {}),
+    cycleSeq: (p.cycleSeq || 0) + 1,
     log: logOf(p, `⏳ GM: 時刻を ${clockLabel(p.day || 1, p.cycleIdx || 0)} → ${clockLabel(d, ci)} に変更`),
   };
 }
 
 // 現在のサイクルをもう一度行う（時刻は進めず、帰還・やる気減少もしない。永夜異変の繰り返し等）
+// cycleSeq を進めて、タイミングのメモ（サイクル開始時）がこの繰り返しを検出できるようにする
 export function repeatCycle(p) {
   return {
-    ...p, actedPcs: [], currentScene: null, reiryokuDone: false,
+    ...p, actedPcs: [], currentScene: null, reiryokuDone: false, cycleSeq: (p.cycleSeq || 0) + 1,
     log: logOf(p, `⏳ GM: ${clockLabel(p.day || 1, p.cycleIdx || 0)}サイクルをもう一度行う`),
   };
 }
@@ -391,11 +400,21 @@ export const appliedPresets = (gs) => toArray(gs?.custom?.applied).filter(Boolea
 // 現在の gs.custom の定義をプリセットとして書き出す（値・配置済みコマは含めない）
 export function presetFromGs(gs, name, desc = "") {
   const c = getCustom(gs);
+  // 書き出し id: 元の id（区切り以降）が種類内で重ならなければそれ、重なるなら「key_元id」（区切りを _ に）
+  const exportIds = (list) => {
+    const count = {};
+    list.forEach(d => { const b = baseId(d.id); count[b] = (count[b] || 0) + 1; });
+    const map = {};
+    list.forEach(d => { map[d.id] = count[baseId(d.id)] > 1 ? String(d.id).split(PRESET_SEP).join("_") : baseId(d.id); });
+    return map;
+  };
+  const catMap = exportIds(c.cats);
   const defs = {};
   PRESET_KINDS.forEach(k => {
+    const map = k === "cats" ? catMap : exportIds(c[k]);
     defs[k] = c[k].map(d => {
-      const out = { ...d, id: baseId(d.id) };
-      if (k === "items" && d.cat) out.cat = baseId(d.cat);
+      const out = { ...d, id: map[d.id] };
+      if (k === "items" && d.cat) out.cat = catMap[d.cat] || baseId(d.cat);
       return out;
     });
   });
@@ -408,6 +427,12 @@ export function applyPreset(p, preset0, key, opts = {}) {
   if (!preset || !key) return p;
   const pid = (id) => `${key}${PRESET_SEP}${baseId(id)}`;
   let next = p;
+  // 再適用は置き換え: 前回この key で入れた定義のうち、今回のプリセットに無いものは外す（値・所持品なども removeDef で片付く）
+  const prefix = `${key}${PRESET_SEP}`;
+  PRESET_KINDS.forEach(k => {
+    const keep = new Set(preset.defs[k].map(d => pid(d.id)));
+    getCustom(next)[k].filter(d => String(d.id).startsWith(prefix) && !keep.has(d.id)).forEach(d => { next = removeDef(next, k, d.id); });
+  });
   PRESET_KINDS.forEach(k => {
     preset.defs[k].forEach(d => {
       const def = { ...d, id: pid(d.id) };
@@ -419,7 +444,7 @@ export function applyPreset(p, preset0, key, opts = {}) {
   // 初期値が「PC の人数」の全体共有ステータス（刻符ノルマ等）。既に値があれば触らない（再適用で上書きしない）
   const global = { ...getCustom(next).global };
   preset.defs.stats.forEach(s => {
-    if (s.scope === "global" && s.initFromPcCount && global[pid(s.id)] == null) global[pid(s.id)] = Math.max(0, opts.pcCount || 0);
+    if (s.scope === "global" && s.initFromPcCount && global[pid(s.id)] == null) global[pid(s.id)] = Math.max(0, opts.pcCount ?? toArray(p.pcs).filter(Boolean).length);
   });
   const applied = [...appliedPresets(next).filter(a => a.key !== key), { key, name: preset.name }];
   next = withCustom(next, { global, applied });
@@ -427,6 +452,10 @@ export function applyPreset(p, preset0, key, opts = {}) {
     const { day, cycleIdx, limitDay, limitCycleIdx } = preset.clock;
     if (day) next = setClock(next, day, cycleIdx ?? 0);
     if (limitDay) next = setLimit(next, limitDay, limitCycleIdx ?? 3);
+    // 導入フェイズ中に適用した場合、探索フェイズの開始（通常は1日目の朝に戻す）でもこの時刻を使う
+    if (day && String(next.sessionPhase || "").startsWith("intro")) {
+      next = withCustom(next, { startClock: { key, day: next.day, cycleIdx: next.cycleIdx } });
+    }
   }
   return { ...next, log: [`📜 GM: 異変再現「${preset.name}」を適用した`, ...(next.log || [])] };
 }
@@ -439,7 +468,10 @@ export function unapplyPreset(p, key) {
   PRESET_KINDS.forEach(k => {
     getCustom(next)[k].filter(d => String(d.id).startsWith(prefix)).forEach(d => { next = removeDef(next, k, d.id); });
   });
-  next = withCustom(next, { applied: appliedPresets(next).filter(a => a.key !== key) });
+  next = withCustom(next, {
+    applied: appliedPresets(next).filter(a => a.key !== key),
+    ...(next.custom?.startClock?.key === key ? { startClock: null } : {}),
+  });
   return { ...next, log: [`📜 GM: 異変再現「${name || key}」を解除した`, ...(p.log || [])] };
 }
 
@@ -463,13 +495,15 @@ const clampInt = (v, lo, hi, fallback) => {
 };
 const colorOr = (v) => (typeof v === "string" && /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : undefined);
 // 「.#$[]/」・空白・プリセット区切り（__）を含まない短い id にする
-export const safeDefId = (id) => baseId(str(id, 60)).replace(/[.#$/[\]\s]/g, "_").replace(/_{2,}/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+// eslint-disable-next-line no-control-regex
+export const safeDefId = (id) => baseId(str(id, 60)).replace(/[.#$/[\]\s\x00-\x1f\x7f]/g, "_").replace(/_{2,}/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+const enumOr = (map, v, fallback) => (typeof v === "string" && Object.prototype.hasOwnProperty.call(map, v) ? v : fallback);
 
 const DEF_SANITIZERS = {
   stats: (d) => {
     const name = str(d.name);
     if (!name) return null;
-    const scope = STAT_SCOPES[d.scope] ? d.scope : "pc";
+    const scope = enumOr(STAT_SCOPES, d.scope, "pc");
     const out = { name, scope, min: intOr(d.min, null), max: intOr(d.max, null), init: intOr(d.init, 0) };
     if (scope === "global" && d.initFromPcCount === true) out.initFromPcCount = true;
     return out;
@@ -483,14 +517,14 @@ const DEF_SANITIZERS = {
       const min = intOr(r.min, null), max = intOr(r.max, min);
       return min == null ? null : { min, max: max ?? min, text: str(r.text, FILE_LIMITS.text) };
     }).filter(Boolean);
-    return { name, dice: TABLE_DICE[d.dice] ? d.dice : "d6", rows };
+    return { name, dice: enumOr(TABLE_DICE, d.dice, "d6"), rows };
   },
   tokens: (d) => { const name = str(d.name); return name ? { name, color: colorOr(d.color) || "#e8a0b8", unique: d.unique !== false } : null; },
   states: (d) => { const name = str(d.name); return name ? { name, desc: str(d.desc, FILE_LIMITS.text), color: colorOr(d.color) || "#e8a0b8" } : null; },
   rules: (d) => { const title = str(d.title); return title ? { title, text: str(d.text, FILE_LIMITS.text) } : null; },
   reminders: (d) => {
     const text = str(d.text, FILE_LIMITS.text);
-    if (!text || !REMINDER_TIMINGS.some(t => t.key === d.timing)) return null;
+    if (!text || typeof d.timing !== "string" || !REMINDER_TIMINGS.some(t => t.key === d.timing)) return null;
     return { timing: d.timing, text, finalOnly: isBattleTiming(d.timing) && d.finalOnly === true };
   },
 };
@@ -544,7 +578,7 @@ export function parsePresetFile(text) {
   if (raw.format === undefined && (!raw.defs || typeof raw.defs !== "object")) return { error: "異変再現プリセットのファイルではありません" };
   if (Number(raw.version) > PRESET_FILE_VERSION) return { error: "新しい版のアプリで書き出されたファイルです。アプリを更新してから読み込んでください" };
   const preset = sanitizePreset(raw);
-  if (!hasAnyDef(preset)) return { error: "読み込める定義がありませんでした" };
+  if (!hasAnyDef(preset) && !preset.clock) return { error: "読み込める定義も時刻もありませんでした" };
   return { preset };
 }
 
@@ -575,6 +609,7 @@ export function timingSnapshot(gs) {
     phase: gs?.sessionPhase || null,
     day: gs?.day || 1,
     ci: gs?.cycleIdx || 0,
+    seq: gs?.cycleSeq || 0,
     acted: acted.length,
     allActed: pcs.length > 0 && pcs.every(pc => acted.includes(pc.uid)),
     scene: gs?.currentScene?.pcUid || null,
@@ -605,8 +640,8 @@ export function detectTimings(prev, cur) {
   if (explore) {
     const fromIntro = String(prev.phase || "").startsWith("intro");
     const clockMoved = prev.day !== cur.day || prev.ci !== cur.ci;
-    const reset = prev.phase === "explore" && prev.allActed && prev.acted > 0 && cur.acted === 0; // 同じサイクルの繰り返し等
-    const newCycle = fromIntro || clockMoved || reset;
+    const repeated = prev.phase === "explore" && (cur.seq || 0) !== (prev.seq || 0); // 同じサイクルの繰り返し（repeatCycle・永遠と須臾）
+    const newCycle = fromIntro || clockMoved || repeated;
     if (newCycle) {
       // 全員の行動を待たずに進めた場合も、終了時のメモはここで出す
       if (prev.phase === "explore" && !endReady(prev)) push("cycle_end");

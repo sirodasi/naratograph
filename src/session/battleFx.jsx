@@ -51,8 +51,11 @@ export function useBattleFx(gs) {
   const seq = useRef(0);
   const [cutin, setCutin] = useState(null);
   const [hit, setHit] = useState(null);
-  const [shake, setShake] = useState({ n: 0, ko: false });
+  const [shake, setShake] = useState({ n: 0, ko: false, on: false });
   const [gridFx, setGridFx] = useState({});
+  const timers = useRef([]);
+  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  const later = (fn, ms) => { timers.current.push(setTimeout(fn, ms)); };
 
   useEffect(() => {
     const cur = JSON.parse(snapKey);
@@ -62,18 +65,25 @@ export function useBattleFx(gs) {
     if (!events.length) return;
     const still = !!motion.reduced;
     const patch = {};
+    // 同じ更新で複数の宣言が届いたら、表示する最後の1枚の分だけ音を鳴らす
+    const spells = events.filter(e => e.type === "spell");
+    if (spells.length) {
+      const ev = spells[spells.length - 1];
+      setCutin({ key: ++seq.current, still, ...ev });
+      sfx.cutin();
+      sfx.spell(!ev.pc);
+    }
     events.forEach(ev => {
       const key = ++seq.current;
       const slot = (patch[ev.id] = patch[ev.id] || {});
       if (ev.type === "spell") {
-        setCutin({ key, still, ...ev });
-        sfx.cutin();
-        sfx.spell(!ev.pc);
+        return;
       } else if (ev.type === "hit") {
         if (!still) {
           slot.hit = { key, cell: ev.cell };
           slot.life = { key, index: ev.lives, lost: ev.lost };
-          setShake(s => ({ n: s.n + 1, ko: ev.ko }));
+          setShake(s => ({ n: s.n + 1, ko: ev.ko, on: true }));
+          later(() => setShake(s => ({ ...s, on: false })), ev.ko ? 900 : 600);
         }
         setHit({ key, still, ...ev });
         if (ev.ko) sfx.ko(); else sfx.hit();
@@ -84,11 +94,25 @@ export function useBattleFx(gs) {
         sfx.graze(ev.amount);
       }
     });
+    if (!Object.keys(patch).length) return;
     setGridFx(g => {
       const next = { ...g };
       Object.entries(patch).forEach(([id, s]) => { next[id] = { ...(g[id] || {}), ...s }; });
       return next;
     });
+    // 再生し終えたマスの演出は消す（盤面が一度消えて出し直されたときに、古い演出が再生されないように）
+    later(() => setGridFx(g => {
+      let changed = false;
+      const next = { ...g };
+      Object.entries(patch).forEach(([id, s]) => {
+        const curFx = next[id];
+        if (!curFx) return;
+        const kept = { ...curFx };
+        Object.entries(s).forEach(([kind, v]) => { if (kept[kind]?.key === v.key) { delete kept[kind]; changed = true; } });
+        next[id] = kept;
+      });
+      return changed ? next : g;
+    }), 1600);
   }, [snapKey]);
 
   useEffect(() => {
@@ -106,7 +130,7 @@ export function useBattleFx(gs) {
 }
 
 // 揺れのアニメーション名（同じ名前のままでは再生し直されないので、回数の偶奇で 2 つを交互に使う）
-export const shakeAnimation = (shake) => !shake.n ? "none"
+export const shakeAnimation = (shake) => (!shake.n || !shake.on) ? "none"
   : `${shake.ko ? (shake.n % 2 ? "fxShakeKoA" : "fxShakeKoB") : (shake.n % 2 ? "fxShakeA" : "fxShakeB")} ${shake.ko ? 0.7 : 0.45}s ease-out`;
 
 // ─── 被弾の全面演出（赤い閃光＋文字。撃破・脱落は白→暗転＋大きな文字） ─────────

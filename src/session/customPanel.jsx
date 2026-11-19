@@ -179,7 +179,7 @@ export function CustomPcSection({ pc, gs, upd, isGm, myUid }) {
                 {def?.desc && <div style={{ fontSize: 8, color: C.textDim, lineHeight: 1.4, marginTop: 2, whiteSpace: "pre-wrap" }}>{def.desc}</div>}
                 {passing === it.iid && (
                   <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 4 }}>
-                    {passTargets.map(t => <button key={t.uid} onClick={() => { setPassing(null); upd(p => transferItem(p, pc.uid, t.uid, it.iid)); }} style={tiny(C.blue)}>→ {t.charName}</button>)}
+                    {passTargets.map(t => <button key={t.uid} onClick={() => { setPassing(null); upd(p => transferItem(p, pc.uid, t.uid, it.iid, !isGm)); }} style={tiny(C.blue)}>→ {t.charName}</button>)}
                   </div>
                 )}
               </div>
@@ -301,7 +301,6 @@ function PresetSection({ gs, upd, user }) {
   const [busy, setBusy] = useState(false);
   const [openDesc, setOpenDesc] = useState(null);
   const applied = appliedPresets(gs);
-  const pcCount = (gs.pcs || []).length;
   const hasDefs = DEF_KINDS.some(k => getCustom(gs)[k].length > 0);
 
   const uid = user?.uid || null;
@@ -324,8 +323,9 @@ function PresetSection({ gs, upd, user }) {
   const apply = (preset, key) => {
     const isApplied = applied.some(a => a.key === key);
     const clockNote = preset.clock && withClock ? "\n時刻とリミットも設定します（行動済み・進行中のシーンはリセット）。" : "";
-    if (!window.confirm(`異変再現「${preset.name}」を${isApplied ? "再" : ""}適用しますか？${isApplied ? "\n（定義を上書きします。現在の値は保持されます）" : ""}${clockNote}`)) return;
-    upd(p => applyPreset(p, preset, key, { pcCount, withClock: withClock && !!preset.clock }));
+    if (!window.confirm(`異変再現「${preset.name}」を${isApplied ? "再" : ""}適用しますか？${isApplied ? "\n（このプリセットの定義に置き換えます。プリセットから無くなった定義は外れ、残る定義の値は保持されます）" : ""}${clockNote}`)) return;
+    // PC の人数（刻符ノルマ等の初期値）はトランザクション内の p.pcs から数える
+    upd(p => applyPreset(p, preset, key, { withClock: withClock && !!preset.clock }));
   };
   const unapply = (a) => {
     if (!window.confirm(`異変再現「${a.name}」を解除しますか？\nこのプリセットで追加したステータス・アイテム（PCの所持分も）・表・コマ・状態・ルールが全て消えます。`)) return;
@@ -668,7 +668,7 @@ function TableSection({ c, gs, upd, prep = false }) {
   const [times, setTimes] = useState(1);
   const [results, setResults] = useState(null); // { tableId, list: [{ key, rolled, value, text }] }
   const [giveTo, setGiveTo] = useState({});      // { [resultKey]: uid }
-  const [given, setGiven] = useState({});        // { [resultKey]: true }
+  const [given, setGiven] = useState({});        // { [resultKey]: 渡したアイテムの iid }（実際に所持品に入ったかは gs で確かめる）
 
   const reset = () => { setEditId(null); setName(""); setDice("d6"); setRowsText(""); };
   const parsed = parseTableRows(rowsText);
@@ -686,7 +686,7 @@ function TableSection({ c, gs, upd, prep = false }) {
     const stamp = Date.now().toString(36);
     const list = rolls.map((r, i) => { const value = tableValue(t.dice, r); return { key: `${stamp}_${i}`, rolled: r, value, text: lookupTable(t, value)?.text || "（該当なし）" }; });
     setResults({ tableId: t.id, list }); setGiveTo({}); setGiven({});
-    upd(p => logTableRoll(p, t.id, rolls));
+    upd(p => logTableRoll(p, t.id, rolls, t));
   };
 
   return (
@@ -719,14 +719,14 @@ function TableSection({ c, gs, upd, prep = false }) {
                   <div key={r.key} style={{ ...row, marginBottom: 2 }}>
                     <span style={{ fontSize: 9, color: C.textFaint }}>[{r.rolled.join(",")}] {r.value}</span>
                     <span style={{ fontSize: 10, color: C.text }}>{r.text}</span>
-                    {item && (given[r.key]
+                    {item && (given[r.key] && (gs.pcs || []).some(pc => pcCustom(pc).items.some(x => x.iid === given[r.key]))
                       ? <span style={{ fontSize: 8, color: C.green, marginLeft: "auto" }}>渡した</span>
                       : <span style={{ marginLeft: "auto", display: "inline-flex", gap: 3 }}>
                           <select value={giveTo[r.key] || ""} onChange={e => setGiveTo(g => ({ ...g, [r.key]: e.target.value }))} style={{ ...sel, fontSize: 9, padding: "2px 4px" }}>
                             <option value="">PC...</option>
                             {pcs.map(pc => <option key={pc.uid} value={pc.uid}>{pc.charName}</option>)}
                           </select>
-                          <button disabled={!giveTo[r.key]} onClick={() => { const to = giveTo[r.key]; const iid = newId("ii"); setGiven(g => ({ ...g, [r.key]: true })); upd(p => giveItem(p, to, item.id, iid, `表「${c.tables.find(t => t.id === results.tableId)?.name || ""}」`)); }} style={tiny(C.gold)}>渡す</button>
+                          <button disabled={!giveTo[r.key]} onClick={() => { const to = giveTo[r.key]; const iid = newId("ii"); setGiven(g => ({ ...g, [r.key]: iid })); upd(p => giveItem(p, to, item.id, iid, `表「${c.tables.find(t => t.id === results.tableId)?.name || ""}」`)); }} style={tiny(C.gold)}>渡す</button>
                         </span>)}
                   </div>
                 );

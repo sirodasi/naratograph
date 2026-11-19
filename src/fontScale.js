@@ -21,7 +21,7 @@ const TOUCH_CSS = `
   [data-touch-zoom] { zoom: 1.2; }
   html[data-font-scale="1"] [data-touch-zoom] { zoom: 1.08; }
   html[data-font-scale="2"] [data-touch-zoom] { zoom: 1; }
-  [data-touch-zoom] [data-touch-zoom] { zoom: 1; }
+  html [data-touch-zoom] [data-touch-zoom] { zoom: 1; }
 }
 @media (pointer: coarse) {
   [data-touch-zoom] button, [data-touch-zoom] select,

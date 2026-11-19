@@ -100,6 +100,8 @@ export const ITEM_DATA = {
       if (!(pc.badStatus || []).includes("スランプ")) {
         const r = resources.霊力 || { cur: 0, max: 30 };
         resources.霊力 = { cur: Math.min(r.cur + 3, r.max), max: r.max };
+        // 攻撃力は霊力から決まる（他の霊力変化と同じく 1 + 霊力/5）
+        resources.攻撃力 = { ...(resources.攻撃力 || { max: 99 }), cur: 1 + Math.floor(resources.霊力.cur / 5) };
       }
       return { ...pc, items: { ...pc.items, "Pアイテム": Math.max(0, (pc.items["Pアイテム"] || 0) - 1) }, resources };
     },
@@ -288,7 +290,8 @@ export function buildBattleNpc(enemy, id, opts = {}) {
       残り人数: { cur: enemy.life, max: 5 },
       スペルカード: { cur: enemy.spellcard, max: 5 },
       攻撃力: { cur: enemy.attack, max: 99 },
-      回避力: { cur: enemy.evade || 3, max: 3 },
+      // 0 はそのまま 0（回避ダイスなし）。未設定・空欄・数値でない値だけ既定の 3
+      回避力: { cur: (enemy.evade === "" || enemy.evade == null || !Number.isFinite(Number(enemy.evade))) ? 3 : Number(enemy.evade), max: 3 },
       グレイズ: { cur: 0, max: 5 },
     },
     ds: enemy.ds ?? { name: enemy.dsName || enemy.dsCustomName || "", desc: enemy.dsDesc || "" },
@@ -330,7 +333,10 @@ export function parseSpell(text) {
   const condition = extractCondition(text);
 
   // 本文から条件文を取り除いたもの（重複表示の防止に使う）
-  const textBody = condition ? text.replace(condition, "").trim() : text;
+  // 原文の末尾に「。」が無い条件文にも対応する（表示用の condition には「。」を補っている）
+  const textBody = condition
+    ? (text.includes(condition) ? text.replace(condition, "") : text.replace(condition.replace(/。$/, ""), "")).trim()
+    : text;
 
   return {
     timing,

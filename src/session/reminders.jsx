@@ -25,14 +25,12 @@ export function GmReminderOverlay({ gs }) {
     if (!prev) return; // 入室・再読み込み直後は出さない
     const fired = remindersFor({ custom: { reminders: JSON.parse(remKey) } }, detectTimings(prev, cur));
     if (!fired.length) return;
+    // id は更新関数の外で決める（更新関数は純粋に保つ）
+    const added = fired.map(g => ({ id: `g${++seqRef.current}`, key: g.key, label: g.label, items: g.items.map(r => ({ id: r.id, text: r.text })), done: {} }));
     setGroups(list => {
       let next = list;
-      fired.forEach(g => {
-        const id = `g${++seqRef.current}`;
-        const items = g.items.map(r => ({ id: r.id, text: r.text }));
-        // 同じタイミングがまだ残っていれば置き換える（チェックはやり直し）
-        next = [...next.filter(x => x.key !== g.key), { id, key: g.key, label: g.label, items, done: {} }];
-      });
+      // 同じタイミングがまだ残っていれば置き換える（チェックはやり直し）
+      added.forEach(g => { next = [...next.filter(x => x.key !== g.key), g]; });
       return next.slice(-MAX_GROUPS);
     });
     setHidden(false);

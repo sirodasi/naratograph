@@ -491,13 +491,14 @@ function PrepRoom({ roomCode, user, isGm }) {
                 <button onClick={() => setShowProfile(true)} style={{ ...btn("rgba(255,255,255,0.03)", C.border, C.textDim, { padding: "2px 8px", fontSize: 9 }) }}>📋 管理</button>
               </div>
               <ScenarioSelector value={room?.scenarioData} onChange={sc => {
-                update(ref(db, `rooms/${roomCode}`), {
-                  scenario:     sc.name,
-                  scenarioId:   sc.id,
-                  limit:        sc.limit || "3日目の夜",
-                  scenarioData: publicScenario(sc), // 答え等は roomSecrets へ
-                });
-                set(ref(db, `roomSecrets/${roomCode}/gm/scenarioData`), stripUndefined(sc)).catch(console.error);
+                // 公開用（答え等を除く）と GM 用の全文を、複数パスの update で同時に書く（片方だけ更新された状態を作らない）
+                update(ref(db), {
+                  [`rooms/${roomCode}/scenario`]:     sc.name,
+                  [`rooms/${roomCode}/scenarioId`]:   sc.id ?? null,
+                  [`rooms/${roomCode}/limit`]:        sc.limit || "3日目の夜",
+                  [`rooms/${roomCode}/scenarioData`]: stripUndefined(publicScenario(sc)),
+                  [`roomSecrets/${roomCode}/gm/scenarioData`]: stripUndefined(sc),
+                }).catch(e => { console.error(e); alert(`シナリオの保存に失敗しました: ${e?.message || e}`); });
               }} />
             </div>
           )}
@@ -873,8 +874,8 @@ export default function LobbyRoot() {
       if (snap.exists()) {
         const v = snap.val();
         setRoomPhase(v.phase);
-        const myPlayer = v.players?.[user.uid];
-        setIsGm(myPlayer ? myPlayer.role === "gm" : false);
+        // GM かどうかは部屋の gmUid で決める（players の role はプレイヤーが書き換えられるため使わない）
+        setIsGm(v.gmUid === user.uid);
       }
     });
     return () => unsub();

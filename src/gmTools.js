@@ -138,13 +138,18 @@ export function giveTableItem(p, id, uid, iid) {
   const resp = req?.responses?.[uid];
   const item = tableResult(req, resp, p)?.item;
   if (!item || resp.given || !iid) return p;
-  const marked = patchResponse(p, id, uid, (cur) => ({ ...cur, given: true }));
-  return giveItem(marked, uid, item.id, iid, `表「${req.table.name}」`);
+  // 先に渡し、実際に渡せた（PC がいる）ときだけ「渡し済み」にする（同じ更新の中で両方）
+  const granted = giveItem(p, uid, item.id, iid, `表「${req.table.name}」`);
+  if (granted === p) return p;
+  return patchResponse(granted, id, uid, (cur) => ({ ...cur, given: true })) || p;
 }
 
 // 応援（判定後の振り足し）。応援者の絆の消費は cheerConsumePatch。
 // fragile = 失敗でファンブルになる応援（魂の弱い所／人を狂わす）。cheers に記録し、判定の評価に反映する。
 export function addCheerDice(p, id, judgeUid, cheererUid, bondName, dice, fragile = false) {
+  // 応援できるかをトランザクション内の最新の状態で確かめ直す（振っている間に移動した・絆を使い切った等）
+  const judge = (p.pcs || []).find(x => x.uid === judgeUid);
+  if (!judge || !cheerOptions(p.pcs, judge).some(o => o.cheerer.uid === cheererUid && o.bondName === bondName && !!o.fragile === !!fragile)) return p;
   let added = false;
   const next = patchResponse(p, id, judgeUid, (cur) => {
     if (!toArray(cur.dice).length || cur.confirmed) return cur;
@@ -284,6 +289,7 @@ export function startAdhocBattle(p, { enemies, participantPcUids, title }, stamp
       type: npcs.length > 1 || uids.length > 1 ? "mass" : "normal",
       phase: "setup",
       adhoc: true,
+      isFinal: false, // 集団戦（mass）でも決戦ではない（旧形式の「mass かつ questId なし＝決戦」判定に掛からないように）
       title: label,
       participantPcUids: uids,
       ...(p.currentScene?.pcUid ? { scenePcUid: p.currentScene.pcUid } : {}),

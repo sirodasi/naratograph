@@ -8,7 +8,13 @@ import { getAbilityEffect, applyAbilityPassiveStats } from "../data/abilityEffec
 import { achAddTo } from "../data/achievements";
 import { GmPcEditor } from "./gmPanel";
 import { CustomPcSection } from "./customPanel";
-import { BAD_STATUS_TABLE, INIT_ITEMS, INIT_RESOURCES, ITEM_DATA, ITEM_NAMES, PS_ONCE_FLAG, SKILL_TYPE_COLOR, SpellCard, buildSpellCard, gainIntimacy, getSpotByD66 } from "./shared";
+import { BAD_STATUS_TABLE, INIT_ITEMS, INIT_RESOURCES, ITEM_DATA, ITEM_NAMES, PS_ONCE_FLAG, SKILL_TYPE_COLOR, SpellCard, buildSpellCard, gainIntimacy, getSpotByD66, isBadStatusImmune } from "./shared";
+
+// アイテム交換: 手放す分を引いてから、得る分を足す（同じアイテムを選んだら個数は変わらない）
+export function tradeItems(items, lose, gain) {
+  const after = { ...(items || {}), [lose]: Math.max(0, ((items || {})[lose] || 0) - 1) };
+  return { ...after, [gain]: (after[gain] || 0) + 1 };
+}
 
 // 発動可能スキルの強調：ブロック枠（左アクセント＋淡い地＋内側グロー）と発動ボタン
 export const skillReadyBox = (color) => ({ borderLeft: `3px solid ${color}`, background: `${color}12`, borderRadius: 4, padding: "6px 8px", boxShadow: `inset 0 0 0 1px ${color}26` });
@@ -2164,7 +2170,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
             {ITEM_NAMES.map(itemName => (
               <button key={itemName} onClick={() => {
                 proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
-                  pc: { items: { ...pc.items, [selectedLose]: Math.max(0, pc.items[selectedLose] - 1), [itemName]: (pc.items[itemName] || 0) + 1 } }
+                  pc: { items: tradeItems(pc.items, selectedLose, itemName) }
                 });
               }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
             ))}
@@ -2177,7 +2183,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
           <button onClick={() => animateDice(1, "アイテム交換", res => {
             const itemName = ITEM_NAMES[res[0] - 1];
             proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
-              pc: { items: { ...pc.items, [selectedLose]: Math.max(0, pc.items[selectedLose] - 1), [itemName]: (pc.items[itemName] || 0) + 1 } }
+              pc: { items: tradeItems(pc.items, selectedLose, itemName) }
             });
           })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを獲得する</button>
         </div>
@@ -2191,6 +2197,8 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
       <div style={{ textAlign: "center", animation: "fadeUp 0.2s ease" }}>
         <button onClick={() => animateDice(1, "変調決定", res => {
           const bsName = BAD_STATUS_TABLE[res[0]].name;
+          // 馬鹿: 免疫のある変調は受けない（やる気の変化も無し）
+          if (isBadStatusImmune(pc, bsName)) { proceed([`${pc.charName} は《${bsName}》に免疫があるため、変調を受けなかった（馬鹿）`]); return; }
           const newBs  = Array.from(new Set([...(pc.badStatus || []), bsName]));
           const nextYaruki = bsName === "だるい" ? 1 : pc.resources.やる気?.cur;
           proceed([`${pc.charName} は変調《${bsName}》を獲得した`], {

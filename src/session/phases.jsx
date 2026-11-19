@@ -4,7 +4,7 @@ import { sfx } from "../audio";
 import { C, btnFull, iStyle } from "../styles/colors";
 import { ACHIEVEMENTS, buildAchContext, aggregateLifetime, getAchievement } from "../data/achievements";
 import { db } from "../firebase";
-import { ref as dbRef, set as dbSet, get as dbGet, remove as dbRemove } from "firebase/database";
+import { ref as dbRef, set as dbSet, get as dbGet, update as dbUpdate } from "firebase/database";
 import { ENHANCE_LABELS } from "./shared";
 
 export function BonusPhaseView({ gs, upd, user, isGm, animateDice }) {
@@ -180,7 +180,14 @@ export function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
 
   const setForm = (uid, patch) => setForms(f => ({ ...f, [uid]: { ...(f[uid] || {}), ...patch } }));
 
+  const savingRef = useRef(new Set());
+  const instanceIdRef = useRef({});
   const applyGrowth = async (pc) => {
+    if (savingRef.current.has(pc.uid)) return;
+    savingRef.current.add(pc.uid);
+    try { await applyGrowthOnce(pc); } finally { savingRef.current.delete(pc.uid); }
+  };
+  const applyGrowthOnce = async (pc) => {
     const form = forms[pc.uid] || {};
     const existing = records[pc.uid] || {};
     const usedSet = new Set(existing.enhancementsUsed || []);
@@ -189,7 +196,7 @@ export function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
     // タグ
     const newTag = (form.newTag || "").trim();
     // 強化（未使用のもののみ）
-    let specialBond = existing.specialBond || null;
+    let specialBond = existing.specialBond || pc.specialBond || null;
     let enhanceApplied = null;
     if (form.enhance && !usedSet.has(form.enhance)) {
       usedSet.add(form.enhance);
@@ -201,7 +208,7 @@ export function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
       }
     }
     // インスタンスID: 成長キャラで参加していれば更新、未成長なら新規（＝別の成長キャラとして分離）
-    const instanceId = pc.grownInstanceId || `g_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const instanceId = pc.grownInstanceId || instanceIdRef.current[pc.uid] || (instanceIdRef.current[pc.uid] = `g_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
     const record = {
       charId: pc.charId || null,
       charName: pc.charName || "?",
@@ -239,7 +246,7 @@ export function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
         growthAbilityUnlocked: x.growthAbilityUnlocked || usedSet.has("ability"),
         growthSpellUnlocked: x.growthSpellUnlocked || usedSet.has("spell"),
         specialBond: record.specialBond || x.specialBond || null,
-        grownBase: { tags: record.tags, enhancementsUsed: record.enhancementsUsed, createdAt: record.createdAt },
+        grownBase: { tags: record.tags, enhancementsUsed: record.enhancementsUsed, createdAt: record.createdAt, specialBond: record.specialBond || null },
         growthApplied: true,
         pendingGrowthRecord,
         // 実績: 縁結び（特別な絆獲得）/ 大器晩成（成長と強化を両方）
@@ -414,7 +421,7 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
       await dbSet(dbRef(db, `users/${uid}/achievements`), nextUnlocked);
       if (!already) await dbSet(dbRef(db, `users/${uid}/achProcessed/${roomCode}`), Date.now());
       if (newly.length) { sfx.victory?.(); }
-      setAchResult({ newly, unlocked: satisfied });
+      setAchResult({ newly, unlocked: Object.keys(nextUnlocked) });
       // GM の終了画面で「実績記録済み」を表示するためのフラグ
       upd(p => ({ ...p, pcs: (p.pcs || []).map(x => x.uid !== uid ? x : { ...x, achRecorded: true }) }));
     } catch (e) {
@@ -684,10 +691,14 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
                 const pendingWarn = warns.length ? `\n\n${warns.join("\n")}` : "";
                 if (window.confirm(`セッションを終了しますか？\nセッションログ(.txt)を保存し、ルームデータを削除します。この操作は元に戻せません。${pendingWarn}`)) {
                   setEnding(true);
-                  await exportLog(); // ログを出力（退避ログ取得を待ってから部屋を消す）
-                  if (roomCode) {
-                    dbRemove(dbRef(db, `roomSecrets/${roomCode}`)).catch(console.error); // 秘匿データ（GM のみ削除可）
-                    dbRemove(dbRef(db, `rooms/${roomCode}`)).catch(console.error); // ルームデータ削除
+                  try {
+                    await exportLog(); // ログを出力（退避ログ取得を待ってから部屋を消す）
+                    // 秘匿データ（GM のみ削除可）と部屋を、複数パスの更新で同時に消す（片方だけ残さない）
+                    if (roomCode) await dbUpdate(dbRef(db), { [`roomSecrets/${roomCode}`]: null, [`rooms/${roomCode}`]: null });
+                  } catch (e) {
+                    console.error(e);
+                    alert(`セッションの終了に失敗しました: ${e?.message || e}\n通信状況を確認して、もう一度お試しください。`);
+                    setEnding(false);
                   }
                 }
               }}

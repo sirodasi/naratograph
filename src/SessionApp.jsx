@@ -1054,7 +1054,9 @@ export default function SessionApp({ roomCode, user }) {
 
     upd(p => ({
       ...p,
-      sessionPhase: "explore", day: 1, cycleIdx: 0,
+      // 導入中に異変再現のプリセットで開始時刻を指定していれば（永夜異変の夜など）、その時刻から始める
+      sessionPhase: "explore", day: p.custom?.startClock?.day || 1, cycleIdx: p.custom?.startClock?.cycleIdx ?? 0,
+      ...(p.custom?.startClock ? { custom: { ...p.custom, startClock: null } } : {}),
       clues:  clueSpots,
       quests: startQuests.map(q => ({ ...q, revealed: true, solved: false })),
       log: [`探索フェイズ開始。手がかりを${clueCount}箇所に配置。`, ...p.log],
@@ -1148,7 +1150,7 @@ export default function SessionApp({ roomCode, user }) {
         return {
           ...p,
           eternityNight: null, eternityShorten: null,
-          actedPcs: [], currentScene: null, reiryokuDone: false,
+          actedPcs: [], currentScene: null, reiryokuDone: false, cycleSeq: (p.cycleSeq || 0) + 1,
           ...(newLimit !== p.limit ? { limit: newLimit } : {}),
           log: [`🌙 永遠と須臾：帰還とやる気減少を行わず、夜サイクルをもう一度行う${newLimit !== p.limit ? `（リミット→${newLimit}）` : ""}`, ...p.log],
         };
@@ -1236,7 +1238,9 @@ export default function SessionApp({ roomCode, user }) {
     const isReachable = exactDist ? distance === exactDist : (distance > 0 && distance <= maxDist);
 
     if (isReachable || isGmMode) {
-      upd(p => ({ ...p, currentScene: { ...p.currentScene, selectedDestSpot: spotId } }));
+      const scenePc = gs.currentScene?.pcUid;
+      upd(p => (!p.currentScene || p.currentScene.pcUid !== scenePc || p.currentScene.phase !== "move_dest") ? p
+        : ({ ...p, currentScene: { ...p.currentScene, selectedDestSpot: spotId } }));
     }
   };
 

@@ -4,7 +4,7 @@ vi.mock("../firebase", () => ({ db: {}, auth: {} }));
 vi.mock("../audio", () => ({ sfx: new Proxy({}, { get: () => () => {} }) }));
 import {
   timingSnapshot, detectTimings, remindersFor, upsertDef, applyPreset, getCustom, REMINDER_TIMINGS,
-  presetFromGs, pcCustom,
+  presetFromGs, pcCustom, repeatCycle,
 } from "../customRules";
 import { addRequest, respondDice, giveTableItem, getRequests, describeDice, tableResult } from "../gmTools";
 import { GmReminderOverlay } from "../session/reminders";
@@ -40,9 +40,13 @@ describe("タイミングの検出", () => {
     expect(keys(ex({ actedPcs: ["a"] }), ex({ cycleIdx: 1 }))).toEqual(["cycle_end", "cycle_start"]);
   });
 
-  it("同じサイクルの繰り返し（行動済みが全員→0）もサイクル開始として扱う", () => {
-    expect(keys(ex({ actedPcs: ["a", "b"] }), ex())).toEqual(["cycle_start"]);
-    // 1人を未行動に戻しただけでは出さない
+  it("同じサイクルの繰り返し（repeatCycle が cycleSeq を進める）もサイクル開始として扱う", () => {
+    expect(keys(ex({ actedPcs: ["a", "b"] }), ex({ cycleSeq: 1 }))).toEqual(["cycle_start"]);
+    // 誰も行動していないうちに繰り返しても出す
+    expect(keys(ex(), ex({ cycleSeq: 1 }))).toEqual(["cycle_end", "cycle_start"]);
+    expect(keys(ex(), repeatCycle(ex()))).toEqual(["cycle_end", "cycle_start"]);
+    // 行動済みを全員→0 にしただけ・1人を未行動に戻しただけでは出さない
+    expect(keys(ex({ actedPcs: ["a", "b"] }), ex())).toEqual([]);
     expect(keys(ex({ actedPcs: ["a", "b"] }), ex({ actedPcs: ["a"] }))).toEqual([]);
   });
 
@@ -178,9 +182,12 @@ describe("表のダイス要求", () => {
     let cur = gs;
     const upd = (fn) => { cur = fn(cur); view.rerender(<GmRequestOverlay gs={cur} upd={upd} user={{ uid: "a" }} />); };
     const view = render(<GmRequestOverlay gs={cur} upd={upd} user={{ uid: "a" }} />);
-    fireEvent.click(screen.getByText("🎲 表を振る"));
-    vi.advanceTimersByTime(1000);
-    vi.useRealTimers();
+    try {
+      fireEvent.click(screen.getByText("🎲 表を振る"));
+      vi.advanceTimersByTime(1000);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(screen.getByText("結果")).toBeInTheDocument();
     expect(screen.getByText(/を獲得しました/)).toBeInTheDocument();
     expect(pcCustom(cur.pcs[0]).items).toHaveLength(1);

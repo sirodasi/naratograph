@@ -49,6 +49,8 @@ describe("JSON の書き出しと読み込み", () => {
       expect(error).toBeUndefined();
       const orig = normalizePreset(pr);
       DEF_KINDS.forEach(k => expect(preset.defs[k].map(d => d.id)).toEqual(orig.defs[k].map(d => d.id)));
+      // 中身も欠けない（読み込み後の値が、元の定義を整えたものと一致する）
+      expect(preset.defs).toEqual(sanitizePreset(orig).defs);
       expect(preset.clock).toEqual(pr.clock);
       expect(preset).toEqual(sanitizePreset(preset)); // 冪等
     });
@@ -60,7 +62,7 @@ describe("JSON の書き出しと読み込み", () => {
     expect(parsePresetFile(JSON.stringify({ format: "other", defs: {} })).error).toMatch(/ファイルではありません/);
     expect(parsePresetFile(JSON.stringify({ name: "x" })).error).toBeTruthy();
     expect(parsePresetFile(JSON.stringify({ format: PRESET_FILE_FORMAT, version: 99, defs: { rules: [{ id: "a", title: "t" }] } })).error).toMatch(/新しい版/);
-    expect(parsePresetFile(JSON.stringify({ format: PRESET_FILE_FORMAT, version: 1, defs: { stats: [{ id: "a" }] } })).error).toMatch(/定義がありません/);
+    expect(parsePresetFile(JSON.stringify({ format: PRESET_FILE_FORMAT, version: 1, defs: { stats: [{ id: "a" }] } })).error).toMatch(/定義も時刻も/);
   });
 
   it("中身は信用せず、既知の項目だけを安全な形に整える", () => {

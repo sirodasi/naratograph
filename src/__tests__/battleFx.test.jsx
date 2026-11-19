@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 const sfxCalls = [];
+vi.mock("../firebase", () => ({ db: {}, auth: {} }));
 vi.mock("../audio", () => ({ sfx: new Proxy({}, { get: (_t, k) => (...a) => { sfxCalls.push([k, ...a]); } }) }));
 import { fxSnapshot, detectFx } from "../battleFx";
 import { useBattleFx, HitOverlay, SpellCutin, shakeAnimation } from "../session/battleFx";
@@ -13,7 +14,7 @@ const res = (lives, graze = 0) => ({ 残り人数: { cur: lives, max: 3 }, グ�
 const gsOf = ({ phase = "pc_shot_intro", round = 1, pcLives = 3, pcGraze = 0, npcLives = 2, pos = { a: 5, n1: 2 }, spells = {}, isFinal, active = true } = {}) => ({
   pcs: [{ uid: "a", charName: "霊夢", resources: res(pcLives, pcGraze) }, { uid: "z", charName: "見学", resources: res(3) }],
   battle: active ? {
-    active: true, phase, round, isFinal, participantPcUids: ["a"], positions: pos, spellUsedBy: spells,
+    active: true, phase, round, isFinal, participantPcUids: ["a"], pcCombatant: "a", npcCombatant: "n1", positions: pos, spellUsedBy: spells,
     participants: { npcs: [{ id: "n1", name: "ルーミア", resources: res(npcLives) }] },
   } : { active: false },
 });

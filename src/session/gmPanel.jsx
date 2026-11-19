@@ -15,6 +15,7 @@ import { SPECIAL_BOND_CHEER, KURUWASU_BOND } from "./shared";
 
 const rollN = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 6) + 1);
 const newId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const toArr = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
 
 const sectionTitle = { fontSize: 9, color: C.textFaint, letterSpacing: 2, borderBottom: `1px solid ${C.border}`, paddingBottom: 3, marginBottom: 6, marginTop: 4 };
 const box = { marginBottom: 10, padding: 8, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4 };
@@ -28,7 +29,7 @@ const cheerLabel = (cheerer, bondName) => bondName === KURUWASU_BOND ? "絆な�
   : `《${bondName}》`;
 // 失敗でファンブルになる応援（魂の弱い所／人を狂わす）は紫で区別する
 const cheerBtn = (o) => o.fragile
-  ? btnFull("rgba(156,39,176,0.15)", "#6a1b9a", C.purple, { width: "auto", fontSize: 9, padding: "3px 8px" })
+  ? btnFull(C.purpleBg, C.purpleBorder, C.purple, { width: "auto", fontSize: 9, padding: "3px 8px" })
   : btnFull(C.blueBg, C.blueBorder, C.blue, { width: "auto", fontSize: 9, padding: "3px 8px" });
 
 // 対象 PC の選択（チップ＋全員）
@@ -85,7 +86,7 @@ function RequestComposer({ pcs, upd, tables = [], gs }) {
       ...(kind === "dice" && table ? { table: { ...table, give: give && tableHasItems } } : {}) };
     const id = newId();
     const now = Date.now();
-    setTitle(""); setText(""); setOptions(""); // 二重送信防止のため先にクリア
+    setTitle(""); setText(""); setOptions(""); setTargets([]); // 二重送信防止のため先にクリア（対象が空なら送れない）
     upd(p => addRequest(p, spec, id, now));
   };
 
@@ -291,7 +292,9 @@ function AdhocBattleForm({ gs, upd, getSpot }) {
 export function GmRequestOverlay({ gs, upd, user }) {
   const [rolling, setRolling] = useState(null); // ローカルの振りアニメ { key, faces }
   const [hidden, setHidden] = useState(false);
-  const [results, setResults] = useState([]); // 自分が振った結果（目標値なしは振った瞬間に確定してカードが消えるため、手元に残す）
+  // 自分が振った目標値なしの要求（振った瞬間に確定してカードが消えるため、結果を手元に残す）: [{ key, reqId }]
+  // 中身はローカルの出目ではなく、gs に確定した回答から作る（GM の代理振りが先に確定した場合も一致させる）
+  const [resultRefs, setResultRefs] = useState([]);
   const me = (gs.pcs || []).find(x => x.uid === user?.uid);
   if (!me) return null;
   const requests = getRequests(gs);
@@ -311,6 +314,18 @@ export function GmRequestOverlay({ gs, upd, user }) {
       if (opts.length) cheerables.push({ req, judge, opts });
     });
   });
+
+  const results = resultRefs.map(ref => {
+    const req = requests.find(r => r.id === ref.reqId);
+    const resp = req?.responses?.[me.uid];
+    if (!req || !toArr(resp?.dice).length) return null; // 要求が閉じられた・まだ書き込まれていない
+    const tr = tableResult(req, resp, gs);
+    return {
+      key: ref.key, title: req.title || (req.table ? `表「${req.table.name}」` : "ダイス"),
+      text: describeDice(req, resp, gs.unluckyPhase), item: tr?.item?.name || null, given: !!resp.given, byGm: !!resp.byGm,
+    };
+  }).filter(Boolean);
+  const closeResult = (key) => setResultRefs(list => list.filter(x => x.key !== key));
 
   if (!mine.length && !cheerables.length && !results.length) return null;
 
@@ -353,10 +368,10 @@ export function GmRequestOverlay({ gs, upd, user }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 3 }}>結果</div>
               <div style={{ fontSize: 12, color: C.gold, marginBottom: 2 }}>{res.title}</div>
-              <div style={{ fontSize: 11, color: C.text }}>{res.text}</div>
+              <div style={{ fontSize: 11, color: C.text }}>{res.text}{res.byGm ? "（GM が代理で振った結果）" : ""}</div>
               {res.item && <div style={{ fontSize: 10, color: C.green, marginTop: 3 }}>{res.given ? `【${res.item}】を獲得しました` : `【${res.item}】（受け取りは GM が判断します）`}</div>}
             </div>
-            <span onClick={() => setResults(results.filter(x => x.key !== res.key))} title="閉じる" style={{ fontSize: 11, color: C.textFaint, cursor: "pointer" }}>✕</span>
+            <span onClick={() => closeResult(res.key)} title="閉じる" style={{ fontSize: 11, color: C.textFaint, cursor: "pointer" }}>✕</span>
           </div>
         </div>
       ))}
@@ -409,14 +424,7 @@ export function GmRequestOverlay({ gs, upd, user }) {
             {!dice.length ? (
               <button disabled={!!rolling} onClick={() => animateThen(key, req.dice.count, res => {
                 const iid = newId();
-                if (!target) {
-                  const resp = { dice: res };
-                  const tr = tableResult(req, resp, gs);
-                  setResults(prev => [...prev, {
-                    key: `${key}:${iid}`, title: req.title || (req.table ? `表「${req.table.name}」` : "ダイス"),
-                    text: describeDice(req, resp, gs.unluckyPhase), item: tr?.item?.name || null, given: !!(tr?.item && req.table?.give),
-                  }].slice(-3));
-                }
+                if (!target) setResultRefs(prev => [...prev.filter(x => x.reqId !== req.id), { key: `${key}:${iid}`, reqId: req.id }].slice(-3));
                 upd(p => respondDice(p, req.id, me.uid, res, false, iid));
               })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 12 })}>🎲 {req.table ? "表を振る" : "ダイスを振る"}</button>
             ) : (

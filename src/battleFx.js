@@ -21,6 +21,8 @@ export function fxSnapshot(gs) {
     active: true,
     round: b.round || 1,
     phase: b.phase || "",
+    // 回避側（いま防御しているエンティティ）。グレイズの火花はこのエンティティのフィールドにだけ出す
+    def: String(b.phase || "").startsWith("pc_") ? (b.pcCombatant || null) : String(b.phase || "").startsWith("npc_") ? (b.npcCombatant || null) : null,
     final: !!(b.isFinal ?? (b.type === "mass" && !b.questId)),
     pos: { ...(b.positions || {}) },
     spells: { ...(b.spellUsedBy || {}) },
@@ -33,7 +35,8 @@ export function detectFx(prev, cur) {
   if (!prev?.active || !cur?.active) return [];
   const out = [];
   Object.entries(cur.spells).forEach(([id, name]) => {
-    if (!name || prev.spells[id] === name) return;
+    // 同じラウンドで同じ宣言が残っているだけなら出さない（ラウンドが変わった後の同名の再宣言は出す）
+    if (!name || (prev.round === cur.round && prev.spells[id] === name)) return;
     const e = cur.ents[id];
     out.push({ type: "spell", id, pc: !!e?.pc, name: String(name), who: e?.name || "", final: cur.final });
   });
@@ -49,7 +52,9 @@ export function detectFx(prev, cur) {
     }
     if (e.graze > p.graze) {
       // 回避中に増えたなら、弾幕を消したマス（移動前の位置）で火花を出す。それ以外（ミシガンロール・GM の操作）は数字だけ
-      out.push({ type: "graze", id, pc: e.pc, name: e.name, amount: e.graze - p.graze, cell: evading ? (prev.pos[id] ?? null) : null });
+      // ミシガンロール等で相手側が同時に得た分は、そのフィールドで弾幕を消していないのでマス無し
+      const cleared = evading && prev.def === id;
+      out.push({ type: "graze", id, pc: e.pc, name: e.name, amount: e.graze - p.graze, cell: cleared ? (prev.pos[id] ?? null) : null });
     }
   });
   return out;

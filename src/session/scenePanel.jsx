@@ -171,7 +171,9 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
 
   const rollMoveDice = () => {
     const count = pc.resources.やる気?.cur || 1;
-    animateDice(count, "移動ダイス", res => upd(p => ({ ...p, currentScene: { ...p.currentScene, moveDice: res } })));
+    const scenePc = sc.pcUid;
+    animateDice(count, "移動ダイス", res => upd(p => (!p.currentScene || p.currentScene.pcUid !== scenePc || p.currentScene.phase !== "move_roll") ? p
+      : ({ ...p, currentScene: { ...p.currentScene, moveDice: res } })));
   };
 
   const selectMoveDie = val => {
@@ -349,6 +351,9 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
   const acquireClue = questId => {
     upd(p => {
       const spotId   = sceneSpot; // 手下シーンなら手下のスポット
+      // 同時に別の操作で使われた手がかり・埋まったクエストには配置しない（1つの手がかりで2枠を埋めない）
+      const target = (p.quests || []).find(q => String(q.id) === String(questId));
+      if (!(p.clues || []).includes(spotId) || !target || target.solved || (target.clues || 0) >= target.level) return p;
       const newClues = (p.clues ||[]).filter(c => c !== spotId);
 
       let resolvedAuto = false;
@@ -1179,7 +1184,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
                       const isPlus = nodoName === "喉の病気を癒す程度の能力＋";
                       return (
                         <button onClick={() => upd(p => isPlus
-                          ? { ...p, currentScene: { ...p.currentScene, phase: "explore_roll", actionDice: undefined, fumbleResolved: false, specialResolved: false }, log: [`🩹 ${myPc.charName} の《喉の病気を癒す程度の能力＋》: ${pc.charName} のファンブルを無効化し判定をやり直す`, ...p.log] }
+                          ? { ...p, currentScene: { ...p.currentScene, phase: "explore_roll", actionDice: undefined, fumbleResolved: false, specialResolved: false, fragileCheer: false, wasCheered: false, kishitsuUsed: false }, log: [`🩹 ${myPc.charName} の《喉の病気を癒す程度の能力＋》: ${pc.charName} のファンブルを無効化し判定をやり直す`, ...p.log] }
                           : { ...p, currentScene: { ...p.currentScene, fumbleResolved: true, fumbleCanceled: true }, log: [`🩹 ${myPc.charName} の《喉の病気を癒す程度の能力》: ${pc.charName} のファンブルを通常の失敗にした`, ...p.log] }
                         )} style={{ ...btnFull("rgba(129,199,132,0.15)", C.greenBorder, C.green, { fontSize: 10 }), marginTop: 6 }}>
                           🩹 喉の病気: ファンブルを{isPlus ? "無効化してやり直す" : "通常の失敗にする"}（{myPc.charName}）
@@ -1204,7 +1209,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
                           pcs: p.pcs.map(x => x.uid !== pc.uid ? x : {
                             ...x, resources: { ...x.resources, やる気: { ...x.resources.やる気, cur: (x.resources.やる気?.cur || 0) - 1 } }
                           }),
-                          currentScene: { ...p.currentScene, phase: "explore_roll", actionDice: undefined, fumbleResolved: false, specialResolved: false },
+                          currentScene: { ...p.currentScene, phase: "explore_roll", actionDice: undefined, fumbleResolved: false, specialResolved: false, fragileCheer: false, wasCheered: false, kishitsuUsed: false },
                           log: [`${pc.charName}《熱中》: やる気1消費して行為判定をやり直す！`, ...p.log]
                         }));
                       }} style={btnFull("rgba(255,183,77,0.15)", "#ffb74d40", "#ffb74d", { fontSize: 10, marginBottom: 8 })}>
@@ -1257,6 +1262,19 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
               SPOTS={SPOTS} getSpot={getSpot} 
               isDone={(sc.currentActionIndex || 0) >= (sc.eventActions ||[]).length}
             />
+          )}
+
+          {/* 手がかりイベント表の結果: 表の内容は書籍を参照し、処理は GM が行う（ここではシーンを止めないための確認だけ） */}
+          {sc.phase === "clue_event_result" && (
+            <div style={{ padding: 8, background: "rgba(156,39,176,0.1)", border: `1px solid ${C.purpleBorder}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 10, color: C.purple, marginBottom: 4 }}>📜 手がかりイベント表: 出目 {sc.clueEventDice ?? "?"}</div>
+              <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.6, marginBottom: 6 }}>書籍の手がかりイベント表で出目の結果を確認し、GM が処理してください。処理が済んだらシーンを終えます。</div>
+              <button onClick={() => upd(p => (p.currentScene?.phase !== "clue_event_result" ? p : {
+                ...p,
+                currentScene: { ...p.currentScene, phase: "action_done" },
+                log: [`📜 ${pc.charName} の手がかりイベント表: 出目${p.currentScene.clueEventDice ?? "?"}（GM が処理）`, ...p.log],
+              }))} style={btnFull(C.purpleBg, C.purpleBorder, C.purple)}>処理した（シーンを終える）</button>
+            </div>
           )}
 
           {sc.phase === "explore_clue" && (() => {

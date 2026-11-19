@@ -20,6 +20,8 @@ export const C = {
   greenBorder: "#1b5e20",
 
   purple:      "#c090e0",
+  purpleBg:    "rgba(156,39,176,0.15)",
+  purpleBorder: "#6a1b9a",
 
   sakura:      "#e8a0b8",
 

@@ -45,8 +45,10 @@ export function PresetEditor({ draft, onSave, onCancel }) {
   const [lCi, setLCi] = useState(ck.limitCycleIdx ?? 3);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const revRef = useRef(0);
+  const touch = () => { revRef.current += 1; setDirty(true); };
 
-  const upd = (fn) => { setBox(b => fn(b)); setDirty(true); };
+  const upd = (fn) => { setBox(b => fn(b)); touch(); };
   const build = () => {
     const clock = {};
     if (useStart) Object.assign(clock, { day, cycleIdx: ci });
@@ -57,7 +59,8 @@ export function PresetEditor({ draft, onSave, onCancel }) {
   const save = async () => {
     if (!name.trim() || busy) return;
     setBusy(true);
-    try { await onSave(build()); setDirty(false); }
+    const rev = revRef.current;
+    try { await onSave(build()); if (revRef.current === rev) setDirty(false); }
     catch (e) { window.alert(`保存に失敗しました: ${e?.message || e}`); }
     finally { setBusy(false); }
   };
@@ -75,21 +78,21 @@ export function PresetEditor({ draft, onSave, onCancel }) {
       </div>
       <div style={card}>
         <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>プリセット名</div>
-        <input value={name} onChange={e => { setName(e.target.value); setDirty(true); }} placeholder="例: 自作異変「〇〇」" style={{ ...inp, marginBottom: 8 }} />
+        <input value={name} onChange={e => { setName(e.target.value); touch(); }} placeholder="例: 自作異変「〇〇」" style={{ ...inp, marginBottom: 8 }} />
         <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>説明（任意。適用の一覧で表示）</div>
-        <textarea value={desc} onChange={e => { setDesc(e.target.value); setDirty(true); }} rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }} />
+        <textarea value={desc} onChange={e => { setDesc(e.target.value); touch(); }} rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }} />
         <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 3 }}>時刻（任意。適用時に「時刻も設定する」がオンなら設定）</div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 10, color: C.textDim, marginBottom: 4 }}>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <input type="checkbox" checked={useStart} onChange={e => { setUseStart(e.target.checked); setDirty(true); }} />開始時刻
+            <input type="checkbox" checked={useStart} onChange={e => { setUseStart(e.target.checked); touch(); }} />開始時刻
           </label>
-          {useStart && <><input type="number" min={1} max={9} value={day} onChange={e => { setDay(parseInt(e.target.value) || 1); setDirty(true); }} style={{ ...inp, width: 48 }} />日目{cycleSel(ci, v => { setCi(v); setDirty(true); })}</>}
+          {useStart && <><input type="number" min={1} max={9} value={day} onChange={e => { setDay(parseInt(e.target.value) || 1); touch(); }} style={{ ...inp, width: 48 }} />日目{cycleSel(ci, v => { setCi(v); touch(); })}</>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 10, color: C.textDim }}>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <input type="checkbox" checked={useLimit} onChange={e => { setUseLimit(e.target.checked); setDirty(true); }} />リミット
+            <input type="checkbox" checked={useLimit} onChange={e => { setUseLimit(e.target.checked); touch(); }} />リミット
           </label>
-          {useLimit && <><input type="number" min={1} max={9} value={lDay} onChange={e => { setLDay(parseInt(e.target.value) || 1); setDirty(true); }} style={{ ...inp, width: 48 }} />日目の{cycleSel(lCi, v => { setLCi(v); setDirty(true); })}</>}
+          {useLimit && <><input type="number" min={1} max={9} value={lDay} onChange={e => { setLDay(parseInt(e.target.value) || 1); touch(); }} style={{ ...inp, width: 48 }} />日目の{cycleSel(lCi, v => { setLCi(v); touch(); })}</>}
         </div>
       </div>
       <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.6, margin: "10px 0 6px" }}>
@@ -136,18 +139,21 @@ export function IhenPresetManager({ user }) {
     await dbSet(dbRef(db, `users/${uid}/ihenPresets/${id}`), stripUndefined({ ...preset, createdAt: createdAt || now, updatedAt: now }));
   };
   const saveDraft = async (preset) => {
-    const id = draft.id || newId();
-    const createdAt = draft.id ? saved?.find(s => s.id === draft.id)?.createdAt : null;
+    const started = draft;
+    const id = started.id || newId();
+    const createdAt = started.createdAt || (started.id ? saved?.find(s => s.id === started.id)?.createdAt : null) || Date.now();
     await store(id, preset, createdAt);
-    setDraft({ id, preset }); // 保存後も編集を続けられるよう、id を持たせる
     reload();
+    // 保存中に別の下書きへ切り替えていたら、そちらは置き換えない
+    setDraft(d => (d === started ? { ...started, id, preset, createdAt, saved: (started.saved || 0) + 1 } : d));
   };
   const del = async (sp) => {
     if (!window.confirm(`プリセット「${sp.name}」を削除しますか？（元に戻せません。適用済みのセッションの内容は残ります）`)) return;
     try { await dbRemove(dbRef(db, `users/${uid}/ihenPresets/${sp.id}`)); reload(); }
     catch (e) { window.alert(`削除に失敗しました: ${e?.message || e}`); }
   };
-  const copyOf = (preset) => ({ preset: { ...sanitizePreset(normalizePreset(preset)), name: `${preset.name}（コピー）` } });
+  // 新しい下書きには nonce を付け、最初の保存で id が付いても編集画面を作り直さない（保存中の入力を失わない）
+  const copyOf = (preset) => ({ nonce: newId(), preset: { ...sanitizePreset(normalizePreset(preset)), name: `${preset.name}（コピー）` } });
   const exportFile = (preset) => downloadJson(presetFileName(preset), presetToFile(preset));
   // 読み込んだ内容は編集画面で確認してから保存する
   const importFile = async (file) => {
@@ -155,14 +161,14 @@ export function IhenPresetManager({ user }) {
     try {
       const { preset, error } = parsePresetFile(await readFileText(file));
       if (error) { window.alert(`読み込めませんでした: ${error}`); return; }
-      setDraft({ preset });
+      setDraft(d => d || { preset, nonce: newId() });
     } catch (e) {
       window.alert(`読み込みに失敗しました: ${e?.message || e}`);
     }
   };
 
   if (!uid) return <div style={{ fontSize: 10, color: C.textFaint }}>ログイン中のみ利用できます</div>;
-  if (draft) return <PresetEditor key={draft.id || "new"} draft={draft} onSave={saveDraft} onCancel={() => setDraft(null)} />;
+  if (draft) return <PresetEditor key={draft.nonce || draft.id || "new"} draft={draft} onSave={saveDraft} onCancel={() => setDraft(null)} />;
 
   const clockText = (ck) => !ck ? "" : [ck.day ? `開始 ${ck.day}日目・${CYCLES[ck.cycleIdx ?? 0]}` : "", ck.limitDay ? `リミット ${limitLabel(ck.limitDay, ck.limitCycleIdx ?? 3)}` : ""].filter(Boolean).join(" ／ ");
   const presetCard = (preset, key, actions) => (
@@ -182,7 +188,7 @@ export function IhenPresetManager({ user }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: C.text, flex: 1 }}>異変再現プリセット</span>
         <button onClick={() => fileRef.current?.click()} style={btn(C.blue)}>📥 JSON を読み込む</button>
-        <button onClick={() => setDraft({ preset: { name: "", defs: {} } })} style={btn(C.gold)}>＋ 新規作成</button>
+        <button onClick={() => setDraft({ nonce: newId(), preset: { name: "", defs: {} } })} style={btn(C.gold)}>＋ 新規作成</button>
         <input ref={fileRef} type="file" accept=".json,application/json" data-testid="preset-file" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; importFile(f); }} />
       </div>
@@ -195,7 +201,7 @@ export function IhenPresetManager({ user }) {
       {loadError && <div style={{ fontSize: 10, color: C.red, marginBottom: 8 }}>読み込みに失敗しました</div>}
       {saved && saved.length === 0 && !loadError && <div style={{ fontSize: 10, color: C.textFaint, padding: "8px 0 12px" }}>まだありません（新規作成、公式の複製、JSON の読み込みで作れます）</div>}
       {(saved || []).map(sp => presetCard(sp, `u${sp.id}`, <>
-        <button onClick={() => setDraft({ id: sp.id, preset: sp })} style={btn(C.gold)}>編集</button>
+        <button onClick={() => setDraft({ id: sp.id, preset: sp, createdAt: sp.createdAt })} style={btn(C.gold)}>編集</button>
         <button onClick={() => setDraft(copyOf(sp))} style={btn()}>複製</button>
         <button onClick={() => exportFile(sp)} style={btn()}>JSON</button>
         <button onClick={() => del(sp)} style={btn(C.red)}>削除</button>

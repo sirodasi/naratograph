@@ -155,11 +155,15 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   // 最新の ma / TABS をハンドラに渡すため ref に保持（リスナーは mount 時1回登録）
   const maRef   = useRef(ma);   maRef.current = ma;
   const tabsRef = useRef(TABS); tabsRef.current = TABS;
+  // 弾幕ごっこ中は主要アクション（Enter）を使わない（戦闘画面では主要アクションのボタンも出していない）
+  const battleRef = useRef(false); battleRef.current = !!gs.battle?.active;
   useEffect(() => {
     const onKey = (e) => {
       // 入力欄フォーカス中・修飾キー併用時はショートカット無効
       const tag = (e.target?.tagName || "").toUpperCase();
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target?.isContentEditable) return;
+      // ボタン等にフォーカスがあるときの Enter はそのボタンを押す（主要アクションで横取りしない）。ダイアログ表示中も同様
+      const interactive = tag === "BUTTON" || tag === "A" || !!e.target?.closest?.("[role=dialog],[role=button]");
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
@@ -178,7 +182,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
       // M: 効果音ミュート切替
       if (e.key === "m" || e.key === "M") { e.preventDefault(); sfx.toggle(); return; }
       // Enter: 状況に応じた主要アクションを実行（GMのみ）
-      if (e.key === "Enter" && isGm && maRef.current) {
+      if (e.key === "Enter" && isGm && maRef.current && !interactive && !battleRef.current) {
         e.preventDefault();
         maRef.current.fn();
         return;
