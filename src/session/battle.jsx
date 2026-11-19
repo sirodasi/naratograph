@@ -622,6 +622,17 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
     }
   }, [b.phase, b.pcFamiliarAction, b.npcFamiliarAction, upd]);
 
+  // 喰らいボムの予約が期限切れになる時刻で再描画する（再読み込み等で完了しなかった予約のボタンを押せるように戻す）
+  const [, setLrTick] = useState(0);
+  const lrAt = Math.max(b.lastResortToken?.pc?.at || 0, b.lastResortToken?.npc?.at || 0);
+  useEffect(() => {
+    if (!lrAt) return;
+    const wait = lrAt + LAST_RESORT_HOLD_MS - Date.now();
+    if (wait <= 0) return;
+    const t = setTimeout(() => setLrTick(n => n + 1), wait + 50);
+    return () => clearTimeout(t);
+  }, [lrAt]);
+
   // ── サウンドON/OFF ────────────────────────────────────────────────
   const [sfxMuted, setSfxMuted] = useState(!sfx.enabled);
   const toggleSfx = () => { sfx.toggle(); setSfxMuted(!sfx.enabled); };

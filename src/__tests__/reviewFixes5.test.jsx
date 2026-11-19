@@ -58,3 +58,24 @@ describe("Enter の主要アクション（RightPanel を実際に描画）", ()
     expect(animateDice).not.toHaveBeenCalled();
   });
 });
+
+describe("旧形式の部屋: PL が真相と solved を書いても、GM の確認前は信用しない", () => {
+  it("候補は秘匿シナリオにあるクエストだけで、真相公開済みは初期値では付かない（登場済みは最初のクエストだけ）", async () => {
+    const { questGateCandidates } = await import("../gsSync");
+    const { fillAwaitingEnemies } = await import("../gmTools");
+    const scenario = [
+      { id: 1, name: "Q1", truth: "T1", enemy: { name: "敵1", life: 1 } },
+      { id: 2, name: "Q2", truth: "T2", unlockType: "quest", unlockQuestId: 1, enemy: { name: "秘密の敵", life: 2 } },
+    ];
+    // PL が未登場の Q2 を「真相つき・解決済み」として書き、架空のクエストも足した
+    const playerQuests = [{ id: 1, name: "Q1", solved: true, truth: "T1" }, { id: 2, name: "偽", solved: true, truth: "T2" }, { id: 9, name: "架空" }];
+    const cands = questGateCandidates(playerQuests, scenario);
+    expect(cands.map(c => c.id)).toEqual([1, 2]); // 架空のクエストは出さない
+    expect(cands.find(c => c.id === 2)).toMatchObject({ name: "Q2", start: false }); // 名前は秘匿シナリオのもの・登場済みの初期値なし
+    // GM の確認前（公開記録で未登場）に Q2 の戦闘が作られても、敵データは補わずに中止する
+    const battle = { pcs: [], log: [], battle: { active: true, questId: 2, awaitingEnemies: true, participants: { npcs: [] } } };
+    const out = fillAwaitingEnemies(battle, [], 1);
+    expect(out.battle.active).toBe(false);
+    expect(JSON.stringify(out)).not.toContain("秘密の敵");
+  });
+});

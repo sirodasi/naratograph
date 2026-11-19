@@ -306,3 +306,15 @@ export function convertReminderKeys(cur) {
 // id ごとの写し: 書き込む時点でまだ無いときだけ書く（別タブが先に写した・編集したメモは上書きしない）
 export const insertReminderIfAbsent = (item) => (cur) => (cur == null ? item : undefined);
 
+// 旧形式の部屋（公開記録が無い）で GM に確かめてもらうクエストの候補。
+// 候補は秘匿シナリオにあるクエストだけ（PL が足した架空のクエストは出さない）。名前は秘匿シナリオのもの。
+// 「登場済み」の初期値は最初のクエスト（unlockType が start）だけ、「真相公開済み」は GM が選ぶまで付けない
+// （PL が gs.quests に書いた solved や真相は、承認の証拠にしない）
+export function questGateCandidates(publicQuests, scenarioQuests) {
+  const scById = new Map(toArray(scenarioQuests).filter(Boolean).map(q => [String(q.id), q]));
+  return toArray(publicQuests).filter(q => q && scById.has(String(q.id))).map(q => {
+    const sq = scById.get(String(q.id));
+    return { id: q.id, name: sq.name || q.name, solved: !!q.solved, start: (sq.unlockType ?? "start") === "start" };
+  });
+}
+

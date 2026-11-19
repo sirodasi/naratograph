@@ -20,7 +20,7 @@ const BonusPhaseView = lazy(() => import("./session/phases").then(m => ({ defaul
 const SessionEndView = lazy(() => import("./session/phases").then(m => ({ default: m.SessionEndView })));
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
-import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent } from "./gsSync";
+import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates } from "./gsSync";
 import { fillAwaitingEnemies } from "./gmTools";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
@@ -1140,7 +1140,7 @@ export default function SessionApp({ roomCode, user }) {
       // 確かめたクエストと、トランザクション時点の戦闘のクエストが同じときだけ補う（違えば、その戦闘は改めて判定する）
       upd(p => (!p.battle?.awaitingEnemies || String(p.battle.questId) !== String(qid)) ? p : fillAwaitingEnemies(p, revealed ? gmScenario.quests : [], stamp));
     };
-    if (questGate?.revealed?.[qid]) { fill(true); return; }
+    // 手元の記録で登場済みでも、補う直前にサーバーの最新の記録を読み直す（直前に承認が取り消された場合に古い記録で補わない）
     (async () => {
       for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
         if (attempt) await new Promise(r => setTimeout(r, 1500));
@@ -1250,13 +1250,7 @@ export default function SessionApp({ roomCode, user }) {
   // 公開記録が無い旧形式の部屋: 自動では作らない。旧形式の部屋ではシナリオ全文（真相を含む）が PL にも見えていた可能性があり、
   // PL が書ける gs.quests の内容（真相の一致を含む）は承認の証拠にならないため、GM に登場済み・承認済みのクエストを確かめてもらう
   const needGateInit = amGm && mode === "gm" && questGate === null && !!gmScenario?.quests && !String(gsRaw.sessionPhase || "").startsWith("intro") && !gsRaw.scenarioRevealed;
-  const gateInitCandidates = useMemo(() => {
-    if (!needGateInit) return [];
-    const scById = new Map(gmScenario.quests.filter(Boolean).map(q => [String(q.id), q]));
-    // 候補は秘匿シナリオにあるクエストだけ（PL が足した架空のクエストは出さない）
-    return (gsRaw.quests || []).filter(q => q && scById.has(String(q.id)))
-      .map(q => ({ id: q.id, name: scById.get(String(q.id)).name || q.name, solved: !!q.solved, start: (scById.get(String(q.id)).unlockType ?? "start") === "start" }));
-  }, [needGateInit, gmScenario, gsRaw.quests]);
+  const gateInitCandidates = useMemo(() => (needGateInit ? questGateCandidates(gsRaw.quests, gmScenario.quests) : []), [needGateInit, gmScenario, gsRaw.quests]);
   const saveGateInit = useCallback((revealedIds, approvedIds) => {
     const patch = { createdAt: Date.now() };
     revealedIds.forEach(id => { patch[`revealed/${id}`] = true; });
@@ -1294,8 +1288,13 @@ export default function SessionApp({ roomCode, user }) {
     // 値がその操作の opId のままのときだけ外す（後から別の操作が書いた承認は残す）
     if (entry.undoGate?.opId && entry.undoGate.keys?.length) {
       entry.undoGate.keys.forEach(k => {
-        runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur === entry.undoGate.opId ? null : undefined))
-          .catch(e => console.error("公開記録の取り消しに失敗:", e));
+        const removeOwn = (attempt = 0) => runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur === entry.undoGate.opId ? null : undefined))
+          .catch(e => {
+            console.error("公開記録の取り消しに失敗:", e);
+            if (attempt === 0) window.alert("クエストの公開記録の取り消しを保存できませんでした。保存できるまで自動でやり直します。");
+            if (attempt < 20) setTimeout(() => removeOwn(attempt + 1), 3000);
+          });
+        removeOwn();
       });
     }
   }, [gsPath, roomCode, writeGmParts]);
