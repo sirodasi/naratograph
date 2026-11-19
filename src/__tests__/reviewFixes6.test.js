@@ -28,11 +28,21 @@ describe("gateRecoveryActions（再読み込み後の確認待ちの回復）", 
   ];
   it("公開記録で登場済みなら確認待ちを外すだけ", () => {
     const gate = { revealed: { 1: true, 2: "op_a" }, approved: { 1: "op_a" } };
-    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "clear" }]);
+    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "clear", value: "op_a" }]);
   });
   it("元のクエストが承認済みで、登場済みの記録だけ失われていたら記録を書く", () => {
     const gate = { revealed: { 1: true }, approved: { 1: "op_a" } };
-    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "reveal" }]);
+    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "reveal", value: "op_a" }]);
+  });
+  it("古い確認待ち（opA）が残ったまま再承認（opB）された場合、書く記録は再承認の操作（opB）のものにする", () => {
+    // opB を取り消すと opB の記録だけが外れるので、回復で書いた登場済みの記録も一緒に外れる
+    const gate = { revealed: { 1: true }, approved: { 1: "op_b" } };
+    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "reveal", value: "op_b" }]);
+  });
+  it("公開条件が「クエスト解決時」以外なら、残っている unlockQuestId を根拠に登場済みにしない", () => {
+    const sc2 = [{ id: 1, unlockType: "start" }, { id: 2, unlockType: "custom", unlockQuestId: 1 }, { id: 3, unlockQuestId: 1 }];
+    const gate = { revealed: { 1: true }, approved: { 1: "op_a" } };
+    expect(gateRecoveryActions([{ id: 2, gatePending: "x" }, { id: 3, gatePending: "y" }], sc2, gate)).toEqual([]);
   });
   it("承認の記録が無ければ何もしない（PL が書いた gatePending や solved は根拠にしない）", () => {
     const gate = { revealed: { 1: true }, approved: {} };
@@ -42,6 +52,6 @@ describe("gateRecoveryActions（再読み込み後の確認待ちの回復）", 
   it("秘匿シナリオに無いクエスト・旧版の true の確認待ちも扱える", () => {
     const gate = { revealed: { 1: true, 2: true }, approved: { 1: true } };
     expect(gateRecoveryActions([{ id: 99, gatePending: "x" }, { id: 2, gatePending: true }], sc, gate))
-      .toEqual([{ id: 2, opId: true, action: "clear" }]);
+      .toEqual([{ id: 2, opId: true, action: "clear", value: true }]);
   });
 });

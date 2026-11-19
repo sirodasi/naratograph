@@ -330,17 +330,22 @@ export function clearOwnGatePending(quests, ids, opId) {
 }
 
 // 再読み込み等で保存のやり直しが失われた確認待ちの回復の判定（GM の公開記録が根拠）。
-//   ・公開記録で既に登場済み → "clear"（確認待ちを外すだけ）
-//   ・元のクエストが公開記録で承認済み → "reveal"（登場済みの記録を書いてから外す）
+//   ・公開記録で既に登場済み → "clear"（その記録をサーバーで確かめてから確認待ちを外す。value = 記録の値）
+//   ・秘匿シナリオで「クエスト解決時」に公開されるクエストで、元のクエストが公開記録で承認済み
+//     → "reveal"（登場済みの記録を書いてから外す。value = 元のクエストを承認した操作の opId。
+//        その承認を取り消すと、この記録も一緒に外れる）
 //   ・どちらでもない → 何もしない（元のクエストが承認待ちに戻るので、GM が再承認すれば進む）
+//   公開条件が「クエスト解決時」以外（カスタム等）なら、unlockQuestId が残っていても根拠にしない
 export function gateRecoveryActions(quests, scenarioQuests, gate) {
   if (!gate) return [];
   const scById = new Map(toArray(scenarioQuests).filter(Boolean).map(q => [String(q.id), q]));
   return toArray(quests).filter(q => q?.gatePending).flatMap(q => {
     const opId = q.gatePending;
-    if (gate.revealed?.[q.id]) return [{ id: q.id, opId, action: "clear" }];
-    const parent = scById.get(String(q.id))?.unlockQuestId;
-    if (parent != null && parent !== "" && gate.approved?.[parent]) return [{ id: q.id, opId, action: "reveal" }];
+    if (gate.revealed?.[q.id]) return [{ id: q.id, opId, action: "clear", value: gate.revealed[q.id] }];
+    const sq = scById.get(String(q.id));
+    if (sq?.unlockType !== "quest") return [];
+    const parent = sq.unlockQuestId;
+    if (parent != null && parent !== "" && gate.approved?.[parent]) return [{ id: q.id, opId, action: "reveal", value: gate.approved[parent] }];
     return [];
   });
 }

@@ -1209,18 +1209,23 @@ export default function SessionApp({ roomCode, user }) {
   // 取り消した承認の opId。保存のやり直しが、取り消した後に記録を作り直さないようにする
   const cancelledOpsRef = useRef(new Set());
   // 公開記録を書く。キーごとのトランザクションで「まだ記録が無いときだけ」書く（別タブが先に書いた承認は上書きしない）。
+  // 既に記録があっても同じ値を書き戻してサーバーでの確定を待つ（手元の未確定の値だけを根拠に確認待ちを外さない）。
   // 失敗したら数秒おきにやり直す（取り消された操作ならやめる）。書けたら、解放したクエストの「確認待ち」を外す（外す更新もやり直す）
+  //   opId: 外す確認待ちの操作。patch の値（書く記録の操作）が取り消されている場合もやめる
   const commitGate = useCallback((patch, unlocked, opId, attempt = 0) => {
-    if (cancelledOpsRef.current.has(opId)) return;
+    const cancelled = () => cancelledOpsRef.current.has(opId) || Object.values(patch).some(v => cancelledOpsRef.current.has(v));
+    if (cancelled()) return;
     const retry = (what, fn) => (e) => {
       console.error(`${what}に失敗:`, e);
       if (attempt === 0) window.alert("クエストの公開記録を保存できませんでした。保存できるまで自動でやり直します（その間、解放したクエストは「GM の確認待ち」になります）。");
       setTimeout(fn, Math.min(30000, 3000 * (attempt + 1)));
     };
     Promise.all(Object.entries(patch).map(([k, v]) =>
-      runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur ? undefined : v))))
+      runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur || v)).then(r => {
+        if (!r.committed || !r.snapshot.val()) throw new Error("公開記録がサーバーで確定しませんでした");
+      })))
       .then(async () => {
-        if (!unlocked.length || cancelledOpsRef.current.has(opId)) return; // 取り消した操作の完了処理はしない
+        if (!unlocked.length || cancelled()) return; // 取り消した操作の完了処理はしない
         const ids = new Set(unlocked.map(String));
         // 解除するのは、この操作（opId）が付けた確認待ちだけ（別の承認が付け直した確認待ちは触らない）
         const res = await upd(p => {
@@ -1260,11 +1265,12 @@ export default function SessionApp({ roomCode, user }) {
   const recoveringGateRef = useRef(new Set());
   useEffect(() => {
     if (!amGm || mode !== "gm" || !questGate || !gmScenario?.quests || !pendingGateKey) return;
-    gateRecoveryActions(gs.quests, gmScenario.quests, questGate).forEach(({ id, opId, action }) => {
-      const key = `${id}:${opId}`;
+    gateRecoveryActions(gs.quests, gmScenario.quests, questGate).forEach(({ id, opId, value }) => {
+      const key = `${id}:${opId}:${value}`;
       if (recoveringGateRef.current.has(key)) return;
       recoveringGateRef.current.add(key);
-      commitGate(action === "reveal" ? { [`revealed/${id}`]: typeof opId === "string" ? opId : true } : {}, [id], opId);
+      // clear も reveal も、登場済みの記録をサーバーで確定させてから外す（reveal の値は元のクエストを承認した操作）
+      commitGate({ [`revealed/${id}`]: value }, [id], opId);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amGm, mode, questGate, gmScenario, pendingGateKey]);
