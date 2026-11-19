@@ -359,3 +359,20 @@ export function recoverRevealTx(gate, id, parent, value) {
   if (gate.revealed?.[id]) return gate;
   return { ...gate, revealed: { ...(gate.revealed || {}), [id]: value } };
 }
+
+// 承認の取り消し（アンドゥ）で公開記録を外すトランザクションの更新関数（questGate 全体に対して実行する）。
+// 値がその操作の opId の記録（承認・登場済み。回復が同じ承認を根拠に作った子の登場済みの記録も含む）を一度にすべて外す。
+// 親と子を一緒に外すので、回復のトランザクション（recoverRevealTx）と競合しても、どちらかがサーバーの値で再実行される。
+// 外すものが無ければ中止（undefined）
+export function undoGateTx(gate, opId) {
+  if (!gate || opId == null) return undefined;
+  let changed = false;
+  const strip = (m) => {
+    if (!m || typeof m !== "object") return m;
+    const out = {};
+    Object.entries(m).forEach(([k, v]) => { if (v === opId) changed = true; else out[k] = v; });
+    return out;
+  };
+  const next = { ...gate, approved: strip(gate.approved), revealed: strip(gate.revealed) };
+  return changed ? next : undefined;
+}

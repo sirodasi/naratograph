@@ -20,7 +20,7 @@ const BonusPhaseView = lazy(() => import("./session/phases").then(m => ({ defaul
 const SessionEndView = lazy(() => import("./session/phases").then(m => ({ default: m.SessionEndView })));
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
-import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates, clearOwnGatePending, gateRecoveryActions, recoverRevealTx } from "./gsSync";
+import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates, clearOwnGatePending, gateRecoveryActions, recoverRevealTx, undoGateTx } from "./gsSync";
 import { fillAwaitingEnemies } from "./gmTools";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
@@ -1264,6 +1264,9 @@ export default function SessionApp({ roomCode, user }) {
   //    失敗・中止したら、公開記録が次に変わったときに再判定する）
   const pendingGateKey = (gs.quests || []).filter(q => q?.gatePending).map(q => `${q.id}:${q.gatePending}`).join(",");
   const recoveringGateRef = useRef(new Set());
+  // 一時的な失敗（通信・確認待ちの解除がコミットされない）のあと、公開記録が変わらなくても回復をやり直すための刻み
+  const [gateRecoveryTick, setGateRecoveryTick] = useState(0);
+  const gateRecoveryAttemptRef = useRef(0);
   useEffect(() => {
     if (!amGm || mode !== "gm" || !questGate || !gmScenario?.quests || !pendingGateKey) return;
     gateRecoveryActions(gs.quests, gmScenario.quests, questGate).forEach(({ id, opId, action, value, parent }) => {
@@ -1280,17 +1283,23 @@ export default function SessionApp({ roomCode, user }) {
             .then(r => r.committed && !!r.snapshot.child(`revealed/${id}`).val())
         : runTransaction(ref(db, `${gatePath}/revealed/${id}`), cur => (cur ? cur : undefined), { applyLocally: false })
             .then(r => r.committed && !!r.snapshot.val());
+      const retryLater = () => { // 一時的な失敗: 少し待ってやり直す（間隔は延ばしていく）
+        recoveringGateRef.current.delete(key);
+        const n = ++gateRecoveryAttemptRef.current;
+        setTimeout(() => setGateRecoveryTick(t => t + 1), Math.min(30000, 3000 * n));
+      };
       tx.then(async ok => {
         if (!ok) { recoveringGateRef.current.delete(key); return; } // 根拠が無い（取り消された等）。記録が変われば再判定する
         const res = await upd(p => {
           const quests = clearOwnGatePending(p.quests, [id], opId);
           return quests === p.quests ? p : { ...p, quests };
         });
-        if (!res?.committed) recoveringGateRef.current.delete(key);
-      }).catch(e => { console.error("確認待ちの回復に失敗:", e); recoveringGateRef.current.delete(key); });
+        if (!res?.committed) { retryLater(); return; }
+        gateRecoveryAttemptRef.current = 0;
+      }).catch(e => { console.error("確認待ちの回復に失敗:", e); retryLater(); });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amGm, mode, questGate, gmScenario, pendingGateKey, roomCode]);
+  }, [amGm, mode, questGate, gmScenario, pendingGateKey, roomCode, gateRecoveryTick]);
   const autoReveal = !!room?.config?.autoRevealTruth;
   const pendingKey = pendingTruths.map(q => q.id).join(",");
   useEffect(() => {
@@ -1338,16 +1347,17 @@ export default function SessionApp({ roomCode, user }) {
     // クエストの公開記録も、取り消す操作（真相の承認）で立てた分だけを外す。
     // 値がその操作の opId のままのときだけ外す（後から別の操作が書いた承認は残す）
     if (entry.undoGate?.opId) cancelledOpsRef.current.add(entry.undoGate.opId); // この操作の公開記録の保存のやり直しを止める
-    if (entry.undoGate?.opId && entry.undoGate.keys?.length) {
-      entry.undoGate.keys.forEach(k => {
-        const removeOwn = (attempt = 0) => runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur === entry.undoGate.opId ? null : undefined))
-          .catch(e => {
-            console.error("公開記録の取り消しに失敗:", e);
-            if (attempt === 0) window.alert("クエストの公開記録の取り消しを保存できませんでした。保存できるまで自動でやり直します。");
-            if (attempt < 20) setTimeout(() => removeOwn(attempt + 1), 3000);
-          });
-        removeOwn();
-      });
+    // questGate 全体の 1 回のトランザクション（undoGateTx）で、親の承認と子の登場済みの記録を一緒に外す
+    // （回復のトランザクションと競合しても、サーバーの値で再実行されるので、子の記録だけが残ることはない）
+    if (entry.undoGate?.opId) {
+      const opId = entry.undoGate.opId;
+      const removeOwn = (attempt = 0) => runTransaction(ref(db, `rooms/${roomCode}/questGate`), cur => undoGateTx(cur, opId))
+        .catch(e => {
+          console.error("公開記録の取り消しに失敗:", e);
+          if (attempt === 0) window.alert("クエストの公開記録の取り消しを保存できませんでした。保存できるまで自動でやり直します。");
+          if (attempt < 20) setTimeout(() => removeOwn(attempt + 1), 3000);
+        });
+      removeOwn();
     }
   }, [gsPath, roomCode, writeGmParts]);
 

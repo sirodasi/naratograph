@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clearOwnGatePending, gateRecoveryActions, recoverRevealTx } from "../gsSync";
+import { clearOwnGatePending, gateRecoveryActions, recoverRevealTx, undoGateTx } from "../gsSync";
 
 describe("clearOwnGatePending（承認で解放したクエストの確認待ちの解除）", () => {
   it("指定の操作（opId）が付けた確認待ちだけを外す", () => {
@@ -72,5 +72,24 @@ describe("recoverRevealTx（回復で登場済みの記録を作るトランザ�
   it("既に記録があれば変えずにそのまま返す", () => {
     const gate = { revealed: { 1: true, 2: "op_x" }, approved: { 1: "op_a" } };
     expect(recoverRevealTx(gate, 2, 1, "op_a")).toBe(gate);
+  });
+});
+
+describe("undoGateTx（承認の取り消しで公開記録を外すトランザクション）", () => {
+  it("その操作の承認と、子の登場済みの記録（回復が同じ承認を根拠に作ったものを含む）を一度に外す", () => {
+    const gate = { revealed: { 1: true, 2: "op_a", 3: "op_b" }, approved: { 1: "op_a", 4: "op_b" }, createdAt: 1 };
+    expect(undoGateTx(gate, "op_a")).toEqual({ revealed: { 1: true, 3: "op_b" }, approved: { 4: "op_b" }, createdAt: 1 });
+  });
+  it("回復が子の記録を先に作っていても、親と一緒に外れて子だけが残らない", () => {
+    // 1) 回復が子の記録を作る → 2) 取り消しは親子をまとめて外す → 3) 回復を再実行しても親の承認が無いので作らない
+    const after = recoverRevealTx({ revealed: { 1: true }, approved: { 1: "op_a" } }, 2, 1, "op_a");
+    const undone = undoGateTx(after, "op_a");
+    expect(undone.revealed[2]).toBeUndefined();
+    expect(undone.approved[1]).toBeUndefined();
+    expect(recoverRevealTx(undone, 2, 1, "op_a")).toBeUndefined();
+  });
+  it("外すものが無ければ中止する", () => {
+    expect(undoGateTx({ revealed: { 1: true }, approved: { 1: "op_b" } }, "op_a")).toBeUndefined();
+    expect(undoGateTx(null, "op_a")).toBeUndefined();
   });
 });
