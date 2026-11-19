@@ -1876,7 +1876,10 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
           if (extraUpdates.pc.items) {
             const sumQty = m => Object.values(m || {}).reduce((s, v) => s + (typeof v === "number" ? v : 1), 0);
             const oldQty = sumQty(base.items);
-            base.items = { ...base.items, ...extraUpdates.pc.items };
+            // 関数なら現在の所持品から計算する（振っている間に所持品が変わっても、その時点の値で処理する）
+            base.items = typeof extraUpdates.pc.items === "function"
+              ? extraUpdates.pc.items(base.items || {})
+              : { ...base.items, ...extraUpdates.pc.items };
             const gained = Math.max(0, sumQty(base.items) - oldQty);
             if (gained > 0) { const ca = base.ach || {}; base.ach = { ...ca, items: (ca.items || 0) + gained }; }
           }
@@ -2172,7 +2175,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
             {ITEM_NAMES.map(itemName => (
               <button key={itemName} onClick={() => {
                 proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
-                  pc: { items: tradeItems(pc.items, selectedLose, itemName) }
+                  pc: { items: (items) => ((items?.[selectedLose] || 0) > 0 ? tradeItems(items, selectedLose, itemName) : items) }
                 });
               }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
             ))}
@@ -2185,7 +2188,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
           <button onClick={() => animateDice(1, "アイテム交換", res => {
             const itemName = ITEM_NAMES[res[0] - 1];
             proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
-              pc: { items: tradeItems(pc.items, selectedLose, itemName) }
+              pc: { items: (items) => ((items?.[selectedLose] || 0) > 0 ? tradeItems(items, selectedLose, itemName) : items) }
             });
           })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを獲得する</button>
         </div>

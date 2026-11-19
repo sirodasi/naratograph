@@ -187,4 +187,4 @@ export function withGrants(b, entity) {
 }
 
 // ラウンド終了時のリセット項目（handleCleanup が battle に混ぜる）
-export const ROUND_RESET = { grantedDs: null, extraEvade: null };
+export const ROUND_RESET = { grantedDs: null, extraEvade: null, lastResortToken: null };

@@ -175,7 +175,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
   const rollMoveDice = () => {
     const count = pc.resources.やる気?.cur || 1;
     const scenePc = sc.pcUid;
-    animateDice(count, "移動ダイス", res => upd(p => (!p.currentScene || p.currentScene.pcUid !== scenePc || p.currentScene.phase !== "move_roll") ? p
+    animateDice(count, "移動ダイス", res => upd(p => (!p.currentScene || p.currentScene.pcUid !== scenePc || p.currentScene.phase !== "move_roll" || (p.currentScene.moveDice || []).length) ? p
       : ({ ...p, currentScene: { ...p.currentScene, moveDice: res } })));
   };
 

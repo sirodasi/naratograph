@@ -1773,7 +1773,9 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
 
   // 回避判定の確定処理（成功→移動 / 失敗→被弾判定）。PCは結果フェイズの「確定」から、NPCは即時に呼ぶ。
   // fragile=魂の弱い所/人を狂わすの応援（失敗→ファンブル）
-  const resolveEvadeApply = (isPc, res, targetValue, combatant, fragile = false) => {
+  // guard: 指定時は、この判定の各更新をその条件を満たすときだけ行う（喰らいボムの二重処理の防止）
+  const resolveEvadeApply = (isPc, res, targetValue, combatant, fragile = false, guard = null) => {
+    const updG = (fn) => upd(p => (guard && !guard(p)) ? p : (typeof fn === "function" ? fn(p) : fn));
     const maxDie = Math.max(...res);
     const isSuccess = maxDie >= targetValue && !res.every(d => d === 1);
     const isFumble = res.every(d => d === 1) || (fragile && !isSuccess);
@@ -1789,7 +1791,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
       if (isPc && isSpecial && !reiFull) {
         animateDice(1, "霊力回復", r => {
           const gain = r[0];
-          upd(p => {
+          updG(p => {
             const pcs0 = p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, resources: { ...x.resources, 霊力: { ...x.resources.霊力, cur: Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) }, 攻撃力: { ...x.resources.攻撃力, cur: 1 + Math.floor(Math.min((x.resources.霊力?.cur || 0) + gain, x.resources.霊力?.max || 20) / 5) } } });
             const { pcs: pcs1, logs } = gainIntimacy(pcs0, b.pcCombatant, 1, `${combatant.charName}のスペシャル`);
             const pcs2 = bumpAch(pcs1, b.pcCombatant, a => ({ ...a, specials: (a.specials || 0) + 1 }));
@@ -1798,20 +1800,20 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
         });
       } else if (isPc && isSpecial) {
         // 霊力が最大 → 回復ロールをスキップ（親密度+1・実績は付与）
-        upd(p => {
+        updG(p => {
           const { pcs: pcs1, logs } = gainIntimacy(p.pcs, b.pcCombatant, 1, `${combatant.charName}のスペシャル`);
           const pcs2 = bumpAch(pcs1, b.pcCombatant, a => ({ ...a, specials: (a.specials || 0) + 1 }));
           return { ...p, pcs: pcs2, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [...logs, `${baseSuccessLog} スペシャル！（霊力は最大のため回復なし）移動先を選択してください。`, ...p.log] };
         });
       } else {
-        upd(p => ({ ...p, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [`${baseSuccessLog}${isPc ? " 移動先を選択してください。" : ""}`, ...p.log] }));
+        updG(p => ({ ...p, battle: { ...p.battle, phase: successPhase, evadeRoll: null }, log: [`${baseSuccessLog}${isPc ? " 移動先を選択してください。" : ""}`, ...p.log] }));
       }
     } else {
       // PC回避のファンブル → 探索同様に animateDice で変調表（馬鹿は免疫）
       if (isPc && isFumble) {
         animateDice(1, "変調決定", r => {
           const bsName = BAD_STATUS_TABLE[r[0]]?.name;
-          upd(p => {
+          updG(p => {
             const immune = isBadStatusImmune(combatant, bsName);
             let newPcs = (!bsName || immune) ? p.pcs : p.pcs.map(x => x.uid !== b.pcCombatant ? x : { ...x, badStatus: [...(x.badStatus || []), bsName] });
             newPcs = bumpAch(newPcs, b.pcCombatant, a => ({ ...a, fumbles: (a.fumbles || 0) + 1 }));
@@ -1820,7 +1822,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           });
         });
       } else {
-        upd(p => ({ ...p, battle: { ...p.battle, phase: failPhase, evadeRoll: null }, log: [baseFailLog, ...p.log] }));
+        updG(p => ({ ...p, battle: { ...p.battle, phase: failPhase, evadeRoll: null }, log: [baseFailLog, ...p.log] }));
       }
     }
   };
@@ -1971,6 +1973,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   const handleEvadeStay = (isPc) => {
     const combatantId = isPc ? b.pcCombatant : b.npcCombatant;
     upd(p => {
+      if (p.battle?.phase !== (isPc ? "pc_evade_move" : "npc_evade_move")) return p; // 先に別の操作で回避が進んでいたら受け付けない
       if ((isPc ? p.battle?.pcCombatant : p.battle?.npcCombatant) !== combatantId) return p;
       const pos = p.battle.positions?.[combatantId];
       const bulletsCleared = p.battle.grids[combatantId]?.[pos - 1] || 0;
@@ -2167,7 +2170,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
         const uids = currentB.participantPcUids || restoredPcs.map(x => x.uid);
         const alive = (e) => (e.resources?.残り人数?.cur || 0) > 0;
         const pcsWiped = !restoredPcs.filter(x => uids.includes(x.uid)).some(alive);
-        const npcsWiped = !restoredNpcs.some(alive);
+        const npcsWiped = isNpcSideDefeated(restoredNpcs); // 主敵がいれば主敵の撃破で勝ち（勝敗表示と同じ判定）
         if (pcsWiped || npcsWiped) {
           return {
             ...p,
@@ -3400,8 +3403,16 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
               onClick={() => {
                 const targetValue = count + 3;
                 const defenderId = targetId;
+                // GM と本人が同時に押しても1回だけ処理する: 振る前に予約し（lastResortToken）、完了時に予約とフェイズを確かめる
+                const token = `lr${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+                const hitPhase = isPc ? "pc_hit_check" : "npc_hit_check";
+                const side = isPc ? "pc" : "npc";
+                const reserved = (p) => p.battle?.lastResortToken?.[side] === token && p.battle?.phase === hitPhase;
+                upd(p => (p.battle?.phase !== hitPhase || p.battle?.lastResortToken?.[side] || (isPc ? p.battle?.pcLastResort : p.battle?.npcLastResort)) ? p
+                  : { ...p, battle: { ...p.battle, lastResortToken: { ...(p.battle.lastResortToken || {}), [side]: token } } });
                 animateDice(2, "喰らいボム", (res) => {
                   upd(p => {
+                    if (!reserved(p) || (isPc ? p.battle.pcLastResort : p.battle.npcLastResort)) return p;
                     // 使った側（PC / NPC）の SC を1消費し、その側の「このラウンド使用済み」を立てる
                     const spend = (x) => ({ ...x, resources: { ...x.resources, スペルカード: { ...x.resources.スペルカード, cur: Math.max(0, (x.resources.スペルカード?.cur || 0) - 1) } } });
                     let pcs = isPc ? p.pcs.map(x => x.uid !== defenderId ? x : spend(x)) : p.pcs;
@@ -3429,7 +3440,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                   // 振り足した出目で再判定を確定させる（遅延させない: 遅らせると戦闘終了後に古い戦闘へ書き込む恐れがある）
                   const combatant = isPc ? combatantPc : combatantNpc;
                   const currentDice = [...(gs.battle?.evadeRoll?.dice || []), ...res];
-                  resolveEvadeApply(isPc, currentDice, targetValue, combatant);
+                  resolveEvadeApply(isPc, currentDice, targetValue, combatant, false, reserved);
                 });
               }}
               style={btnFull("rgba(171,71,188,0.2)", "#7b1fa2", C.purple, { opacity: (target?.resources?.スペルカード?.cur || 0) >= 1 ? 1 : 0.35 })}>
@@ -3868,6 +3879,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           spellChoose: null,
           evadeRoll: null,
           pcLastResort: false,
+          lastResortToken: null,
           npcLastResort: false,
           spellUsedBy: {},
           wallPassBy: null,

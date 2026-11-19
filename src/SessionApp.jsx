@@ -1344,8 +1344,20 @@ export default function SessionApp({ roomCode, user }) {
 
     if (isReachable || isGmMode) {
       const scenePc = gs.currentScene?.pcUid;
-      upd(p => (!p.currentScene || p.currentScene.pcUid !== scenePc || p.currentScene.phase !== "move_dest") ? p
-        : ({ ...p, currentScene: { ...p.currentScene, selectedDestSpot: spotId } }));
+      upd(p => {
+        const cs = p.currentScene;
+        if (!cs || cs.pcUid !== scenePc || cs.phase !== "move_dest") return p;
+        // 届くかどうかは、確定時点のシーン（移動ダイスの値・PC の位置）で確かめ直す（GM は制限なし）
+        if (!isGmMode) {
+          const pcNow = (p.pcs || []).find(x => x.uid === cs.pcUid);
+          const mNow = cs.minionId ? (p.minions || []).find(m => m.id === cs.minionId) : null;
+          if (!pcNow) return p;
+          const d = getDistances(mNow ? mNow.currentSpot : pcNow.currentSpot, mNow ? [] : getAbilityMoveEdges(pcNow))[spotId] ?? 999;
+          const ok = cs.exactMoveDist ? d === cs.exactMoveDist : (d > 0 && d <= (cs.selectedMoveDie || 0));
+          if (!ok) return p;
+        }
+        return { ...p, currentScene: { ...cs, selectedDestSpot: spotId } };
+      });
     }
   };
 

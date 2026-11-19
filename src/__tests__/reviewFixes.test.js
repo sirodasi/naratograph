@@ -30,6 +30,21 @@ describe("異変再現プリセット", () => {
     expect(getCustom(back).stats.filter(s => s.name.includes("ノルマ"))).toHaveLength(2);
   });
 
+  it("書き出し id は種類の中で必ず一意（a__x・b__x・c__a_x でも重ならず、分類の参照も一致）", () => {
+    let p = base();
+    ["a__x", "b__x", "c__a_x"].forEach((id, i) => { p = upsertDef(p, "cats", { id, name: `分類${i}` }); p = upsertDef(p, "items", { id: `it${i}`, name: `品${i}`, cat: id }); });
+    const out = presetFromGs(p, "x");
+    const ids = out.defs.cats.map(c => c.id);
+    expect(new Set(ids).size).toBe(3);
+    out.defs.items.forEach((it, i) => expect(out.defs.cats.find(c => c.id === it.cat).name).toBe(`分類${i}`));
+  });
+
+  it("導入中に GM が時刻を変えたら、探索開始の時刻もそれに合わせる", () => {
+    let p = applyPreset(base({ sessionPhase: "intro_main" }), getIhenPreset("eiya"), "eiya", { withClock: true });
+    p = setClock(p, 2, 1);
+    expect(p.custom.startClock).toMatchObject({ key: "eiya", day: 2, cycleIdx: 1 });
+  });
+
   it("再適用は置き換え: プリセットから消えた定義は外れる", () => {
     const pr = { name: "X", defs: { rules: [{ id: "r1", title: "A" }, { id: "r2", title: "B" }] } };
     let p = applyPreset(base(), pr, "k");

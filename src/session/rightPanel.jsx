@@ -157,6 +157,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const tabsRef = useRef(TABS); tabsRef.current = TABS;
   // 弾幕ごっこ中は主要アクション（Enter）を使わない（戦闘画面では主要アクションのボタンも出していない）
   const battleRef = useRef(false); battleRef.current = !!gs.battle?.active;
+  const overlayRef = useRef(false); overlayRef.current = showShortcuts; // ショートカット一覧を表示中
   useEffect(() => {
     const onKey = (e) => {
       // 入力欄フォーカス中・修飾キー併用時はショートカット無効
@@ -182,7 +183,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
       // M: 効果音ミュート切替
       if (e.key === "m" || e.key === "M") { e.preventDefault(); sfx.toggle(); return; }
       // Enter: 状況に応じた主要アクションを実行（GMのみ）
-      if (e.key === "Enter" && isGm && maRef.current && !interactive && !battleRef.current) {
+      if (e.key === "Enter" && isGm && maRef.current && !interactive && !battleRef.current && !overlayRef.current && !document.querySelector("[role=dialog]")) {
         e.preventDefault();
         maRef.current.fn();
         return;

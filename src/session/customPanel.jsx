@@ -668,7 +668,15 @@ function TableSection({ c, gs, upd, prep = false }) {
   const [times, setTimes] = useState(1);
   const [results, setResults] = useState(null); // { tableId, list: [{ key, rolled, value, text }] }
   const [giveTo, setGiveTo] = useState({});      // { [resultKey]: uid }
-  const [given, setGiven] = useState({});        // { [resultKey]: 渡したアイテムの iid }（実際に所持品に入ったかは gs で確かめる）
+  const [given, setGiven] = useState({});        // { [resultKey]: 渡したアイテムの iid }
+  const [received, setReceived] = useState({});  // { [resultKey]: true } 所持品に入ったのを確かめた（その後に使って消えても「渡した」のまま）
+  const owned = (iid) => (gs.pcs || []).some(pc => pcCustom(pc).items.some(x => x.iid === iid));
+  const pcsNow = gs.pcs;
+  useEffect(() => {
+    const has = (iid) => (pcsNow || []).some(pc => pcCustom(pc).items.some(x => x.iid === iid));
+    const seen = Object.entries(given).filter(([k, iid]) => !received[k] && has(iid)).map(([k]) => k);
+    if (seen.length) setReceived(r => ({ ...r, ...Object.fromEntries(seen.map(k => [k, true])) }));
+  }, [given, received, pcsNow]);
 
   const reset = () => { setEditId(null); setName(""); setDice("d6"); setRowsText(""); };
   const parsed = parseTableRows(rowsText);
@@ -685,7 +693,7 @@ function TableSection({ c, gs, upd, prep = false }) {
     const rolls = Array.from({ length: n }, () => Array.from({ length: tableDiceCount(t.dice) }, d6));
     const stamp = Date.now().toString(36);
     const list = rolls.map((r, i) => { const value = tableValue(t.dice, r); return { key: `${stamp}_${i}`, rolled: r, value, text: lookupTable(t, value)?.text || "（該当なし）" }; });
-    setResults({ tableId: t.id, list }); setGiveTo({}); setGiven({});
+    setResults({ tableId: t.id, list }); setGiveTo({}); setGiven({}); setReceived({});
     upd(p => logTableRoll(p, t.id, rolls, t));
   };
 
@@ -719,7 +727,7 @@ function TableSection({ c, gs, upd, prep = false }) {
                   <div key={r.key} style={{ ...row, marginBottom: 2 }}>
                     <span style={{ fontSize: 9, color: C.textFaint }}>[{r.rolled.join(",")}] {r.value}</span>
                     <span style={{ fontSize: 10, color: C.text }}>{r.text}</span>
-                    {item && (given[r.key] && (gs.pcs || []).some(pc => pcCustom(pc).items.some(x => x.iid === given[r.key]))
+                    {item && (given[r.key] && (received[r.key] || owned(given[r.key]))
                       ? <span style={{ fontSize: 8, color: C.green, marginLeft: "auto" }}>渡した</span>
                       : <span style={{ marginLeft: "auto", display: "inline-flex", gap: 3 }}>
                           <select value={giveTo[r.key] || ""} onChange={e => setGiveTo(g => ({ ...g, [r.key]: e.target.value }))} style={{ ...sel, fontSize: 9, padding: "2px 4px" }}>

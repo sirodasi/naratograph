@@ -331,6 +331,8 @@ export function setClock(p, day, cycleIdx) {
     actedPcs: [], currentScene: null, reiryokuDone: false,
     ...(dayChanged ? { newspaper: null, newspaperDone: false, cluePlaced: false } : {}),
     cycleSeq: (p.cycleSeq || 0) + 1,
+    // 導入中に設定した時刻は、探索フェイズの開始時刻にも使う（プリセットの開始時刻より後の指定を優先）
+    ...(String(p.sessionPhase || "").startsWith("intro") ? { custom: { ...(p.custom || {}), startClock: { key: p.custom?.startClock?.key || "clock", day: d, cycleIdx: ci } } } : {}),
     log: logOf(p, `⏳ GM: 時刻を ${clockLabel(p.day || 1, p.cycleIdx || 0)} → ${clockLabel(d, ci)} に変更`),
   };
 }
@@ -404,8 +406,17 @@ export function presetFromGs(gs, name, desc = "") {
   const exportIds = (list) => {
     const count = {};
     list.forEach(d => { const b = baseId(d.id); count[b] = (count[b] || 0) + 1; });
+    const used = new Set();
     const map = {};
-    list.forEach(d => { map[d.id] = count[baseId(d.id)] > 1 ? String(d.id).split(PRESET_SEP).join("_") : baseId(d.id); });
+    // 重ならない元の id はそのまま。重なるものは区切りを残した id に。それでも重なれば連番を付ける（種類の中で必ず一意）
+    list.forEach(d => { if (count[baseId(d.id)] === 1) { map[d.id] = baseId(d.id); used.add(map[d.id]); } });
+    list.forEach(d => {
+      if (map[d.id] != null) return;
+      let id = String(d.id).split(PRESET_SEP).join("_");
+      for (let n = 2; used.has(id); n++) id = `${String(d.id).split(PRESET_SEP).join("_")}_${n}`;
+      map[d.id] = id;
+      used.add(id);
+    });
     return map;
   };
   const catMap = exportIds(c.cats);

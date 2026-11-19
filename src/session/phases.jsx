@@ -196,7 +196,8 @@ export function GrowthCeremony({ gs, upd, user, isGm, onClose }) {
     // タグ
     const newTag = (form.newTag || "").trim();
     // 強化（未使用のもののみ）
-    let specialBond = existing.specialBond || pc.specialBond || null;
+    // セッション中に上がった親密度を失わないよう、PC の現在の値を優先する（保存済みの記録は無いときの補い）
+    let specialBond = pc.specialBond || existing.specialBond || null;
     let enhanceApplied = null;
     if (form.enhance && !usedSet.has(form.enhance)) {
       usedSet.add(form.enhance);
@@ -497,6 +498,7 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return !archiveFailed; // 全文を出力できたか（false なら古いログが欠けている）
   };
 
   return (
@@ -692,7 +694,9 @@ export function SessionEndView({ gs, upd, isGm, user, roomCode }) {
                 if (window.confirm(`セッションを終了しますか？\nセッションログ(.txt)を保存し、ルームデータを削除します。この操作は元に戻せません。${pendingWarn}`)) {
                   setEnding(true);
                   try {
-                    await exportLog(); // ログを出力（退避ログ取得を待ってから部屋を消す）
+                    const complete = await exportLog(); // ログを出力（退避ログ取得を待ってから部屋を消す）
+                    // 古いログを取得できなかった場合、部屋を消すと取り戻せないので確かめる
+                    if (!complete && !window.confirm("古いログ（退避分）を取得できず、直近のログだけを保存しました。\nこのまま部屋を削除すると、古いログは取り戻せません。削除しますか？")) { setEnding(false); return; }
                     // 秘匿データ（GM のみ削除可）と部屋を、複数パスの更新で同時に消す（片方だけ残さない）
                     if (roomCode) await dbUpdate(dbRef(db), { [`roomSecrets/${roomCode}`]: null, [`rooms/${roomCode}`]: null });
                   } catch (e) {
