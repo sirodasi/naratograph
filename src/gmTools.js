@@ -300,6 +300,20 @@ export function startAdhocBattle(p, { enemies, participantPcUids, title }, stamp
   };
 }
 
+// PL が始めたクエストの弾幕ごっこ（敵データは公開されていないので awaitingEnemies: true で作られる）に、
+// GM のクライアントが秘匿シナリオのクエストから敵を補う。敵が見つからなければ戦闘を閉じてシーンに戻す。
+export function fillAwaitingEnemies(p, scenarioQuests, stamp) {
+  const b = p.battle;
+  if (!b?.active || !b.awaitingEnemies) return p;
+  const q = toArray(scenarioQuests).find(x => x && String(x.id) === String(b.questId));
+  const list = q?.enemy ? [q.enemy, ...(b.type === "mass" ? toArray(q.extraEnemies) : [])].filter(Boolean) : [];
+  const npcs = list.map((en, i) => buildBattleNpc(en, `enemy_${i}_${stamp}`)).filter(Boolean);
+  if (!npcs.length) {
+    return { ...p, ...closeBattlePatch(p), log: [`⚠ クエストの敵データが見つからないため、弾幕ごっこを中止した（GM 操作の臨時の弾幕ごっこで対応してください）`, ...(p.log || [])] };
+  }
+  return { ...p, battle: { ...b, awaitingEnemies: null, participants: { ...(b.participants || {}), npcs } } };
+}
+
 // 戦闘を閉じるときの共通パッチ: 中断していたシーンを戻し、退避データを消す
 export function closeBattlePatch(p) {
   const resume = p.battle?.resumeScene;

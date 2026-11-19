@@ -1069,10 +1069,12 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
             {itemKeys.map(k => {
               const count  = items[k] || 0;
-              const canUse = ITEM_DATA[k]?.canUse(pc);
+              // アイテムを使えるのは、その PC の持ち主と GM だけ（他の PL は個数を見るだけ）
+              const mayUse = isGm || (!!myUid && myUid === pc.uid);
+              const canUse = mayUse && ITEM_DATA[k]?.canUse(pc);
               if (count === 0 && !isGm) return null;
               return (
-                <div key={k} style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 7px", borderRadius: 12, cursor: count > 0 ? "pointer" : "default", background: canUse ? "rgba(200,160,64,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${canUse ? C.goldDim : C.border}` }} onClick={() => count > 0 && setItemModal(k)}>
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 7px", borderRadius: 12, cursor: count > 0 && mayUse ? "pointer" : "default", background: canUse ? "rgba(200,160,64,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${canUse ? C.goldDim : C.border}` }} onClick={() => count > 0 && mayUse && setItemModal(k)}>
                   <span style={{ fontSize: 10, color: canUse ? C.gold : C.textFaint }}>{k}</span>
                   <span style={{ fontSize: 9, color: canUse ? C.gold : C.textFaint, padding: "0 4px", background: "rgba(0,0,0,0.3)", borderRadius: 8 }}>{count}</span>
                 </div>
@@ -1436,7 +1438,7 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
         </div>
       )}
 
-      {itemModal && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => consumeItem(itemModal)} onCancel={() => setItemModal(null)} />}
+      {itemModal && (isGm || (!!myUid && myUid === pc.uid)) && <ItemUseModal itemName={itemModal} pc={pc} onConfirm={() => consumeItem(itemModal)} onCancel={() => setItemModal(null)} />}
       {skillModal && skill && <SkillActivateModal skillName={skill.name} skillType={skill.type} desc={skill.desc} onConfirm={activateSkill} onCancel={() => setSkillModal(null)} />}
       {abilityModal && <SkillActivateModal skillName={abilityModal.name} skillType={abilityModal.type} desc={abilityModal.desc} onConfirm={() => activateAbility(abilityModal)} onCancel={() => setAbilityModal(null)} />}
       {abilityItemPick && (

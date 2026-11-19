@@ -97,10 +97,12 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
   // クエスト解決のための弾幕ごっこを開始する。演出判定の有無に関わらず同じ戦闘を立ち上げる。
   const startQuestBattle = q => {
     const enemy = q?.enemy;
-    if (!enemy) return;
+    // 敵データは秘匿（公開の gs には hasEnemy だけ）。GM の画面には秘匿シナリオから合成されている。
+    // PL が始めた場合は敵なしで戦闘を作り（awaitingEnemies）、GM のクライアントが敵を補う（fillAwaitingEnemies）
+    if (!enemy && !q?.hasEnemy) return;
     const isMassQuest = !!q.massBattle;
     // 集団戦時は enemy + extraEnemies、その場（クエスト場所）にいる全PCが参加する。
-    const enemyList = [enemy, ...(isMassQuest ? (q.extraEnemies || []) : [])].filter(Boolean);
+    const enemyList = enemy ? [enemy, ...(isMassQuest ? (q.extraEnemies || []) : [])].filter(Boolean) : [];
     const questLoc = sc.questLocation || pc.currentSpot;
     const massPcUids = gs.pcs.filter(x => x.currentSpot === questLoc).map(x => x.uid);
     upd(p => {
@@ -121,6 +123,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
           scenePcUid,
           participantPcUids,
           participants: { npcs },
+          ...(npcs.length ? {} : { awaitingEnemies: true }),
         },
         log: [
           isMassQuest
@@ -1356,7 +1359,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
                       </button>
                     )}
                     {q?.solutionType === "弾幕ごっこ" && (() => {
-                      const enemy = q.enemy;
+                      const enemy = q.enemy || q.hasEnemy;
                       if (!enemy) return (
                         <div style={{ fontSize: 11, color: C.red }}>敵データが設定されていません</div>
                       );

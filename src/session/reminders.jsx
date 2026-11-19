@@ -8,6 +8,30 @@ import { getCustom, timingSnapshot, detectTimings, remindersFor } from "../custo
 
 const MAX_GROUPS = 6;
 
+// ─── クエストの真相の公開待ち（GM のみ） ─────────────────────────────
+// PL も「解決済み」を書けるため、真相は自動では公開せず、GM の承認で公開する（設定で自動公開にもできる）。
+// gs は GM の表示用（秘匿シナリオを合成済み）で、未公開の真相には truthPending が付いている。
+export function GmTruthApproval({ gs, onReveal, onAuto }) {
+  const pending = (gs.quests || []).filter(q => q?.solved && q.truthPending);
+  if (!pending.length) return null;
+  return (
+    <div data-testid="truth-approval" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 141, width: "min(92vw, 360px)", background: "rgba(10,8,22,0.97)", border: `1px solid ${C.gold}`, borderRadius: 6, padding: "8px 10px", boxShadow: "0 6px 20px rgba(0,0,0,0.55)", fontFamily: "'Noto Serif JP', serif", animation: "modalIn 0.22s ease both" }}>
+      <div style={{ fontSize: 10, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>🔓 真相の公開待ち（GM にだけ表示）</div>
+      <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.5, marginBottom: 6 }}>解決されたクエストです。正しく解決されていれば公開してください（次のクエストもこのとき解放されます）。</div>
+      {pending.map(q => (
+        <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <span style={{ flex: 1, fontSize: 11, color: C.text }}>「{q.name}」</span>
+          <button onClick={() => onReveal([q.id])} style={{ padding: "3px 10px", fontSize: 10, cursor: "pointer", borderRadius: 3, background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, fontFamily: "inherit" }}>公開する</button>
+        </div>
+      ))}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        {pending.length > 1 ? <span onClick={() => onReveal(pending.map(q => q.id))} style={{ fontSize: 9, color: C.gold, cursor: "pointer" }}>すべて公開する</span> : <span />}
+        <span onClick={() => window.confirm("以後、クエストが解決されたら真相を自動で公開しますか？（この部屋の設定。PL が解決済みを書き換えた場合も公開されます）") && onAuto()} style={{ fontSize: 9, color: C.textFaint, cursor: "pointer" }}>以後は自動で公開する</span>
+      </div>
+    </div>
+  );
+}
+
 export function GmReminderOverlay({ gs }) {
   const [groups, setGroups] = useState([]); // [{ id, key, label, items: [{ id, text }], done: { [itemId]: true } }]
   const [hidden, setHidden] = useState(false);

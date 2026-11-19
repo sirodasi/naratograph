@@ -145,10 +145,17 @@ export function publicScenario(sd) {
 }
 
 // 未解決クエストの真相は公開しない
+// 公開用のクエスト: 未解決なら真相を外す。敵データ（能力・スペルカード）は解決の有無に関わらず外し、
+// 「敵がいるか」だけを残す（戦闘の開始時に GM のクライアントが秘匿シナリオから補う。fillAwaitingEnemies）
 export function publicQuest(q) {
-  if (!q || typeof q !== "object" || q.solved || !("truth" in q)) return q;
-  const { truth: _truth, ...rest } = q;
-  return rest;
+  if (!q || typeof q !== "object") return q;
+  let out = q;
+  if (!q.solved && "truth" in q) { const { truth: _truth, ...rest } = out; out = rest; }
+  if (out.enemy || out.extraEnemies) {
+    const { enemy, extraEnemies, ...rest } = out;
+    out = { ...rest, hasEnemy: !!enemy || !!out.hasEnemy, extraEnemyCount: toArray(extraEnemies).filter(Boolean).length };
+  }
+  return out;
 }
 
 // gs を書き込む直前に秘匿情報を取り除く（どのクライアントの書き込みでも漏れないように）
@@ -164,25 +171,93 @@ export function mergeScenarioSecret(gs, secret) {
   return {
     ...gs,
     scenarioData: { ...(gs.scenarioData || {}), ...secret },
-    quests: toArray(gs.quests).map(q => (q && !q.truth && byId.get(String(q.id))?.truth) ? { ...q, truth: byId.get(String(q.id)).truth } : q),
+    // 公開版に無い真相（解決済みで公開済みのものは除く）と敵データを GM の表示用に戻す。
+    // 真相は GM の承認で公開するまで、GM の画面でも「未公開」と分かるよう truthPending を付ける
+    quests: toArray(gs.quests).map(q => {
+      const sq = q && byId.get(String(q.id));
+      if (!sq) return q;
+      let out = q;
+      if (!q.truth && sq.truth) out = { ...out, truth: sq.truth, ...(q.solved ? { truthPending: true } : {}) };
+      if (!q.enemy && sq.enemy) out = { ...out, enemy: sq.enemy, extraEnemies: sq.extraEnemies };
+      return out;
+    }),
   };
 }
 
+// ─── 公開 state と、画面・更新関数が扱う gs（ビュー）の変換 ─────────────
+// Firebase 上では GM しか書けない／読めないデータを state の外に置き、クライアントでは従来どおり 1 つの gs として扱う。
+//   ・GM の要求の定義（見出し・対象・ダイス・表…）: rooms/{code}/gmRequests/{id}（GM だけが書ける。全員が読める）
+//     PL の回答は state.reqResponses[id][uid]（参加者が書ける）。ビューでは gs.gmRequests = [{ ...定義, responses }]
+//   ・タイミングのメモ（GM 用）: roomSecrets/{code}/gm/custom/reminders（GM だけが読み書きできる）。ビューでは gs.custom.reminders
+export const SECRET_CUSTOM_KEYS = ["reminders"];
+
+const requestDefsList = (defs) => toArray(defs).filter(d => d && d.id)
+  .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
+
+// state（normalizeGs 済み）→ ビュー。secretCustom は GM のときだけ渡す
+export function viewOfState(state, { requestDefs = null, secretCustom = null } = {}) {
+  if (!state) return state;
+  const { reqResponses = {}, gmRequests: _legacy, ...rest } = state;
+  const view = {
+    ...rest,
+    gmRequests: requestDefsList(requestDefs).map(d => ({ ...d, responses: reqResponses?.[d.id] || {} })),
+  };
+  if (secretCustom) {
+    const extra = {};
+    SECRET_CUSTOM_KEYS.forEach(k => { if (secretCustom[k] != null) extra[k] = secretCustom[k]; });
+    view.custom = { ...(view.custom || {}), ...extra };
+  }
+  return view;
+}
+
+// ビュー → { state, requestDefs, secretCustom }
+//   prevState: 更新前の state（このクライアントが定義を知らない要求の回答は、消さずにそのまま残す）
+//   knownIds: 更新前のビューにあった要求の id（このクライアントが定義を知っていたもの）
+//   authoritative: GM（定義の正本を持つ）なら、定義の無い回答を片付ける
+export function splitView(view, { prevState = null, knownIds = [], authoritative = false } = {}) {
+  if (!view || typeof view !== "object") return { state: view, requestDefs: null, secretCustom: null };
+  const { gmRequests, ...rest } = view;
+  const reqs = toArray(gmRequests).filter(r => r && r.id);
+  const requestDefs = {};
+  const fromView = {};
+  reqs.forEach(({ responses, ...def }) => {
+    requestDefs[def.id] = def;
+    if (responses && Object.keys(responses).length) fromView[def.id] = responses;
+  });
+  const known = new Set(knownIds.map(String));
+  const keep = {};
+  if (!authoritative) {
+    Object.entries(prevState?.reqResponses || {}).forEach(([id, resp]) => { if (!known.has(id) && !requestDefs[id]) keep[id] = resp; });
+  }
+  const reqResponses = { ...keep, ...fromView };
+  const custom = rest.custom && typeof rest.custom === "object" ? { ...rest.custom } : rest.custom;
+  const secretCustom = {};
+  if (custom && typeof custom === "object") {
+    SECRET_CUSTOM_KEYS.forEach(k => { secretCustom[k] = custom[k] ?? null; delete custom[k]; });
+  }
+  const state = { ...rest, ...(custom !== undefined ? { custom } : {}), reqResponses: Object.keys(reqResponses).length ? reqResponses : null };
+  return { state, requestDefs, secretCustom };
+}
+
 // 解決済みクエストへ真相を付与し、それを条件とするクエストを解放する。変更が無ければ null。
-export function reconcileQuests(quests, scenarioQuests) {
+// onlyIds: 指定したクエスト（GM が公開を承認したもの）だけを対象にする。null なら解決済みのすべて（自動で公開する設定）
+export function reconcileQuests(quests, scenarioQuests, onlyIds = null) {
   const scQs = toArray(scenarioQuests).filter(Boolean);
   if (!scQs.length) return null;
   const byId = new Map(scQs.map(q => [String(q.id), q]));
+  const allowed = onlyIds ? new Set(toArray(onlyIds).map(String)) : null;
+  const ok = (q) => !allowed || allowed.has(String(q?.id));
   let changed = false;
   const next = toArray(quests).map(q => {
-    if (q?.solved && !q.truth) {
+    if (q?.solved && !q.truth && ok(q)) {
       const truth = byId.get(String(q.id))?.truth;
       if (truth) { changed = true; return { ...q, truth }; }
     }
     return q;
   });
   const have = new Set(next.map(q => String(q?.id)));
-  next.filter(q => q?.solved).forEach(sq => {
+  // 次のクエストの解放も、真相を公開した（承認した）クエストの分だけ
+  next.filter(q => q?.solved && ok(q)).forEach(sq => {
     scQs.forEach(scQ => {
       if (scQ.unlockType === "quest" && String(scQ.unlockQuestId) === String(sq.id) && !have.has(String(scQ.id))) {
         next.push(publicQuest({ ...scQ, revealed: true, solved: false, clues: 0 }));

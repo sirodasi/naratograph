@@ -526,6 +526,10 @@ function PrepRoom({ roomCode, user, isGm }) {
                 <input type="checkbox" checked={room.config?.useLastResort || false} onChange={() => toggleExtraRule("useLastResort")} />
                 喰らいボム（回避失敗時にSCを消費して追加判定）
               </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 11, marginTop: 8 }}>
+                <input type="checkbox" checked={room.config?.autoRevealTruth || false} onChange={() => toggleExtraRule("autoRevealTruth")} />
+                クエストの真相を自動で公開（オフなら GM が確認してから公開）
+              </label>
             </div>
           )}
 

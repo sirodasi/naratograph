@@ -671,6 +671,14 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   }, [b.phase, npcsDefeated, alivePcs.length]);
 
   if (!gs.battle) return null; // フック群の後で実際の有無を判定（上の || {} と対）
+  // PL が始めたクエストの弾幕ごっこ: 敵データ（秘匿）を GM のクライアントが補うまで待つ
+  if (b.awaitingEnemies) {
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#040608", color: C.textDim, fontSize: 12, letterSpacing: 2, fontFamily: "'Noto Serif JP', serif", textAlign: "center", padding: 16 }}>
+        ⚔ 弾幕ごっこの準備中…<br />（GM の画面から敵のデータを読み込んでいます）
+      </div>
+    );
+  }
 
   const handleSupportFire = (userUid) => {
     upd(p => ({
