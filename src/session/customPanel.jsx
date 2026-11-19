@@ -1,6 +1,6 @@
 // 異変再現などの独自要素の UI。ロジックは src/customRules.js（純関数）。
-//   CustomRulesEditor … GM の「独自」タブ（定義の作成と運用：時間操作・ステータス・アイテム・表・コマ・状態・ルール掲示）
-//   CustomBoard       … 全員に見える掲示（ルール文・全体共有/戦闘中のステータス）
+//   CustomRulesEditor … GM の「独自」タブ（定義の作成と運用：時間操作・ステータス・アイテム・表・コマ・状態・ルール掲示・タイミングのメモ）
+//   CustomBoard       … 全員に見える掲示（ルール文・全体共有/戦闘中のステータス・マップの独自コマの凡例）
 //   CustomPcSection   … PC カード内（PC個別ステータス・独自の状態・独自アイテム）
 //   GmFieldEditor     … 弾幕ごっこ中の GM 盤面編集（弾幕・独自コマ・被弾無効・追加の回避ステップ・一時スキル）
 import { useState, useEffect } from "react";
@@ -16,6 +16,7 @@ import {
   tableValue, lookupTable, logTableRoll, itemByName, placeTokens, removeToken, clearTokens,
   tokenCandidates, toggleState, setClock, repeatCycle, setLimit, parseLimit, postRule, pcCustom,
   DEF_KINDS, normalizePreset, presetSummary, appliedPresets, presetFromGs, applyPreset, unapplyPreset,
+  REMINDER_TIMINGS, isBattleTiming,
 } from "../customRules";
 import {
   adjustBullets, placeBulletsByDice, clearField, moveEntity, adjustLives, cancelHit, startExtraEvade,
@@ -67,11 +68,16 @@ function StatValue({ def, value, canEdit, onAdjust, onSet }) {
 }
 
 // ─── 全員に見える掲示 ─────────────────────────────────────────────
-export function CustomBoard({ gs, upd, isGm }) {
+export function CustomBoard({ gs, upd, isGm, getSpot }) {
   const c = getCustom(gs);
   const [openRule, setOpenRule] = useState(null);
   const shared = c.stats.filter(s => s.scope === "global" || (s.scope === "battle" && gs.battle?.active));
-  if (!c.rules.length && !shared.length) return null;
+  // マップの独自コマの凡例（地図上のコマはホバーでしか名前が出ず、スマホでは分からないため）
+  const placed = c.tokens.map(k => {
+    const spots = c.mapTokens.filter(t => t.kind === k.id).map(t => getSpot?.(t.spot)?.name || t.spot);
+    return { k, spots };
+  }).filter(x => x.spots.length > 0);
+  if (!c.rules.length && !shared.length && !placed.length) return null;
   return (
     <div style={{ ...box, borderColor: `${C.sakura}55` }}>
       <div style={{ fontSize: 9, color: C.sakura, letterSpacing: 2, marginBottom: 4 }}>◆ 独自ルール</div>
@@ -88,6 +94,18 @@ export function CustomBoard({ gs, upd, isGm }) {
           {shared.map(s => (
             <StatValue key={s.id} def={s} value={getStatValue(gs, s)} canEdit={isGm}
               onAdjust={d => upd(p => adjustStat(p, s.id, d))} onSet={v => upd(p => setStat(p, s.id, v))} />
+          ))}
+        </div>
+      )}
+      {placed.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ fontSize: 8, color: C.textFaint, marginBottom: 2 }}>マップの独自コマ</div>
+          {placed.map(({ k, spots }) => (
+            <div key={k.id} style={{ display: "flex", gap: 5, alignItems: "baseline", fontSize: 9, color: C.textDim, lineHeight: 1.6 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: k.color || C.sakura, flexShrink: 0, transform: "translateY(1px)" }} />
+              <span style={{ color: C.text, flexShrink: 0 }}>{k.name}（{spots.length}）</span>
+              <span>{[...new Set(spots)].join("・")}</span>
+            </div>
           ))}
         </div>
       )}
@@ -189,7 +207,65 @@ export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot, user }) {
       <TableSection c={c} gs={gs} upd={upd} />
       <TokenSection c={c} gs={gs} upd={upd} SPOTS={SPOTS} spotName={spotName} />
       <StateSection c={c} gs={gs} upd={upd} />
+      <ReminderSection c={c} upd={upd} />
     </div>
+  );
+}
+
+// ─── タイミングのメモ ─────────────────────────────────────────────
+// 「サイクル開始時にかけらを置く」など、GM が手で行う処理を忘れないためのメモ。
+// 登録したタイミングが来ると GM の画面の左下に表示される（src/session/reminders.jsx）。PL には見えない。
+function ReminderSection({ c, upd }) {
+  const [editId, setEditId] = useState(null);
+  const [timing, setTiming] = useState("cycle_start");
+  const [text, setText] = useState("");
+  const [finalOnly, setFinalOnly] = useState(false);
+  const reset = () => { setEditId(null); setText(""); setFinalOnly(false); };
+  const save = () => {
+    if (!text.trim()) return;
+    const def = { id: editId || newId("rm"), timing, text: text.trim(), finalOnly: isBattleTiming(timing) && finalOnly };
+    reset();
+    upd(p => upsertDef(p, "reminders", def));
+  };
+  return (
+    <Fold title="⏰ タイミングのメモ（GM用）" count={c.reminders.length}>
+      <div style={{ fontSize: 8, color: C.textFaint, lineHeight: 1.6, marginBottom: 6 }}>
+        登録したタイミングが来ると、GM の画面の左下にメモが出ます（PL には見えません）。処理そのものは自動では行いません。
+      </div>
+      {REMINDER_TIMINGS.map(t => {
+        const list = c.reminders.filter(r => r.timing === t.key);
+        if (!list.length) return null;
+        return (
+          <div key={t.key} style={{ marginBottom: 6 }}>
+            <div style={{ fontSize: 9, color: C.red, marginBottom: 2 }}>{t.label}</div>
+            {list.map(r => (
+              <div key={r.id} style={{ ...row, alignItems: "flex-start" }}>
+                <span style={{ flex: 1, fontSize: 9, color: C.text, whiteSpace: "pre-wrap" }}>{r.finalOnly ? "［決戦のみ］" : ""}{r.text}</span>
+                <button onClick={() => { setEditId(r.id); setTiming(r.timing); setText(r.text || ""); setFinalOnly(!!r.finalOnly); }} style={tiny()}>編集</button>
+                <button onClick={() => window.confirm("このメモを削除しますか？") && upd(p => removeDef(p, "reminders", r.id))} style={tiny(C.red)}>✕</button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {c.reminders.length === 0 && empty}
+      <div style={label}>{editId ? "編集中" : "メモを追加"}</div>
+      <div style={row}>
+        <select value={timing} onChange={e => setTiming(e.target.value)} style={sel}>
+          {REMINDER_TIMINGS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+        </select>
+        {isBattleTiming(timing) && (
+          <label style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer" }}>
+            <input type="checkbox" checked={finalOnly} onChange={e => setFinalOnly(e.target.checked)} />決戦のときだけ
+          </label>
+        )}
+      </div>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="例: 春のかけらをPC人数の半分だけランダムに置く" style={{ ...inp, resize: "vertical", marginBottom: 4 }} />
+      <div style={row}>
+        <button disabled={!text.trim()} onClick={save} style={tiny(C.gold)}>{editId ? "更新する" : "追加する"}</button>
+        {editId && <button onClick={reset} style={tiny()}>やめる</button>}
+      </div>
+    </Fold>
   );
 }
 

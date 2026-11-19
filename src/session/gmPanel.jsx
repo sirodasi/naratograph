@@ -8,8 +8,9 @@ import {
   REQUEST_KINDS, getRequests, addRequest, removeRequest, respondDice, addCheerDice, confirmDice,
   respondChoice, ackNotice, isAnswered, pendingFor, describeDice, evalJudgment, cheerOptions,
   scenarioEnemies, startAdhocBattle, BAD_STATUS_NAMES, gmAddBadStatus, gmAddBond, gmRemoveBond,
-  gmToggleBondUsed, gmMovePc, gmToggleActed, gmResetAbilityUse, gmAdjustMax,
+  gmToggleBondUsed, gmMovePc, gmToggleActed, gmResetAbilityUse, gmAdjustMax, tableResult, giveTableItem,
 } from "../gmTools";
+import { getCustom, itemByName, TABLE_DICE } from "../customRules";
 import { SPECIAL_BOND_CHEER } from "./shared";
 
 const rollN = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 6) + 1);
@@ -46,7 +47,7 @@ export function GmToolsPanel({ gs, upd, getSpot }) {
 
   return (
     <div>
-      <RequestComposer pcs={pcs} upd={upd} />
+      <RequestComposer pcs={pcs} upd={upd} tables={getCustom(gs).tables} gs={gs} />
       <div style={sectionTitle}>進行中の要求（{requests.length}）</div>
       {requests.length === 0 && <div style={{ fontSize: 10, color: "#2a3545", marginBottom: 10 }}>なし</div>}
       {[...requests].reverse().map(r => <RequestMonitor key={r.id} req={r} gs={gs} upd={upd} />)}
@@ -55,7 +56,7 @@ export function GmToolsPanel({ gs, upd, getSpot }) {
   );
 }
 
-function RequestComposer({ pcs, upd }) {
+function RequestComposer({ pcs, upd, tables = [], gs }) {
   const [kind, setKind] = useState("dice");
   const [targets, setTargets] = useState([]);
   const [title, setTitle] = useState("");
@@ -64,13 +65,19 @@ function RequestComposer({ pcs, upd }) {
   const [mode, setMode] = useState("nd6");
   const [target, setTarget] = useState("");
   const [options, setOptions] = useState("");
+  const [tableId, setTableId] = useState("");
+  const [give, setGive] = useState(true);
 
+  const table = mode === "table" ? tables.find(t => t.id === tableId) : null;
+  const tableHasItems = !!table && table.rows.some(r => itemByName(gs, r.text));
   const optList = options.split("\n").map(s => s.trim()).filter(Boolean);
-  const valid = targets.length > 0 && (kind !== "choice" || optList.length >= 2) && (kind !== "notice" || title.trim() || text.trim());
+  const valid = targets.length > 0 && (kind !== "choice" || optList.length >= 2) && (kind !== "notice" || title.trim() || text.trim())
+    && (kind !== "dice" || mode !== "table" || !!table);
 
   const send = () => {
     if (!valid) return;
-    const spec = { kind, title, text, targets, dice: { count, mode, target: target ? parseInt(target) : null }, options: optList };
+    const spec = { kind, title, text, targets, dice: { count, mode, target: target ? parseInt(target) : null }, options: optList,
+      ...(kind === "dice" && table ? { table: { ...table, give: give && tableHasItems } } : {}) };
     const id = newId();
     const now = Date.now();
     setTitle(""); setText(""); setOptions(""); // 二重送信防止のため先にクリア
@@ -92,6 +99,22 @@ function RequestComposer({ pcs, upd }) {
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 9, color: C.textDim }}>
           <span onClick={() => setMode("nd6")} style={chip(mode === "nd6")}>nD6</span>
           <span onClick={() => setMode("d66")} style={chip(mode === "d66")}>D66</span>
+          {tables.length > 0 && <span onClick={() => setMode("table")} style={chip(mode === "table")}>独自の表</span>}
+          {mode === "table" && (
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 4 }}>
+              <select value={tableId} onChange={e => setTableId(e.target.value)} style={{ ...iStyle, fontSize: 10, padding: "3px 4px" }}>
+                <option value="">表を選択...</option>
+                {tables.map(t => <option key={t.id} value={t.id}>{t.name}（{TABLE_DICE[t.dice] || t.dice}）</option>)}
+              </select>
+              {tableHasItems && (
+                <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                  <input type="checkbox" checked={give} onChange={e => setGive(e.target.checked)} />
+                  結果と同じ名前の独自アイテムを、振った PC にそのまま渡す
+                </label>
+              )}
+              <div style={{ fontSize: 8, color: C.textFaint }}>PL が自分の画面で表を振り、結果がログに残ります。</div>
+            </div>
+          )}
           {mode === "nd6" && (
             <>
               <span>個数</span>
@@ -125,20 +148,24 @@ function RequestMonitor({ req, gs, upd }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
         <span style={{ flex: 1, fontSize: 10, color: done ? C.green : C.gold }}>
           {icon} {req.title || REQUEST_KINDS[req.kind]}
-          {req.kind === "dice" && <span style={{ color: C.textFaint }}>（{req.dice?.mode === "d66" ? "D66" : `${req.dice?.count}D6`}{req.dice?.target ? `・目標${req.dice.target}` : ""}）</span>}
+          {req.kind === "dice" && <span style={{ color: C.textFaint }}>（{req.table ? `表「${req.table.name}」${req.table.give ? "・アイテム自動" : ""}` : req.dice?.mode === "d66" ? "D66" : `${req.dice?.count}D6`}{req.dice?.target ? `・目標${req.dice.target}` : ""}）</span>}
         </span>
         <button onClick={() => upd(p => removeRequest(p, req.id))} title={done ? "閉じる" : "未回答のまま取り下げる"} style={tiny(done ? C.green : C.red)}>{done ? "閉じる" : "取り下げ"}</button>
       </div>
       {(req.targets || []).map(uid => {
         const r = req.responses?.[uid] || {};
         const rolled = (r.dice || []).length > 0;
+        const tr = tableResult(req, r, gs);
         return (
           <div key={uid} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 9, padding: "2px 0", borderTop: `1px solid ${C.border}44` }}>
             <span style={{ minWidth: 56, color: C.text }}>{nameOf(uid)}</span>
             {req.kind === "dice" && (
               <>
                 <span style={{ flex: 1, color: r.confirmed ? C.green : rolled ? C.gold : C.textFaint }}>{rolled ? describeDice(req, r, gs.unluckyPhase) : "未"}{rolled && !r.confirmed ? "（確定待ち）" : ""}</span>
-                {!rolled && <button onClick={() => { const d = rollN(req.dice.count); upd(p => respondDice(p, req.id, uid, d, true)); }} style={tiny(C.red)}>代理で振る</button>}
+                {!rolled && <button onClick={() => { const d = rollN(req.dice.count); const iid = newId(); upd(p => respondDice(p, req.id, uid, d, true, iid)); }} style={tiny(C.red)}>代理で振る</button>}
+                {tr?.item && (r.given
+                  ? <span style={{ color: C.green }}>渡し済み</span>
+                  : <button onClick={() => { const iid = newId(); upd(p => giveTableItem(p, req.id, uid, iid)); }} style={tiny(C.gold)}>【{tr.item.name}】を渡す</button>)}
                 {rolled && !r.confirmed && <button onClick={() => upd(p => confirmDice(p, req.id, uid))} style={tiny(C.red)}>代理確定</button>}
               </>
             )}
@@ -249,6 +276,7 @@ function AdhocBattleForm({ gs, upd, getSpot }) {
 export function GmRequestOverlay({ gs, upd, user }) {
   const [rolling, setRolling] = useState(null); // ローカルの振りアニメ { key, faces }
   const [hidden, setHidden] = useState(false);
+  const [results, setResults] = useState([]); // 自分が振った結果（目標値なしは振った瞬間に確定してカードが消えるため、手元に残す）
   const me = (gs.pcs || []).find(x => x.uid === user?.uid);
   if (!me) return null;
   const requests = getRequests(gs);
@@ -269,7 +297,7 @@ export function GmRequestOverlay({ gs, upd, user }) {
     });
   });
 
-  if (!mine.length && !cheerables.length) return null;
+  if (!mine.length && !cheerables.length && !results.length) return null;
 
   const animateThen = (key, n, done) => {
     if (rolling) return;
@@ -294,7 +322,7 @@ export function GmRequestOverlay({ gs, upd, user }) {
   if (hidden) {
     return (
       <div onClick={() => setHidden(false)} style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 140, padding: "6px 14px", borderRadius: 16, cursor: "pointer", background: "rgba(10,8,22,0.95)", border: `1px solid ${C.gold}`, color: C.gold, fontSize: 11, fontFamily: "'Noto Serif JP', serif", animation: "panelAlertGlow 1.6s ease infinite" }}>
-        📜 GMからの要求 {mine.length + cheerables.length} 件（開く）
+        📜 GMからの要求 {mine.length + cheerables.length} 件{results.length ? `・結果 ${results.length}` : ""}（開く）
       </div>
     );
   }
@@ -304,6 +332,19 @@ export function GmRequestOverlay({ gs, upd, user }) {
       <div style={{ textAlign: "right" }}>
         <span onClick={() => setHidden(true)} style={{ fontSize: 9, color: C.textFaint, cursor: "pointer", padding: "2px 8px", background: "rgba(10,8,22,0.9)", borderRadius: 8, border: `1px solid ${C.border}` }}>しまう ▾</span>
       </div>
+      {results.map(res => (
+        <div key={res.key} style={card(C.green)}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, color: C.textFaint, letterSpacing: 2, marginBottom: 3 }}>結果</div>
+              <div style={{ fontSize: 12, color: C.gold, marginBottom: 2 }}>{res.title}</div>
+              <div style={{ fontSize: 11, color: C.text }}>{res.text}</div>
+              {res.item && <div style={{ fontSize: 10, color: C.green, marginTop: 3 }}>{res.given ? `【${res.item}】を獲得しました` : `【${res.item}】（受け取りは GM が判断します）`}</div>}
+            </div>
+            <span onClick={() => setResults(results.filter(x => x.key !== res.key))} title="閉じる" style={{ fontSize: 11, color: C.textFaint, cursor: "pointer" }}>✕</span>
+          </div>
+        </div>
+      ))}
       {mine.map(req => {
         const r = req.responses?.[me.uid] || {};
         const key = `${req.id}:${me.uid}`;
@@ -345,13 +386,24 @@ export function GmRequestOverlay({ gs, upd, user }) {
           <div key={req.id} style={card(C.gold)}>
             {head}
             <div style={{ fontSize: 9, color: C.textDim, marginBottom: 6 }}>
-              {req.dice?.mode === "d66" ? "D66" : `${req.dice?.count}D6`}{target ? ` ／ 行為判定・目標値 ${target}` : ""}
+              {req.table ? `表「${req.table.name}」を振る（${TABLE_DICE[req.table.dice] || req.table.dice}）` : req.dice?.mode === "d66" ? "D66" : `${req.dice?.count}D6`}{target ? ` ／ 行為判定・目標値 ${target}` : ""}
             </div>
             {shown.length > 0 && (
               <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 6 }}>{shown.map((d, i) => face(d, i))}</div>
             )}
             {!dice.length ? (
-              <button disabled={!!rolling} onClick={() => animateThen(key, req.dice.count, res => upd(p => respondDice(p, req.id, me.uid, res)))} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 12 })}>🎲 ダイスを振る</button>
+              <button disabled={!!rolling} onClick={() => animateThen(key, req.dice.count, res => {
+                const iid = newId();
+                if (!target) {
+                  const resp = { dice: res };
+                  const tr = tableResult(req, resp, gs);
+                  setResults(prev => [...prev, {
+                    key: `${key}:${iid}`, title: req.title || (req.table ? `表「${req.table.name}」` : "ダイス"),
+                    text: describeDice(req, resp, gs.unluckyPhase), item: tr?.item?.name || null, given: !!(tr?.item && req.table?.give),
+                  }].slice(-3));
+                }
+                upd(p => respondDice(p, req.id, me.uid, res, false, iid));
+              })} style={btnFull(C.goldBg, C.goldDim, C.gold, { fontSize: 12 })}>🎲 {req.table ? "表を振る" : "ダイスを振る"}</button>
             ) : (
               <>
                 {j && (

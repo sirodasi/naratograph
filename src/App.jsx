@@ -9,6 +9,7 @@ import { useUrlParams } from "./useUrlParams";
 import { ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./session/shared";
 import { BackstoryScreen, EpilogueView, SceneStage } from "./session/scene";
 import { GmRequestOverlay } from "./session/gmPanel";
+import { GmReminderOverlay } from "./session/reminders";
 import { getCustom } from "./customRules";
 
 // コード分割: ロビーとセッションの大きな画面は必要になるまで読み込まない（初回表示を軽くする）
@@ -1594,6 +1595,9 @@ function SessionApp({ roomCode, user }) {
 
       {/* GM からの要求（ダイス・選択・告知）と応援できる判定。自分の PC がいる参加者にのみ表示 */}
       {isParticipant && mode !== "gm" && <GmRequestOverlay gs={gs} upd={upd} user={user} />}
+
+      {/* タイミングのメモ（独自タブで登録。サイクル開始時・ラウンド終了時などに GM にだけ表示） */}
+      {isParticipant && mode === "gm" && <GmReminderOverlay gs={gs} />}
 
       {/* 空を飛ぶ: 表ロール後の振り直しプロンプト（操作中の保持者にのみ表示） */}
       {pendingReroll && (

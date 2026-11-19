@@ -40,6 +40,11 @@ export const IHEN_PRESETS = [
         { id: "kakera", name: "春のかけら", color: "#e8a0b8", unique: true },
         { id: "cherry", name: "チェリー", color: "#d05040", unique: false },
       ],
+      reminders: [
+        { id: "m1", timing: "cycle_start", text: "【春のかけら】をPC人数の半分だけ、ランダムなスポットに置く（独自タブ › マップの独自コマ › ランダム配置）" },
+        { id: "m2", timing: "round_start", text: "このラウンドのNPCのショットステップごとに、回避側PCのフィールドのランダムなマスへチェリーを置く（盤面編集 › 独自コマ）" },
+        { id: "m3", timing: "round_end", text: "《森羅結界》のPCがこのラウンドの代表だったら、結界を解除して【春度】を0にする" },
+      ],
       states: [{ id: "shinra", name: "森羅結界", desc: "霊撃を宣言できる（自分のフィールドの弾幕を全て取り除き、確定した被弾も無効）", color: "#e8a0b8" }],
       rules: [{ id: "rule", title: "異変再現「春雪異変」（要約）", text: [
         "■【春度】PCごとに0〜5。NPCは持たない。",
@@ -64,6 +69,10 @@ export const IHEN_PRESETS = [
       stats: [
         { id: "kokufu", name: "刻符", scope: "global", min: 0, max: null, init: 0 },
         { id: "norma", name: "刻符ノルマ", scope: "global", min: 0, max: null, init: 0, initFromPcCount: true },
+      ],
+      reminders: [
+        { id: "m1", timing: "cycle_end", text: "【刻符】が【刻符ノルマ】を上回っていれば、時間操作で「このサイクルをもう一度行う」＋ノルマ+1" },
+        { id: "m2", timing: "cycle_end", text: "【刻符】を0にする（サイクル終了時に全て失われる）" },
       ],
       rules: [{ id: "rule", title: "異変再現「永夜異変」（要約）", text: [
         "■ 探索フェイズは「1日目の夜サイクル」から始まり、リミットも「1日目の夜サイクル」。",
@@ -90,6 +99,10 @@ export const IHEN_PRESETS = [
         { id: "film", name: "フィルム装填率", scope: "pc", min: 0, max: 5, init: 0 },
         { id: "score", name: "撮影スコア", scope: "battle", min: 0, max: null, init: 0 },
         { id: "norma", name: "撮影ノルマ", scope: "battle", min: 0, max: null, init: 0 },
+      ],
+      reminders: [
+        { id: "m1", timing: "battle_start", text: "弾幕撮影にするなら宣言し、【撮影ノルマ】を決める（目安は被写体の【残り人数】×3）" },
+        { id: "m2", timing: "round_start", text: "（弾幕撮影なら）被写体を自身の弾幕フィールドのランダムなマスへ移動させる（盤面編集 › コマを移動）" },
       ],
       rules: [{ id: "rule", title: "異変再現「弾幕撮影」（要約）", text: [
         "■【フィルム装填率】PCごとに0〜5（5を超えたら5）。弾幕撮影の処理中に条件を満たすと増える。",
@@ -124,6 +137,10 @@ export const IHEN_PRESETS = [
         { min: 5, max: 6, text: "ベントラー緑" },
       ] }],
       tokens: [{ id: "ufo", name: "UFO", color: "#7090e0", unique: false }],
+      reminders: [
+        { id: "m1", timing: "round_end", finalOnly: true, text: "対戦者のPCにベントラーアイテムをランダムに1つ（GM操作 › ダイス要求で決定表を振らせると、結果のアイテムがそのまま渡る）" },
+        { id: "m2", timing: "scene_end", text: "クエストが解決されたシーンなら、シーンプレイヤーに好きな種類のベントラーを1つ" },
+      ],
       rules: [{ id: "rule", title: "異変再現「宝船を追って」（要約）", text: [
         "■【ベントラーアイテム】赤・青・緑の3種類。通常のアイテムとは別に合計3つまで（4つ目を得たら1つ選んで捨てる）。同じスポットのPCに渡せる。",
         "■ 獲得: ランダムな種類はベントラーアイテム決定表（D6: 1-2赤 3-4青 5-6緑）。",
@@ -145,6 +162,10 @@ export const IHEN_PRESETS = [
     defs: {
       cats: [{ id: "ability", name: "アビリティカード", cap: 3 }],
       items: ABILITY_CARDS.map(([n, name, desc]) => ({ id: `c${n}`, name, cat: "ability", desc })),
+      reminders: [
+        { id: "m1", timing: "scene_end", text: "クエストシーンだったら市場を開く（アビリティカード表を「PC人数+1」回振って公開、各PCは【小銭】1つで1枚まで）" },
+        { id: "m2", timing: "battle_start", finalOnly: true, text: "決戦の弾幕ごっこの開始前に市場を開く（まだなら、セットアップ中に）" },
+      ],
       tables: [{ id: "cards", name: "アビリティカード表", dice: "d66", rows: ABILITY_CARDS.map(([n, name]) => ({ min: n, max: n, text: name })) }],
       rules: [{ id: "rule", title: "異変再現「月虹の市場」（要約）", text: [
         "■【アビリティカード】通常のアイテムとは別に3枚まで（4枚目を得たら1枚選んで捨てる）。",

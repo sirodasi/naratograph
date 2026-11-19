@@ -12,6 +12,7 @@
 //     mapTokens: [{ id, kind, spot }],                                          マップ上に置かれた独自コマ
 //     states: [{ id, name, desc, color }],                                      独自の状態
 //     rules:  [{ id, title, text }],                                            ルールの掲示
+//     reminders: [{ id, timing, text, finalOnly? }],                           タイミングのメモ（GM にだけ表示）
 //   }
 //   pc.custom     = { vals: { [statId]: n }, items: [{ iid, def, used? }], states: [stateId] }
 //   battle.customVals = { [statId]: n }   ← 戦闘中だけのステータス（戦闘ごとに作り直されるので自然にリセット）
@@ -23,7 +24,7 @@ const toArray = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Obje
 
 export const STAT_SCOPES = { pc: "PC個別", global: "全体共有", battle: "戦闘中のみ" };
 export const TABLE_DICE = { d6: "D6", "2d6": "2D6", d66: "D66" };
-export const DEF_KINDS = ["stats", "cats", "items", "tables", "tokens", "states", "rules"];
+export const DEF_KINDS = ["stats", "cats", "items", "tables", "tokens", "states", "rules", "reminders"];
 
 // Firebase の空配列消失・疎配列のオブジェクト化に耐える読み出し
 export function getCustom(gs) {
@@ -367,7 +368,7 @@ export function postRule(p, rule) {
 // 同じプリセットを再適用すると同じ id に上書き（値は保持）、解除でそのプリセット由来の定義だけを消せる。
 export const PRESET_SEP = "__";
 export const baseId = (id) => String(id).split(PRESET_SEP).pop();
-const PRESET_KINDS = DEF_KINDS; // stats, cats, items, tables, tokens, states, rules
+const PRESET_KINDS = DEF_KINDS; // stats, cats, items, tables, tokens, states, rules, reminders
 
 // Firebase から読んだ（空配列が消えた・疎配列がオブジェクトになった）プリセットを整える
 export function normalizePreset(raw) {
@@ -380,7 +381,7 @@ export function normalizePreset(raw) {
 
 export const presetSummary = (preset) => {
   const d = normalizePreset(preset)?.defs || {};
-  const parts = [["stats", "ステータス"], ["items", "アイテム"], ["tables", "表"], ["tokens", "コマ"], ["states", "状態"], ["rules", "ルール"]]
+  const parts = [["stats", "ステータス"], ["items", "アイテム"], ["tables", "表"], ["tokens", "コマ"], ["states", "状態"], ["rules", "ルール"], ["reminders", "メモ"]]
     .map(([k, n]) => d[k]?.length ? `${n}${d[k].length}` : null).filter(Boolean);
   return parts.join("・") || "空";
 };
@@ -440,4 +441,97 @@ export function unapplyPreset(p, key) {
   });
   next = withCustom(next, { applied: appliedPresets(next).filter(a => a.key !== key) });
   return { ...next, log: [`📜 GM: 異変再現「${name || key}」を解除した`, ...(p.log || [])] };
+}
+
+// ─── タイミングのメモ（GM 向けリマインダー） ─────────────────────
+// 自動処理はしない方針なので、「サイクル開始時にかけらを置く」などの手順を GM が忘れないよう、
+// そのタイミングが来たら GM の画面にメモを出す。検出は GM クライアントが gs の変化から行う（gs には何も書かない）。
+export const REMINDER_TIMINGS = [
+  { key: "day_start", label: "日の開始時" },
+  { key: "cycle_start", label: "サイクル開始時" },
+  { key: "scene_start", label: "シーン開始時" },
+  { key: "scene_end", label: "シーン終了時" },
+  { key: "cycle_end", label: "サイクル終了時（全員が行動済み）" },
+  { key: "battle_start", label: "弾幕ごっこ開始時", battle: true },
+  { key: "round_start", label: "ラウンド開始時", battle: true },
+  { key: "round_end", label: "ラウンド終了時", battle: true },
+  { key: "battle_end", label: "弾幕ごっこ終了時", battle: true },
+];
+export const timingLabel = (key) => REMINDER_TIMINGS.find(t => t.key === key)?.label || key;
+export const isBattleTiming = (key) => !!REMINDER_TIMINGS.find(t => t.key === key)?.battle;
+
+// タイミング検出に使う gs の要約（前回との比較用）
+export function timingSnapshot(gs) {
+  const pcs = toArray(gs?.pcs).filter(Boolean);
+  const acted = toArray(gs?.actedPcs);
+  const b = gs?.battle;
+  const active = !!b?.active;
+  return {
+    phase: gs?.sessionPhase || null,
+    day: gs?.day || 1,
+    ci: gs?.cycleIdx || 0,
+    acted: acted.length,
+    allActed: pcs.length > 0 && pcs.every(pc => acted.includes(pc.uid)),
+    scene: gs?.currentScene?.pcUid || null,
+    battle: active,
+    final: active && !!(b.isFinal ?? (b.type === "mass" && !b.questId)),
+    round: active ? (b.round || 1) : 0,
+    bphase: active ? (b.phase || null) : null,
+  };
+}
+
+const ROUND_ENDING = ["round_end_check", "cleanup"];
+
+// 前回と今回の要約から、通過したタイミングを順に返す [{ key, final }]
+export function detectTimings(prev, cur) {
+  if (!prev || !cur) return [];
+  const out = [];
+  const push = (key, final = false) => out.push({ key, final });
+  const explore = cur.phase === "explore" && !cur.battle;
+  const endReady = (s) => s.phase === "explore" && !s.battle && s.allActed && !s.scene;
+
+  // シーン（弾幕ごっこの前後で退避・復帰する分は数えない）
+  if (!prev.battle && !cur.battle && prev.scene !== cur.scene) {
+    if (prev.scene) push("scene_end");
+  }
+  // 弾幕ごっこの終了（ラウンド途中で決着した場合、ラウンド終了時のメモは出さない）
+  if (prev.battle && !cur.battle) push("battle_end", prev.final);
+  // サイクル
+  if (explore) {
+    const fromIntro = String(prev.phase || "").startsWith("intro");
+    const clockMoved = prev.day !== cur.day || prev.ci !== cur.ci;
+    const reset = prev.phase === "explore" && prev.allActed && prev.acted > 0 && cur.acted === 0; // 同じサイクルの繰り返し等
+    const newCycle = fromIntro || clockMoved || reset;
+    if (newCycle) {
+      // 全員の行動を待たずに進めた場合も、終了時のメモはここで出す
+      if (prev.phase === "explore" && !endReady(prev)) push("cycle_end");
+      if (fromIntro || prev.day !== cur.day) push("day_start");
+      push("cycle_start");
+    } else if (endReady(cur) && !endReady(prev)) {
+      push("cycle_end");
+    }
+  }
+  if (!prev.battle && !cur.battle && prev.scene !== cur.scene && cur.scene) push("scene_start");
+
+  // 弾幕ごっこ
+  if (!prev.battle && cur.battle) {
+    push("battle_start", cur.final);
+    if (cur.bphase === "round_start") push("round_start", cur.final);
+  } else if (prev.battle && cur.battle) {
+    const ending = ROUND_ENDING.includes(cur.bphase);
+    const wasEnding = ROUND_ENDING.includes(prev.bphase);
+    if ((ending && !wasEnding) || (cur.round > prev.round && !wasEnding)) push("round_end", cur.final);
+    if (cur.bphase === "round_start" && prev.bphase !== "round_start") push("round_start", cur.final);
+  }
+  return out;
+}
+
+// 通過したタイミングに登録されたメモ [{ key, label, final, items: [reminder] }]（メモの無いタイミングは除く）
+export function remindersFor(gs, events) {
+  const list = getCustom(gs).reminders;
+  return toArray(events).map(ev => ({
+    ...ev,
+    label: timingLabel(ev.key),
+    items: list.filter(r => r.timing === ev.key && (!r.finalOnly || ev.final)),
+  })).filter(g => g.items.length > 0);
 }

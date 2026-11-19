@@ -6,12 +6,14 @@
 // を行えるようにする。いずれも gs の更新関数（upd に渡す p => next）として書き、
 // トランザクションで再実行されても結果が変わらないよう、乱数は呼び出し側で振って引数で渡す。
 import { SPECIAL_BOND_CHEER, BAD_STATUS_TABLE, buildBattleNpc } from "./session/shared";
+import { TABLE_DICE, tableDiceCount, tableValue, lookupTable, itemByName, giveItem } from "./customRules";
 
 const toArray = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
 
 // ─── 要求（gs.gmRequests） ───────────────────────────────────────
 // { id, kind: "dice"|"choice"|"notice", title, text, targets: [uid], createdAt,
 //   dice?: { count, mode: "nd6"|"d66", target? }, options?: [string],
+//   table?: { id, name, dice, rows, give? }   ← カスタム表を振らせる場合（作成時点の表を写して持つ。give=結果と同名の独自アイテムを渡す）
 //   responses: { [uid]: { dice?, cheers?, confirmed?, choice?, ack?, byGm? } } }
 export const REQUEST_KINDS = { dice: "ダイス", choice: "選択", notice: "告知" };
 export const MAX_REQUESTS = 12;
@@ -21,13 +23,29 @@ export const getRequests = (gs) => toArray(gs?.gmRequests).filter(Boolean);
 const pcName = (p, uid) => (p.pcs || []).find(x => x.uid === uid)?.charName || "？";
 
 const diceText = (d) => d.mode === "d66" ? "D66" : `${d.count}D6`;
+const reqDiceText = (r) => r.table ? `表「${r.table.name}」(${TABLE_DICE[r.table.dice] || r.table.dice})` : diceText(r.dice);
+
+// 表の要求の結果 { value, text, item }（振っていなければ null）
+export function tableResult(req, resp, gs) {
+  const dice = toArray(resp?.dice);
+  if (!req?.table || !dice.length) return null;
+  const value = tableValue(req.table.dice, dice);
+  const text = lookupTable(req.table, value)?.text || null;
+  return { value, text, item: text && gs ? itemByName(gs, text) : null };
+}
 
 // 要求を作る。spec: { kind, title, text, targets, dice?, options? }。id/createdAt は呼び出し側で決める。
 export function addRequest(p, spec, id, now) {
   const targets = [...new Set((spec.targets || []).filter(Boolean))];
   if (!targets.length) return p;
   const req = { id, kind: spec.kind, title: (spec.title || "").trim(), text: (spec.text || "").trim(), targets, createdAt: now, responses: {} };
-  if (spec.kind === "dice") {
+  if (spec.kind === "dice" && spec.table?.id) {
+    const t = spec.table;
+    const rows = toArray(t.rows).filter(Boolean);
+    if (!rows.length) return p;
+    req.table = { id: t.id, name: t.name || "表", dice: t.dice, rows, ...(t.give ? { give: true } : {}) };
+    req.dice = t.dice === "d66" ? { count: 2, mode: "d66" } : { count: tableDiceCount(t.dice), mode: "nd6" };
+  } else if (spec.kind === "dice") {
     const mode = spec.dice?.mode === "d66" ? "d66" : "nd6";
     const count = mode === "d66" ? 2 : Math.max(1, Math.min(10, parseInt(spec.dice?.count) || 1));
     const target = mode === "nd6" && spec.dice?.target ? Math.max(1, Math.min(6, parseInt(spec.dice.target) || 0)) : null;
@@ -39,7 +57,7 @@ export function addRequest(p, spec, id, now) {
   }
   const names = targets.map(uid => pcName(p, uid)).join("・");
   const head = spec.kind === "dice"
-    ? `🎲 GM: ${names} に${req.title ? `「${req.title}」の` : ""}${diceText(req.dice)}${req.dice.target ? `（目標値${req.dice.target}）` : ""}を要求`
+    ? `🎲 GM: ${names} に${req.title ? `「${req.title}」の` : ""}${reqDiceText(req)}${req.dice.target ? `（目標値${req.dice.target}）` : ""}を要求`
     : spec.kind === "choice"
     ? `❓ GM: ${names} に選択を要求${req.title ? `「${req.title}」` : ""}（${req.options.join(" / ")}）`
     : `📣 GM: ${req.title ? `「${req.title}」` : "告知"}${req.text ? ` ${req.text}` : ""}`;
@@ -80,6 +98,10 @@ export function evalJudgment(dice, target, unlucky = false) {
 export function describeDice(req, resp, unlucky = false) {
   const dice = toArray(resp?.dice);
   if (!dice.length) return "";
+  if (req.table) {
+    const v = tableValue(req.table.dice, dice);
+    return `${v}${req.table.dice === "d6" ? "" : `（${dice.join(",")}）`} → ${lookupTable(req.table, v)?.text || "（該当なし）"}`;
+  }
   if (req.dice?.mode === "d66") return `D66 → ${d66Value(dice)}（${dice.join(",")}）`;
   const base = `${dice.join(",")}${dice.length > 1 ? `（合計${dice.reduce((a, b) => a + b, 0)}）` : ""}`;
   if (!req.dice?.target) return base;
@@ -89,7 +111,8 @@ export function describeDice(req, resp, unlucky = false) {
 }
 
 // ダイス要求に振った結果を記録（dice は呼び出し側で振る）。目標値なしならその場で確定。
-export function respondDice(p, id, uid, dice, byGm = false) {
+// 表の要求で give 指定なら、結果と同名の独自アイテムを渡す（iid は呼び出し側で決める）。
+export function respondDice(p, id, uid, dice, byGm = false, iid = null) {
   const next = patchResponse(p, id, uid, (cur, r) => {
     if (toArray(cur.dice).length) return cur; // 二重振り防止
     return { ...cur, dice, ...(r.dice?.target ? {} : { confirmed: true }), ...(byGm ? { byGm: true } : {}) };
@@ -97,8 +120,20 @@ export function respondDice(p, id, uid, dice, byGm = false) {
   if (!next) return p;
   const req = getRequests(next).find(r => r.id === id);
   const resp = req.responses[uid];
-  const label = req.title ? `「${req.title}」` : "ダイス要求";
-  return { ...next, log: [`🎲 ${pcName(p, uid)} の${label}: ${describeDice(req, resp, p.unluckyPhase)}${byGm ? "（GM代理）" : ""}`, ...(p.log || [])] };
+  const label = req.title ? `「${req.title}」` : req.table ? `表「${req.table.name}」` : "ダイス要求";
+  const logged = { ...next, log: [`🎲 ${pcName(p, uid)} の${label}: ${describeDice(req, resp, p.unluckyPhase)}${byGm ? "（GM代理）" : ""}`, ...(p.log || [])] };
+  const item = req.table?.give && iid ? tableResult(req, resp, logged)?.item : null;
+  return item ? giveTableItem(logged, id, uid, iid) : logged;
+}
+
+// 表の結果と同名の独自アイテムを、振った PC に渡す（1回だけ。responses[uid].given で記録）
+export function giveTableItem(p, id, uid, iid) {
+  const req = getRequests(p).find(r => r.id === id);
+  const resp = req?.responses?.[uid];
+  const item = tableResult(req, resp, p)?.item;
+  if (!item || resp.given || !iid) return p;
+  const marked = patchResponse(p, id, uid, (cur) => ({ ...cur, given: true }));
+  return giveItem(marked, uid, item.id, iid, `表「${req.table.name}」`);
 }
 
 // 応援（判定後の振り足し）。cheerConsume は応援者に適用するパッチ（bondUsed 等）。

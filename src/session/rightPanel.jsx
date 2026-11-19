@@ -247,7 +247,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             </div>
           )}
           {isGm && <GmFieldEditor gs={gs} upd={upd} />}
-          <CustomBoard gs={gs} upd={upd} isGm={isGm} />
+          <CustomBoard gs={gs} upd={upd} isGm={isGm} getSpot={getSpot} />
           <BattleRightPanel
             gs={gs}
             upd={upd}
@@ -385,7 +385,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
               {tab === "progress" && (
                 <div>
-                  <CustomBoard gs={gs} upd={upd} isGm={isGm} />
+                  <CustomBoard gs={gs} upd={upd} isGm={isGm} getSpot={getSpot} />
                   {/* 任意ダイス（GM裁定・自作判定用） */}
                   <div style={{ marginBottom: 8, padding: 6, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 4 }}>
                     <div style={{ fontSize: 9, color: C.gold, marginBottom: 4 }}>🎲 任意ダイス</div>

@@ -99,7 +99,7 @@ describe("書き出しと読み戻し", () => {
   });
 
   it("要約表示", () => {
-    expect(presetSummary(getIhenPreset("eiya"))).toBe("ステータス2・ルール1");
+    expect(presetSummary(getIhenPreset("eiya"))).toBe("ステータス2・ルール1・メモ2");
   });
 });
 
