@@ -128,16 +128,23 @@ export function respondDice(p, id, uid, dice, byGm = false, iid = null) {
   const resp = req.responses[uid];
   const label = req.title ? `「${req.title}」` : req.table ? `表「${req.table.name}」` : "ダイス要求";
   const logged = { ...next, log: [`🎲 ${pcName(p, uid)} の${label}: ${describeDice(req, resp, p.unluckyPhase)}${byGm ? "（GM代理）" : ""}`, ...(p.log || [])] };
-  const item = req.table?.give && iid ? tableResult(req, resp, logged)?.item : null;
+  const item = req.table?.give ? tableResult(req, resp, logged)?.item : null;
   return item ? giveTableItem(logged, id, uid, iid) : logged;
 }
 
 // 表の結果と同名の独自アイテムを、振った PC に渡す（1回だけ。responses[uid].given で記録）
-export function giveTableItem(p, id, uid, iid) {
+// 表の報酬のアイテムの iid は「要求 × PC」で決める。回答が消されて答え直しても、同じ報酬を二重に渡さないように
+export const tableGrantIid = (id, uid) => `rq_${id}_${uid}`;
+const hasItemIid = (p, iid) => (p.pcs || []).some(pc => toArray(pc?.custom?.items).some(it => it?.iid === iid));
+
+export function giveTableItem(p, id, uid, _iid = null) {
   const req = getRequests(p).find(r => r.id === id);
   const resp = req?.responses?.[uid];
   const item = tableResult(req, resp, p)?.item;
-  if (!item || resp.given || !iid) return p;
+  if (!item || resp.given) return p;
+  const iid = tableGrantIid(id, uid);
+  // 既に渡してある（回答が消されて答え直した等）なら、渡さずに「渡し済み」だけ戻す
+  if (hasItemIid(p, iid)) return patchResponse(p, id, uid, (cur) => ({ ...cur, given: true })) || p;
   // 先に渡し、実際に渡せた（PC がいる）ときだけ「渡し済み」にする（同じ更新の中で両方）
   const granted = giveItem(p, uid, item.id, iid, `表「${req.table.name}」`);
   if (granted === p) return p;

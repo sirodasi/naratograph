@@ -16,6 +16,12 @@ import { CustomRulesEditor, CustomBoard, GmFieldEditor } from "./customPanel";
 import { getRequests } from "../gmTools";
 
 // ─── RightPanel ───────────────────────────────────────────────────
+// Enter で主要アクションを実行してよいか（GM のみ・主要アクションがある・ボタン等にフォーカスが無い・
+// 弾幕ごっこ中でない・ショートカット一覧や新聞などのオーバーレイ／ダイアログを開いていない）
+export function canRunMainActionByEnter({ isGm, hasAction, interactive, inBattle, overlayOpen, dialogOpen }) {
+  return !!(isGm && hasAction && !interactive && !inBattle && !overlayOpen && !dialogOpen);
+}
+
 export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room, animateDice, CYCLES, CYCLE_COLORS, NEWSPAPER, getSpot, doNewspaper, doReiryoku, setPendingAction, SPOTS, presence = {}, width = 300, undo, undoCount = 0 }) {
   const [tab, setTab]             = useState("progress");
   const [expandedQuests, setExpandedQuests] = useState({});
@@ -183,7 +189,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
       // M: 効果音ミュート切替
       if (e.key === "m" || e.key === "M") { e.preventDefault(); sfx.toggle(); return; }
       // Enter: 状況に応じた主要アクションを実行（GMのみ）
-      if (e.key === "Enter" && isGm && maRef.current && !interactive && !battleRef.current && !overlayRef.current && !document.querySelector("[role=dialog]")) {
+      if (e.key === "Enter" && canRunMainActionByEnter({ isGm, hasAction: !!maRef.current, interactive, inBattle: battleRef.current, overlayOpen: overlayRef.current, dialogOpen: !!document.querySelector("[role=dialog]") })) {
         e.preventDefault();
         maRef.current.fn();
         return;

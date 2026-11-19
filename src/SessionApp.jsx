@@ -1068,7 +1068,8 @@ export default function SessionApp({ roomCode, user }) {
       // アンドゥ: ログが増えた＝意味のある操作 の直前状態を保存（ダイス演出等のログ無し更新は無視）。
       // GM 専用部分はこの操作で変えた分だけを戻せるよう、前後の値も持つ
       if (last.logGrew) {
-        undoStackRef.current = [...undoStackRef.current.slice(-19), { view: last.prev, gmBefore, gmAfter, undoGate: opts.undoGate || null }];
+        const undoGate = opts.undoGateFor ? opts.undoGateFor(last.next) : (opts.undoGate || null);
+        undoStackRef.current = [...undoStackRef.current.slice(-19), { view: last.prev, gmBefore, gmAfter, undoGate }];
         setUndoCount(undoStackRef.current.length);
       }
       // ログ上限超過分を退避（終了時の .txt 出力で全文を復元）
@@ -1076,6 +1077,16 @@ export default function SessionApp({ roomCode, user }) {
       return { committed: true, gs: last.next };
     }).catch(e => { console.error("ゲームステートの更新に失敗:", e); return { committed: false, gs: null }; });
   }, [gsPath, roomCode, writeGmParts]);
+
+  // GM 用の場所に「配列の番号」をキーにして保存されたメモ（以前の形式）を、id をキーにした形へ直す
+  useEffect(() => {
+    if (!amGm || mode !== "gm" || !secretCustom?.reminders) return;
+    const patch = {};
+    Object.entries(secretCustom.reminders).forEach(([k, r]) => {
+      if (r && r.id && String(r.id) !== k) { patch[k] = null; patch[r.id] = stripUndefined(r); }
+    });
+    if (Object.keys(patch).length) update(ref(db, `roomSecrets/${roomCode}/gm/custom/reminders`), patch).catch(e => console.error("タイミングのメモの形式の変換に失敗:", e));
+  }, [amGm, mode, secretCustom, roomCode]);
 
   // 旧形式（state にタイミングのメモがある）の部屋: GM 用の場所へ写し、サーバーが受け付けてから state から消す。
   // 消す更新がコミットされなければ、少し待ってやり直す（写しはそのまま使う）
@@ -1090,12 +1101,13 @@ export default function SessionApp({ roomCode, user }) {
       try {
         if (!legacyCopiedRef.current) {
           const remRef = ref(db, `roomSecrets/${roomCode}/gm/custom/reminders`);
-          const onServer = await get(remRef); // サーバーの値（既に写してあれば使う）
-          if (!onServer.exists()) {
-            const legacy = gsRaw.custom.reminders;
-            const map = Object.fromEntries((Array.isArray(legacy) ? legacy : Object.values(legacy)).filter(r => r && r.id).map(r => [r.id, r]));
-            await set(remRef, stripUndefined(map)); // サーバーが受け付けるまで待つ
-          }
+          const onServer = (await get(remRef)).val() || {}; // サーバーの値
+          const have = new Set(Object.values(onServer).filter(r => r && r.id).map(r => String(r.id)));
+          const legacy = gsRaw.custom.reminders;
+          // GM 用の場所に無いメモだけを id ごとに足す（既にあるメモ・別タブで追加されたメモは上書きしない）
+          const patch = {};
+          (Array.isArray(legacy) ? legacy : Object.values(legacy)).filter(r => r && r.id && !have.has(String(r.id))).forEach(r => { patch[r.id] = stripUndefined(r); });
+          if (Object.keys(patch).length) await update(remRef, patch); // サーバーが受け付けるまで待つ
           legacyCopiedRef.current = true;
         }
         const res = await upd(p => p); // 写しが確かめられたので、この書き込みで state から消える
@@ -1110,16 +1122,32 @@ export default function SessionApp({ roomCode, user }) {
   }, [amGm, mode, secretCustom, gsRaw, roomCode, upd, migrationRetry]);
 
   // PL が始めたクエストの弾幕ごっこ（敵データは秘匿のため未設定）に、GM のクライアントが敵を補う。
-  // PL は battle.questId を自由に書けるので、GM の公開記録で「登場済み」のクエストでなければ敵を出さない
+  // PL は battle.questId を自由に書けるので、GM の公開記録で「登場済み」のクエストでなければ敵を出さない。
+  // 手元の記録で未登場なら、サーバーの最新の記録を読み直す（別の GM のクライアントが書いた直後など、届く順が前後しても誤って中止しない）。
+  // それでも未登場なら少し待って数回読み直し、最後まで未登場のときだけ中止する。
   useEffect(() => {
     if (!amGm || mode !== "gm" || !gsRaw.battle?.active || !gsRaw.battle?.awaitingEnemies || !gmScenario?.quests) return;
     if (questGate === undefined) return;
-    const stamp = Date.now();
     const qid = gsRaw.battle.questId;
-    const revealed = !!questGate?.revealed?.[qid];
-    // 確かめたクエストと、トランザクション時点の戦闘のクエストが同じときだけ補う（違えば、その戦闘は改めて判定する）
-    upd(p => (!p.battle?.awaitingEnemies || String(p.battle.questId) !== String(qid)) ? p : fillAwaitingEnemies(p, revealed ? gmScenario.quests : [], stamp));
-  }, [amGm, mode, gsRaw.battle?.active, gsRaw.battle?.awaitingEnemies, gsRaw.battle?.questId, gmScenario, questGate, upd]);
+    let cancelled = false;
+    const fill = (revealed) => {
+      const stamp = Date.now();
+      // 確かめたクエストと、トランザクション時点の戦闘のクエストが同じときだけ補う（違えば、その戦闘は改めて判定する）
+      upd(p => (!p.battle?.awaitingEnemies || String(p.battle.questId) !== String(qid)) ? p : fillAwaitingEnemies(p, revealed ? gmScenario.quests : [], stamp));
+    };
+    if (questGate?.revealed?.[qid]) { fill(true); return; }
+    (async () => {
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        if (attempt) await new Promise(r => setTimeout(r, 1500));
+        try {
+          const snap = await get(ref(db, `rooms/${roomCode}/questGate/revealed/${qid}`));
+          if (snap.val() === true) { if (!cancelled) fill(true); return; }
+        } catch (e) { console.error("クエストの公開記録の確認に失敗:", e); }
+      }
+      if (!cancelled) fill(false);
+    })();
+    return () => { cancelled = true; };
+  }, [amGm, mode, gsRaw.battle?.active, gsRaw.battle?.awaitingEnemies, gsRaw.battle?.questId, gmScenario, questGate, roomCode, upd]);
 
   // ─── シナリオ秘匿（GM クライアントのみ） ─────────────────────────
   const secretScenarioPath = `roomSecrets/${roomCode}/gm/scenarioData`;
@@ -1157,36 +1185,37 @@ export default function SessionApp({ roomCode, user }) {
   }, [amGm, gsRaw.scenarioRevealed, questGate, gs.quests]);
   // GM の承認で真相を公開する。真相の文が無いクエストも、承認すれば次のクエストを解放する。
   //   ・承認できるのは公開記録で「登場済み」のクエストだけ。トランザクションの時点でまだ解決済みのものだけを承認する
-  //   ・解放される次のクエスト（秘匿シナリオから決まる）は、state に出す前に公開記録へ「登場済み」として書く
-  //     （PL がそのクエストの弾幕ごっこを始めたとき、GM のクライアントが敵を補えるように）。書けなければ公開しない
-  //   ・取り消し（アンドゥ）では、この承認で新たに立てた記録だけを外す
+  //   ・公開記録（承認済み・解放した次のクエストの登場済み）は、承認がコミットされた後に、確定した分だけを書く
+  //     （承認が確定しなければ何も記録しない。書けなければ知らせ、承認待ちのまま残るので再度承認できる）
+  //   ・敵の補充は公開記録をサーバーから読み直して待つので、記録が少し遅れて届いても戦闘は中止されない
+  //   ・取り消し（アンドゥ）では、この承認で新たに立てた記録だけを外す（別の操作の承認は消さない）
+  const gateForApproval = (after, want, scQs, gate) => {
+    const approved = want.filter(id => (after?.quests || []).some(q => q && String(q.id) === String(id) && q.solved));
+    const approvedSet = new Set(approved.map(String));
+    const unlocked = scQs.filter(sq => sq?.unlockType === "quest" && approvedSet.has(String(sq.unlockQuestId))).map(sq => sq.id);
+    const patch = {};
+    approved.forEach(id => { if (!gate.approved?.[id]) patch[`approved/${id}`] = true; });
+    unlocked.forEach(id => { if (!gate.revealed?.[id]) patch[`revealed/${id}`] = true; });
+    return { patch, undo: Object.fromEntries(Object.keys(patch).map(k => [k, null])) };
+  };
   const revealTruths = useCallback(async (ids) => {
     if (!amGm || !gmScenario?.quests || !ids?.length) return;
     const scQs = gmScenario.quests;
     const gate = questGate || {};
     const want = ids.filter(id => gate.revealed?.[id]);
     if (!want.length) return;
-    const solvedNow = new Set((gs.quests || []).filter(q => q?.solved).map(q => String(q.id)));
-    const unlockIds = scQs.filter(sq => sq?.unlockType === "quest" && want.some(id => String(id) === String(sq.unlockQuestId) && solvedNow.has(String(id)))).map(sq => sq.id);
-    const prePatch = {};
-    unlockIds.forEach(id => { if (!gate.revealed?.[id]) prePatch[`revealed/${id}`] = true; });
-    if (Object.keys(prePatch).length) {
-      try { await update(ref(db, `rooms/${roomCode}/questGate`), prePatch); }
-      catch (e) { console.error(e); window.alert("クエストの公開記録を保存できませんでした。通信状況を確認して、もう一度公開してください。"); return; }
-    }
-    const undoGate = { ...Object.fromEntries(Object.keys(prePatch).map(k => [k, null])) };
-    want.forEach(id => { if (!gate.approved?.[id]) undoGate[`approved/${id}`] = null; });
     const res = await upd(p => {
       const solvedIds = want.filter(id => (p.quests || []).some(q => q && String(q.id) === String(id) && q.solved));
       if (!solvedIds.length) return p; // 承認の前に解決が取り消された
       const next = reconcileQuests(p.quests, scQs, solvedIds);
       return { ...p, ...(next ? { quests: next } : {}), log: [`🔓 GM: クエストの真相を公開した`, ...(p.log || [])] };
-    }, { undoGate });
+    }, { undoGateFor: (after) => gateForApproval(after, want, scQs, gate).undo });
     if (!res?.committed) return;
-    // 確定した状態でまだ解決済みのクエストだけを承認済みにする
-    const approved = want.filter(id => (res.gs?.quests || []).some(q => q && String(q.id) === String(id) && q.solved));
-    writeGate(Object.fromEntries(approved.map(id => [`approved/${id}`, true])));
-  }, [amGm, gmScenario, questGate, gs.quests, roomCode, upd, writeGate]);
+    const { patch } = gateForApproval(res.gs, want, scQs, gate);
+    if (!Object.keys(patch).length) return;
+    try { await update(ref(db, `rooms/${roomCode}/questGate`), patch); }
+    catch (e) { console.error(e); window.alert("クエストの公開記録を保存できませんでした。通信状況を確認して、もう一度「公開する」を押してください。"); }
+  }, [amGm, gmScenario, questGate, roomCode, upd]);
   const autoReveal = !!room?.config?.autoRevealTruth;
   const pendingKey = pendingTruths.map(q => q.id).join(",");
   useEffect(() => {

@@ -134,7 +134,7 @@ describe("表のダイス要求", () => {
     const r = getRequests(p)[0].responses.a;
     expect(r).toMatchObject({ confirmed: true, given: true });
     expect(describeDice(getRequests(p)[0], r)).toBe("4 → ベントラー青");
-    expect(pcCustom(p.pcs[0]).items).toEqual([{ iid: "i1", def: "tb__blue" }]);
+    expect(pcCustom(p.pcs[0]).items).toEqual([{ iid: "rq_q1_a", def: "tb__blue" }]); // iid は要求 × PC で決まる
     // 二重に渡さない
     expect(giveTableItem(p, "q1", "a", "i2")).toBe(p);
   });
