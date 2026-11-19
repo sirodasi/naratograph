@@ -345,7 +345,17 @@ export function gateRecoveryActions(quests, scenarioQuests, gate) {
     const sq = scById.get(String(q.id));
     if (sq?.unlockType !== "quest") return [];
     const parent = sq.unlockQuestId;
-    if (parent != null && parent !== "" && gate.approved?.[parent]) return [{ id: q.id, opId, action: "reveal", value: gate.approved[parent] }];
+    if (parent != null && parent !== "" && gate.approved?.[parent]) return [{ id: q.id, opId, action: "reveal", value: gate.approved[parent], parent }];
     return [];
   });
+}
+
+// 回復で「登場済み」の記録を作るトランザクションの更新関数（questGate 全体に対して実行する）。
+// サーバーの値で、元のクエストの承認がまだ同じ操作（value）のままのときだけ、子の登場済みの記録を value で作る。
+// 承認が取り消されていれば（別の GM クライアントのアンドゥも含む）中止（undefined）。既に記録があればそのまま
+// （同じ値を書き戻してサーバーでの確定を待つ）。親ノードのトランザクションなので、取り消しの書き込みと競合すれば再実行される
+export function recoverRevealTx(gate, id, parent, value) {
+  if (!gate || value == null || gate.approved?.[parent] !== value) return undefined;
+  if (gate.revealed?.[id]) return gate;
+  return { ...gate, revealed: { ...(gate.revealed || {}), [id]: value } };
 }

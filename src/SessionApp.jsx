@@ -20,7 +20,7 @@ const BonusPhaseView = lazy(() => import("./session/phases").then(m => ({ defaul
 const SessionEndView = lazy(() => import("./session/phases").then(m => ({ default: m.SessionEndView })));
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
-import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates, clearOwnGatePending, gateRecoveryActions } from "./gsSync";
+import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates, clearOwnGatePending, gateRecoveryActions, recoverRevealTx } from "./gsSync";
 import { fillAwaitingEnemies } from "./gmTools";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
@@ -1260,20 +1260,37 @@ export default function SessionApp({ roomCode, user }) {
   //   ・公開記録で既に登場済みなら、確認待ちを外す
   //   ・元のクエストが公開記録で承認済みなら（GM の記録が根拠）、登場済みの記録を書いてから外す
   //   ・どちらでもなければ（承認の記録が保存されていない）、元のクエストが承認待ちに戻るので、GM が再承認すれば進む
-  //   （確認待ちの値は付けた操作の opId。旧版の true もそのまま照合に使う。同じ確認待ちの回復は一度だけ始める）
+  //   （確認待ちの値は付けた操作の opId。旧版の true もそのまま照合に使う。同じ確認待ちの回復は同時に一つだけ。
+  //    失敗・中止したら、公開記録が次に変わったときに再判定する）
   const pendingGateKey = (gs.quests || []).filter(q => q?.gatePending).map(q => `${q.id}:${q.gatePending}`).join(",");
   const recoveringGateRef = useRef(new Set());
   useEffect(() => {
     if (!amGm || mode !== "gm" || !questGate || !gmScenario?.quests || !pendingGateKey) return;
-    gateRecoveryActions(gs.quests, gmScenario.quests, questGate).forEach(({ id, opId, value }) => {
+    gateRecoveryActions(gs.quests, gmScenario.quests, questGate).forEach(({ id, opId, action, value, parent }) => {
       const key = `${id}:${opId}:${value}`;
       if (recoveringGateRef.current.has(key)) return;
       recoveringGateRef.current.add(key);
-      // clear も reveal も、登場済みの記録をサーバーで確定させてから外す（reveal の値は元のクエストを承認した操作）
-      commitGate({ [`revealed/${id}`]: value }, [id], opId);
+      // 購読値（手元の未確定の値や、別の GM の取り消し前の値）だけを根拠に記録を作らない:
+      //   clear  … サーバーに既にある記録を確かめるだけ（無ければ作らずに中止）
+      //   reveal … questGate 全体のトランザクションで「親の承認が同じ操作のまま」のときだけ子の記録を作る
+      //            （どのタブの取り消しと競合しても、サーバーの値で再判定される）
+      const gatePath = `rooms/${roomCode}/questGate`;
+      const tx = action === "reveal"
+        ? runTransaction(ref(db, gatePath), cur => recoverRevealTx(cur, id, parent, value), { applyLocally: false })
+            .then(r => r.committed && !!r.snapshot.child(`revealed/${id}`).val())
+        : runTransaction(ref(db, `${gatePath}/revealed/${id}`), cur => (cur ? cur : undefined), { applyLocally: false })
+            .then(r => r.committed && !!r.snapshot.val());
+      tx.then(async ok => {
+        if (!ok) { recoveringGateRef.current.delete(key); return; } // 根拠が無い（取り消された等）。記録が変われば再判定する
+        const res = await upd(p => {
+          const quests = clearOwnGatePending(p.quests, [id], opId);
+          return quests === p.quests ? p : { ...p, quests };
+        });
+        if (!res?.committed) recoveringGateRef.current.delete(key);
+      }).catch(e => { console.error("確認待ちの回復に失敗:", e); recoveringGateRef.current.delete(key); });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amGm, mode, questGate, gmScenario, pendingGateKey]);
+  }, [amGm, mode, questGate, gmScenario, pendingGateKey, roomCode]);
   const autoReveal = !!room?.config?.autoRevealTruth;
   const pendingKey = pendingTruths.map(q => q.id).join(",");
   useEffect(() => {
