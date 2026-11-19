@@ -3,10 +3,12 @@
 //   CustomBoard       … 全員に見える掲示（ルール文・全体共有/戦闘中のステータス・マップの独自コマの凡例）
 //   CustomPcSection   … PC カード内（PC個別ステータス・独自の状態・独自アイテム）
 //   GmFieldEditor     … 弾幕ごっこ中の GM 盤面編集（弾幕・独自コマ・被弾無効・追加の回避ステップ・一時スキル）
-import { useState, useEffect } from "react";
+//   PresetDefsEditor  … セッション外でプリセットの定義を編集する（src/session/presetManager.jsx から使う。運用の操作は出さない）
+import { useState, useEffect, useRef } from "react";
 import { db } from "../firebase";
 import { ref as dbRef, get as dbGet, set as dbSet, remove as dbRemove } from "firebase/database";
 import { stripUndefined } from "../gsSync";
+import { downloadJson, readFileText } from "../fileTransfer";
 import { IHEN_PRESETS } from "../data/ihenPresets";
 import { C, iStyle } from "../styles/colors";
 import { CYCLES } from "../data/gameData";
@@ -16,7 +18,7 @@ import {
   tableValue, lookupTable, logTableRoll, itemByName, placeTokens, removeToken, clearTokens,
   tokenCandidates, toggleState, setClock, repeatCycle, setLimit, parseLimit, postRule, pcCustom,
   DEF_KINDS, normalizePreset, presetSummary, appliedPresets, presetFromGs, applyPreset, unapplyPreset,
-  REMINDER_TIMINGS, isBattleTiming,
+  REMINDER_TIMINGS, isBattleTiming, presetToFile, presetFileName, parsePresetFile,
 } from "../customRules";
 import {
   adjustBullets, placeBulletsByDice, clearField, moveEntity, adjustLives, cancelHit, startExtraEvade,
@@ -212,6 +214,24 @@ export function CustomRulesEditor({ gs, upd, SPOTS = [], getSpot, user }) {
   );
 }
 
+// ─── プリセットの定義だけを編集する（セッション外） ─────────────────
+// gs の代わりに { custom: defs, pcs: [], log: [] } のような作業用オブジェクトを渡す。
+// PC への受け渡し・表を振る・コマの配置など、セッション中の運用の操作は出さない（prep）。
+export function PresetDefsEditor({ gs, upd }) {
+  const c = getCustom(gs);
+  return (
+    <div>
+      <RuleSection c={c} upd={upd} />
+      <StatSection c={c} gs={gs} upd={upd} prep />
+      <ItemSection c={c} gs={gs} upd={upd} prep />
+      <TableSection c={c} gs={gs} upd={upd} prep />
+      <TokenSection c={c} gs={gs} upd={upd} SPOTS={[]} spotName={(id) => id} prep />
+      <StateSection c={c} gs={gs} upd={upd} />
+      <ReminderSection c={c} upd={upd} />
+    </div>
+  );
+}
+
 // ─── タイミングのメモ ─────────────────────────────────────────────
 // 「サイクル開始時にかけらを置く」など、GM が手で行う処理を忘れないためのメモ。
 // 登録したタイミングが来ると GM の画面の左下に表示される（src/session/reminders.jsx）。PL には見えない。
@@ -324,6 +344,22 @@ function PresetSection({ gs, upd, user }) {
       window.alert(`保存に失敗しました: ${e?.message || e}`);
     } finally { setBusy(false); }
   };
+  // JSON ファイルを読み込んで自作プリセットとして保存（その後、一覧から適用する）
+  const fileRef = useRef(null);
+  const importFile = async (file) => {
+    if (!file || !user?.uid) return;
+    try {
+      const { preset, error } = parsePresetFile(await readFileText(file));
+      if (error) { window.alert(`読み込めませんでした: ${error}`); return; }
+      if (!window.confirm(`プリセット「${preset.name}」（${presetSummary(preset)}）を自作プリセットとして保存しますか？`)) return;
+      const now = Date.now();
+      await dbSet(dbRef(db, `users/${user.uid}/ihenPresets/${newId("ip")}`), stripUndefined({ ...preset, createdAt: now, updatedAt: now }));
+      reload();
+    } catch (e) {
+      window.alert(`読み込みに失敗しました: ${e?.message || e}`);
+    }
+  };
+  const exportFile = (preset) => downloadJson(presetFileName(preset), presetToFile(preset));
   const del = async (sp) => {
     if (!window.confirm(`保存したプリセット「${sp.name}」を削除しますか？（このセッションに適用済みの内容は残ります）`)) return;
     try { await dbRemove(dbRef(db, `users/${user.uid}/ihenPresets/${sp.id}`)); reload(); }
@@ -340,6 +376,7 @@ function PresetSection({ gs, upd, user }) {
           <span style={{ fontSize: 8, color: C.textFaint }}>{presetSummary(preset)}{preset.clock ? "・時刻" : ""}</span>
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: 3 }}>
             <button onClick={() => apply(preset, key)} style={tiny(C.gold)}>{isApplied ? "再適用" : "適用"}</button>
+            <button onClick={() => exportFile(preset)} title="JSON ファイルとして書き出す" style={tiny()}>JSON</button>
             {extra}
           </span>
         </div>
@@ -379,6 +416,14 @@ function PresetSection({ gs, upd, user }) {
       {loadError && <div style={{ fontSize: 9, color: C.red }}>読み込みに失敗しました</div>}
       {saved && saved.length === 0 && !loadError && empty}
       {(saved || []).map(sp => presetRow(sp, `u${sp.id}`, <button onClick={() => del(sp)} style={tiny(C.red)}>削除</button>))}
+      {uid && (
+        <div style={row}>
+          <button onClick={() => fileRef.current?.click()} style={tiny(C.blue)}>📥 JSON を読み込んで保存</button>
+          <span style={{ fontSize: 8, color: C.textFaint }}>事前の作成・編集はプロフィールの「異変再現」タブで</span>
+          <input ref={fileRef} type="file" accept=".json,application/json" data-testid="preset-file" style={{ display: "none" }}
+            onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; importFile(f); }} />
+        </div>
+      )}
 
       <div style={label}>現在の独自要素をプリセットとして保存（値・配置済みのコマは含めない）</div>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="プリセット名（例: 自作異変「〇〇」）" style={{ ...inp, marginBottom: 4 }} />
@@ -449,17 +494,29 @@ function RuleSection({ c, upd }) {
   );
 }
 
-function StatSection({ c, gs, upd }) {
+function StatSection({ c, gs, upd, prep = false }) {
+  const [editId, setEditId] = useState(null);
   const [name, setName] = useState("");
   const [scope, setScope] = useState("pc");
   const [min, setMin] = useState("0");
   const [max, setMax] = useState("");
   const [init, setInit] = useState("0");
+  const [byPcCount, setByPcCount] = useState(false);
+  const toNum = (v) => (v === "" || Number.isNaN(parseInt(v)) ? null : parseInt(v));
+  const reset = () => { setEditId(null); setName(""); setScope("pc"); setMin("0"); setMax(""); setInit("0"); setByPcCount(false); };
+  const startEdit = (s) => {
+    setEditId(s.id); setName(s.name); setScope(s.scope || "pc");
+    setMin(s.min == null ? "" : String(s.min)); setMax(s.max == null ? "" : String(s.max)); setInit(String(s.init ?? 0));
+    setByPcCount(!!s.initFromPcCount);
+  };
   const add = () => {
     if (!name.trim()) return;
-    const def = { id: newId("st"), name: name.trim(), scope, min: min === "" ? null : parseInt(min), max: max === "" ? null : parseInt(max), init: parseInt(init) || 0 };
-    setName("");
-    upd(p => ({ ...upsertDef(p, "stats", def), log: [`✨ GM: 独自ステータス【${def.name}】（${STAT_SCOPES[def.scope]}）を追加`, ...p.log] }));
+    const def = { id: editId || newId("st"), name: name.trim(), scope, min: toNum(min), max: toNum(max), init: parseInt(init) || 0 };
+    // 初期値を PC の人数にする（全体共有のみ。プリセット適用時に使われる）
+    if (prep) def.initFromPcCount = scope === "global" && byPcCount;
+    const verb = editId ? "を更新" : "を追加";
+    reset();
+    upd(p => ({ ...upsertDef(p, "stats", def), log: [`✨ GM: 独自ステータス【${def.name}】（${STAT_SCOPES[def.scope]}）${verb}`, ...(p.log || [])] }));
   };
   return (
     <Fold title="✨ 独自ステータス" count={c.stats.length}>
@@ -467,14 +524,15 @@ function StatSection({ c, gs, upd }) {
       {c.stats.map(s => (
         <div key={s.id} style={row}>
           <span style={{ fontSize: 10, color: C.text }}>【{s.name}】</span>
-          <span style={{ fontSize: 8, color: C.textFaint }}>{STAT_SCOPES[s.scope]}・{s.min ?? "−∞"}〜{s.max ?? "∞"}・初期{s.init ?? 0}</span>
+          <span style={{ fontSize: 8, color: C.textFaint }}>{STAT_SCOPES[s.scope]}・{s.min ?? "−∞"}〜{s.max ?? "∞"}・初期{s.initFromPcCount ? "PC人数" : (s.init ?? 0)}</span>
           {s.scope === "pc" && (gs.pcs || []).length > 0 && (
             <button onClick={() => window.confirm(`全PCの【${s.name}】を初期値 ${s.init ?? 0} に戻しますか？`) && upd(p => (p.pcs || []).reduce((acc, pc) => setStat(acc, s.id, s.init ?? 0, pc.uid), p))} style={tiny()}>全PCを初期値に</button>
           )}
-          <button onClick={() => window.confirm(`【${s.name}】を削除しますか？（値も消えます）`) && upd(p => removeDef(p, "stats", s.id))} style={{ ...tiny(C.red), marginLeft: "auto" }}>✕</button>
+          <button onClick={() => startEdit(s)} style={{ ...tiny(), marginLeft: "auto" }}>編集</button>
+          <button onClick={() => window.confirm(`【${s.name}】を削除しますか？（値も消えます）`) && upd(p => removeDef(p, "stats", s.id))} style={tiny(C.red)}>✕</button>
         </div>
       ))}
-      <div style={label}>追加（PC個別の値は各PCカード、全体共有・戦闘中の値は「進行」タブ／戦闘画面の掲示で増減）</div>
+      <div style={label}>{editId ? "編集中" : prep ? "追加" : "追加（PC個別の値は各PCカード、全体共有・戦闘中の値は「進行」タブ／戦闘画面の掲示で増減）"}</div>
       <div style={row}>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="名前（例: 春度）" style={{ ...inp, flex: 1, minWidth: 90 }} />
         <select value={scope} onChange={e => setScope(e.target.value)} style={sel}>{Object.entries(STAT_SCOPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
@@ -482,15 +540,22 @@ function StatSection({ c, gs, upd }) {
       <div style={row}>
         最小<input value={min} onChange={e => setMin(e.target.value)} style={num} />
         最大<input value={max} onChange={e => setMax(e.target.value)} placeholder="なし" style={num} />
-        初期<input value={init} onChange={e => setInit(e.target.value)} style={num} />
-        <button disabled={!name.trim()} onClick={add} style={tiny(C.gold)}>追加</button>
+        初期<input value={init} onChange={e => setInit(e.target.value)} disabled={prep && scope === "global" && byPcCount} style={num} />
+        <button disabled={!name.trim()} onClick={add} style={tiny(C.gold)}>{editId ? "更新" : "追加"}</button>
+        {editId && <button onClick={reset} style={tiny()}>やめる</button>}
       </div>
+      {prep && scope === "global" && (
+        <label style={{ fontSize: 9, color: C.textDim, display: "inline-flex", alignItems: "center", gap: 3 }}>
+          <input type="checkbox" checked={byPcCount} onChange={e => setByPcCount(e.target.checked)} />初期値をPCの人数にする（適用時に設定）
+        </label>
+      )}
     </Fold>
   );
 }
 
-function ItemSection({ c, gs, upd }) {
+function ItemSection({ c, gs, upd, prep = false }) {
   const pcs = gs.pcs || [];
+  const [editId, setEditId] = useState(null);
   const [catName, setCatName] = useState("");
   const [catCap, setCatCap] = useState("3");
   const [name, setName] = useState("");
@@ -508,10 +573,12 @@ function ItemSection({ c, gs, upd }) {
   };
   const addItem = () => {
     if (!name.trim()) return;
-    const def = { id: newId("it"), name: name.trim(), cat: cat || null, desc: desc.trim() };
-    setName(""); setDesc("");
+    const def = { id: editId || newId("it"), name: name.trim(), cat: cat || null, desc: desc.trim() };
+    setEditId(null); setName(""); setDesc("");
     upd(p => upsertDef(p, "items", def));
   };
+  const startEdit = (it) => { setEditId(it.id); setName(it.name); setCat(it.cat || ""); setDesc(it.desc || ""); };
+  const cancelEdit = () => { setEditId(null); setName(""); setDesc(""); };
   // 「名前：説明」を1行ずつまとめて登録（アビリティカード21種などの一括入力）
   const addBulk = () => {
     const defs = bulk.split("\n").map(l => l.trim()).filter(Boolean).map((l, i) => {
@@ -551,7 +618,8 @@ function ItemSection({ c, gs, upd }) {
           <span style={{ fontSize: 10, color: C.gold }}>{it.name}</span>
           {it.cat && <span style={{ fontSize: 8, color: C.textFaint }}>［{c.cats.find(k => k.id === it.cat)?.name}］</span>}
           {it.desc && <span style={{ fontSize: 8, color: C.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.desc}>{it.desc}</span>}
-          <button onClick={() => window.confirm(`【${it.name}】を削除しますか？（PCの所持分も消えます）`) && upd(p => removeDef(p, "items", it.id))} style={{ ...tiny(C.red), marginLeft: "auto" }}>✕</button>
+          <button onClick={() => startEdit(it)} style={{ ...tiny(), marginLeft: "auto" }}>編集</button>
+          <button onClick={() => window.confirm(`【${it.name}】を削除しますか？（PCの所持分も消えます）`) && upd(p => removeDef(p, "items", it.id))} style={tiny(C.red)}>✕</button>
         </div>
       ))}
       <div style={row}>
@@ -562,28 +630,35 @@ function ItemSection({ c, gs, upd }) {
         </select>
       </div>
       <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} placeholder="効果の説明（任意）" style={{ ...inp, resize: "vertical", marginBottom: 4 }} />
-      <button disabled={!name.trim()} onClick={addItem} style={tiny(C.gold)}>アイテムを追加</button>
+      <div style={row}>
+        <button disabled={!name.trim()} onClick={addItem} style={tiny(C.gold)}>{editId ? "アイテムを更新" : "アイテムを追加"}</button>
+        {editId && <button onClick={cancelEdit} style={tiny()}>やめる</button>}
+      </div>
       <div style={label}>一括追加（1行に「名前：説明」。分類は上の選択を使用）</div>
       <textarea value={bulk} onChange={e => setBulk(e.target.value)} rows={3} placeholder={"不死鳥の尾：装備…\n大天狗の麦飯：即効…"} style={{ ...inp, resize: "vertical", marginBottom: 4 }} />
       <button disabled={!bulk.trim()} onClick={addBulk} style={tiny(C.gold)}>まとめて追加</button>
 
-      <div style={label}>PCに渡す</div>
-      <div style={row}>
-        <select value={giveDef} onChange={e => setGiveDef(e.target.value)} style={sel}>
-          <option value="">アイテム...</option>
-          {c.items.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
-        </select>
-        <select value={giveTo} onChange={e => setGiveTo(e.target.value)} style={sel}>
-          <option value="">PC...</option>
-          {pcs.map(pc => <option key={pc.uid} value={pc.uid}>{pc.charName}</option>)}
-        </select>
-        <button disabled={!giveDef || !giveTo} onClick={give} style={tiny(C.gold)}>渡す</button>
-      </div>
+      {!prep && (
+        <>
+          <div style={label}>PCに渡す</div>
+          <div style={row}>
+            <select value={giveDef} onChange={e => setGiveDef(e.target.value)} style={sel}>
+              <option value="">アイテム...</option>
+              {c.items.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+            </select>
+            <select value={giveTo} onChange={e => setGiveTo(e.target.value)} style={sel}>
+              <option value="">PC...</option>
+              {pcs.map(pc => <option key={pc.uid} value={pc.uid}>{pc.charName}</option>)}
+            </select>
+            <button disabled={!giveDef || !giveTo} onClick={give} style={tiny(C.gold)}>渡す</button>
+          </div>
+        </>
+      )}
     </Fold>
   );
 }
 
-function TableSection({ c, gs, upd }) {
+function TableSection({ c, gs, upd, prep = false }) {
   const pcs = gs.pcs || [];
   const [editId, setEditId] = useState(null);
   const [name, setName] = useState("");
@@ -625,7 +700,7 @@ function TableSection({ c, gs, upd }) {
         </div>
       ))}
 
-      {c.tables.length > 0 && (
+      {!prep && c.tables.length > 0 && (
         <>
           <div style={label}>表を振る（結果がアイテム名と一致すれば、そのままPCに渡せます）</div>
           <div style={row}>
@@ -678,7 +753,7 @@ function TableSection({ c, gs, upd }) {
 
 const TOKEN_COLORS = ["#e8a0b8", "#7090e0", "#4caf50", "#d4a838", "#d05040", "#c090e0", "#e0e0e0"];
 
-function TokenSection({ c, gs, upd, SPOTS, spotName }) {
+function TokenSection({ c, gs, upd, SPOTS, spotName, prep = false }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(TOKEN_COLORS[0]);
   const [unique, setUnique] = useState(true);
@@ -707,7 +782,7 @@ function TokenSection({ c, gs, upd, SPOTS, spotName }) {
   };
 
   return (
-    <Fold title="📍 マップの独自コマ" count={c.mapTokens.length}>
+    <Fold title="📍 マップの独自コマ" count={prep ? c.tokens.length : c.mapTokens.length}>
       {c.tokens.length === 0 && empty}
       {c.tokens.map(k => {
         const placed = c.mapTokens.filter(t => t.kind === k.id);
@@ -719,7 +794,7 @@ function TokenSection({ c, gs, upd, SPOTS, spotName }) {
               <span style={{ fontSize: 8, color: C.textFaint }}>{k.unique ? "1スポット1つまで" : "重ね置き可"}</span>
               <button onClick={() => window.confirm(`コマ「${k.name}」の種類を削除しますか？（置かれたコマも消えます）`) && upd(p => removeDef(p, "tokens", k.id))} style={{ ...tiny(C.red), marginLeft: "auto" }}>✕</button>
             </div>
-            <div style={row}>
+            {!prep && <><div style={row}>
               <select value={spot[k.id] || ""} onChange={e => setSpot(s => ({ ...s, [k.id]: e.target.value }))} style={{ ...sel, maxWidth: 140 }}>
                 <option value="">スポット...</option>
                 {SPOTS.filter(s => s.id !== "dream").map(s => <option key={s.id} value={s.id}>[{s.roll ?? s.id}] {s.name}</option>)}
@@ -736,7 +811,7 @@ function TokenSection({ c, gs, upd, SPOTS, spotName }) {
                 <span key={t.id} onClick={() => upd(p => removeToken(p, t.id, spotName))} title="クリックで取り除く"
                   style={{ padding: "1px 6px", fontSize: 9, borderRadius: 8, cursor: "pointer", border: `1px solid ${k.color}`, color: k.color }}>{spotName(t.spot)} ✕</span>
               ))}
-            </div>
+            </div></>}
           </div>
         );
       })}
@@ -756,13 +831,15 @@ function TokenSection({ c, gs, upd, SPOTS, spotName }) {
 }
 
 function StateSection({ c, gs, upd }) {
+  const [editId, setEditId] = useState(null);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [color, setColor] = useState(TOKEN_COLORS[0]);
+  const reset = () => { setEditId(null); setName(""); setDesc(""); };
   const add = () => {
     if (!name.trim()) return;
-    const def = { id: newId("ss"), name: name.trim(), desc: desc.trim(), color };
-    setName(""); setDesc("");
+    const def = { id: editId || newId("ss"), name: name.trim(), desc: desc.trim(), color };
+    reset();
     upd(p => upsertDef(p, "states", def));
   };
   return (
@@ -773,7 +850,8 @@ function StateSection({ c, gs, upd }) {
           <div style={row}>
             <span style={{ fontSize: 10, color: s.color || C.sakura }}>《{s.name}》</span>
             {s.desc && <span style={{ fontSize: 8, color: C.textDim, flex: 1 }}>{s.desc}</span>}
-            <button onClick={() => window.confirm(`《${s.name}》を削除しますか？（PCからも外れます）`) && upd(p => removeDef(p, "states", s.id))} style={{ ...tiny(C.red), marginLeft: "auto" }}>✕</button>
+            <button onClick={() => { setEditId(s.id); setName(s.name); setDesc(s.desc || ""); setColor(s.color || TOKEN_COLORS[0]); }} style={{ ...tiny(), marginLeft: "auto" }}>編集</button>
+            <button onClick={() => window.confirm(`《${s.name}》を削除しますか？（PCからも外れます）`) && upd(p => removeDef(p, "states", s.id))} style={tiny(C.red)}>✕</button>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
             {(gs.pcs || []).map(pc => {
@@ -784,12 +862,13 @@ function StateSection({ c, gs, upd }) {
           </div>
         </div>
       ))}
-      <div style={label}>状態を作る（PCカードに表示。PCごとに付与／解除）</div>
+      <div style={label}>{editId ? "編集中" : "状態を作る（PCカードに表示。PCごとに付与／解除）"}</div>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="名前（例: 森羅結界）" style={{ ...inp, marginBottom: 4 }} />
       <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="説明（任意）" style={{ ...inp, marginBottom: 4 }} />
       <div style={row}>
         {TOKEN_COLORS.map(col => <span key={col} onClick={() => setColor(col)} style={{ width: 14, height: 14, borderRadius: "50%", background: col, cursor: "pointer", outline: color === col ? `2px solid ${C.text}` : "none", outlineOffset: 1 }} />)}
-        <button disabled={!name.trim()} onClick={add} style={tiny(C.gold)}>追加</button>
+        <button disabled={!name.trim()} onClick={add} style={tiny(C.gold)}>{editId ? "更新" : "追加"}</button>
+        {editId && <button onClick={reset} style={tiny()}>やめる</button>}
       </div>
     </Fold>
   );

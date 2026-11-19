@@ -10,6 +10,7 @@ import { ACHIEVEMENTS } from "./data/achievements";
 import { getBuiltinScenarios } from "./scenarios";
 import { useUrlParams } from "./useUrlParams";
 import { useIsAllowedGm } from "./useIsAllowedGm";
+import { IhenPresetManager } from "./session/presetManager";
 
 // コード同梱のビルトインシナリオ（静的。glob 集約済み）
 const BUILTIN_SCENARIOS = getBuiltinScenarios();
@@ -1277,7 +1278,7 @@ function ProfilePage({ onClose }) {
     />
   );
 
-  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["builtin","収録シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"],["achievements","実績"]];
+  const TABS = [["account","アカウント"],["scenarios","シナリオ"],["builtin","収録シナリオ"],["rooms","部屋一覧"],["grown","成長キャラ"],["ihen","異変再現"],["achievements","実績"]];
   const ENH_LABEL = { spell:"追加スペカ取得", ability:"能力スキル＋", bond:"特別な絆" };
 
   return(
@@ -1292,7 +1293,7 @@ function ProfilePage({ onClose }) {
         <button onClick={onClose} style={btn("rgba(255,255,255,0.03)",C.border,C.textFaint,{padding:"5px 14px"})}>← ロビーに戻る</button>
       </div>
 
-      <div style={{display:"flex",gap:6,marginBottom:20}}>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setView(id)} style={{
             ...btn(view === id?C.goldBg:"rgba(255,255,255,0.02)",view === id?C.goldDim:C.border,view === id?C.gold:C.textFaint),
@@ -1442,6 +1443,9 @@ function ProfilePage({ onClose }) {
           })}
         </div>
       )}
+
+      {/* ── 異変再現プリセット ── */}
+      {view==="ihen"&&<IhenPresetManager user={user} />}
 
       {/* ── 実績 ── */}
       {view==="achievements"&&(()=>{

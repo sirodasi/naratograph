@@ -443,6 +443,111 @@ export function unapplyPreset(p, key) {
   return { ...next, log: [`📜 GM: 異変再現「${name || key}」を解除した`, ...(p.log || [])] };
 }
 
+// ─── プリセットの JSON 書き出し・読み込み ─────────────────────────
+// 他の GM と自作の異変再現を受け渡すためのファイル形式。
+//   { format: PRESET_FILE_FORMAT, version, name, desc, defs, clock? }
+// 読み込み時は中身を信用せず、種類ごとに既知の項目だけを取り出して整える（id は Firebase のキーにも使われるため安全な文字に）。
+export const PRESET_FILE_FORMAT = "gensou-naratograph/ihen-preset";
+export const PRESET_FILE_VERSION = 1;
+const FILE_LIMITS = { defs: 200, rows: 100, name: 80, text: 4000 };
+
+const str = (v, max = FILE_LIMITS.name) => (typeof v === "string" || typeof v === "number" ? String(v) : "").trim().slice(0, max);
+const intOr = (v, fallback) => {
+  if (v === null || v === undefined || v === "") return fallback;
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? n : fallback;
+};
+const clampInt = (v, lo, hi, fallback) => {
+  const n = intOr(v, fallback);
+  return n == null ? n : Math.max(lo, Math.min(hi, n));
+};
+const colorOr = (v) => (typeof v === "string" && /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : undefined);
+// 「.#$[]/」・空白・プリセット区切り（__）を含まない短い id にする
+export const safeDefId = (id) => baseId(str(id, 60)).replace(/[.#$/[\]\s]/g, "_").replace(/_{2,}/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+
+const DEF_SANITIZERS = {
+  stats: (d) => {
+    const name = str(d.name);
+    if (!name) return null;
+    const scope = STAT_SCOPES[d.scope] ? d.scope : "pc";
+    const out = { name, scope, min: intOr(d.min, null), max: intOr(d.max, null), init: intOr(d.init, 0) };
+    if (scope === "global" && d.initFromPcCount === true) out.initFromPcCount = true;
+    return out;
+  },
+  cats: (d) => { const name = str(d.name); return name ? { name, cap: intOr(d.cap, null) } : null; },
+  items: (d) => { const name = str(d.name); return name ? { name, cat: d.cat ? safeDefId(d.cat) : null, desc: str(d.desc, FILE_LIMITS.text) } : null; },
+  tables: (d) => {
+    const name = str(d.name);
+    if (!name) return null;
+    const rows = toArray(d.rows).filter(r => r && typeof r === "object").slice(0, FILE_LIMITS.rows).map(r => {
+      const min = intOr(r.min, null), max = intOr(r.max, min);
+      return min == null ? null : { min, max: max ?? min, text: str(r.text, FILE_LIMITS.text) };
+    }).filter(Boolean);
+    return { name, dice: TABLE_DICE[d.dice] ? d.dice : "d6", rows };
+  },
+  tokens: (d) => { const name = str(d.name); return name ? { name, color: colorOr(d.color) || "#e8a0b8", unique: d.unique !== false } : null; },
+  states: (d) => { const name = str(d.name); return name ? { name, desc: str(d.desc, FILE_LIMITS.text), color: colorOr(d.color) || "#e8a0b8" } : null; },
+  rules: (d) => { const title = str(d.title); return title ? { title, text: str(d.text, FILE_LIMITS.text) } : null; },
+  reminders: (d) => {
+    const text = str(d.text, FILE_LIMITS.text);
+    if (!text || !REMINDER_TIMINGS.some(t => t.key === d.timing)) return null;
+    return { timing: d.timing, text, finalOnly: isBattleTiming(d.timing) && d.finalOnly === true };
+  },
+};
+
+// 任意のオブジェクトを安全なプリセットに整える（不正な定義は捨てる）。読み込みと編集画面の保存で使う
+export function sanitizePreset(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const defs = {};
+  PRESET_KINDS.forEach(k => {
+    const used = new Set();
+    defs[k] = toArray(raw.defs?.[k]).filter(d => d && typeof d === "object").slice(0, FILE_LIMITS.defs).map((d, i) => {
+      const body = DEF_SANITIZERS[k](d);
+      if (!body) return null;
+      let id = safeDefId(d.id) || `${k.slice(0, 2)}${i + 1}`;
+      while (used.has(id)) id = `${id}_${i + 1}`;
+      used.add(id);
+      return { id, ...body };
+    }).filter(Boolean);
+  });
+  // 存在しない分類への参照は外す
+  const catIds = new Set(defs.cats.map(c => c.id));
+  defs.items = defs.items.map(it => (it.cat && !catIds.has(it.cat) ? { ...it, cat: null } : it));
+  const out = { name: str(raw.name) || "（名称なし）", desc: str(raw.desc, FILE_LIMITS.text), defs };
+  const ck = raw.clock;
+  if (ck && typeof ck === "object" && (ck.day || ck.limitDay)) {
+    const clock = {};
+    if (ck.day) { clock.day = clampInt(ck.day, 1, 9, 1); clock.cycleIdx = clampInt(ck.cycleIdx, 0, 3, 0); }
+    if (ck.limitDay) { clock.limitDay = clampInt(ck.limitDay, 1, 9, 3); clock.limitCycleIdx = clampInt(ck.limitCycleIdx, 0, 3, 3); }
+    out.clock = clock;
+  }
+  return out;
+}
+
+const hasAnyDef = (preset) => PRESET_KINDS.some(k => preset.defs[k].length > 0);
+
+// 書き出し用のオブジェクト（保存日時や Firebase の id は含めない）
+export function presetToFile(preset) {
+  const p = sanitizePreset(normalizePreset(preset)) || { name: "", desc: "", defs: {} };
+  return { format: PRESET_FILE_FORMAT, version: PRESET_FILE_VERSION, name: p.name, desc: p.desc, defs: p.defs, ...(p.clock ? { clock: p.clock } : {}) };
+}
+
+export const presetFileName = (preset) => `異変再現_${(str(preset?.name) || "preset").replace(/[\\/:*?"<>|\s]+/g, "_")}.json`;
+
+// ファイルの中身（文字列）→ { preset } または { error }
+export function parsePresetFile(text) {
+  let raw;
+  try { raw = JSON.parse(String(text ?? "")); }
+  catch { return { error: "JSON として読み込めませんでした" }; }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { error: "プリセットのファイルではありません" };
+  if (raw.format !== undefined && raw.format !== PRESET_FILE_FORMAT) return { error: "異変再現プリセットのファイルではありません" };
+  if (raw.format === undefined && (!raw.defs || typeof raw.defs !== "object")) return { error: "異変再現プリセットのファイルではありません" };
+  if (Number(raw.version) > PRESET_FILE_VERSION) return { error: "新しい版のアプリで書き出されたファイルです。アプリを更新してから読み込んでください" };
+  const preset = sanitizePreset(raw);
+  if (!hasAnyDef(preset)) return { error: "読み込める定義がありませんでした" };
+  return { preset };
+}
+
 // ─── タイミングのメモ（GM 向けリマインダー） ─────────────────────
 // 自動処理はしない方針なので、「サイクル開始時にかけらを置く」などの手順を GM が忘れないよう、
 // そのタイミングが来たら GM の画面にメモを出す。検出は GM クライアントが gs の変化から行う（gs には何も書かない）。
