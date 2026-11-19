@@ -166,6 +166,37 @@ export const sfx = {
     } catch { /* noop */ }
   },
 
+  // ── 撃破・脱落（残り人数0）: 重い打撃＋長い下降音 ─────────────────────
+  ko() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      burst(t, 0.25, 0.16, 300);
+      tone("sawtooth", 180, t, 0.9, 0.18, 40);
+      tone("sine", 880, t + 0.05, 0.6, 0.06, 110);
+    } catch { /* noop */ }
+  },
+
+  // ── グレイズ: かすめる短い高音（量が多いほど粒を増やす） ─────────────────
+  graze(amount = 1) {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      const n = Math.max(1, Math.min(5, amount));
+      for (let i = 0; i < n; i++) tone("square", 1800 + i * 160, t + i * 0.035, 0.04, 0.03, 2600);
+    } catch { /* noop */ }
+  },
+
+  // ── スペルカードのカットイン: 風を切る音（宣言のチャイムに重ねる） ──────
+  cutin() {
+    if (!_enabled) return;
+    try {
+      const t = getCtx().currentTime;
+      burst(t, 0.35, 0.07, 2400);
+      tone("sine", 200, t, 0.3, 0.05, 900);
+    } catch { /* noop */ }
+  },
+
   // ── 勝利 ──────────────────────────────────────────────────────────────
   victory() {
     if (!_enabled) return;

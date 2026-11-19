@@ -176,6 +176,7 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `shared.jsx` | Constants, pure helpers (`buildSpellCard`, `hasOfficialSkill`, `INIT_RESOURCES`/`INIT_ITEMS`, …), `SpellCard`, `ConfirmModal`. **Must not import other session modules** (init-order safety); non-function top-level values live here. |
 | `scene.jsx` | `BackstoryScreen`, `SceneStage`, `SceneEditor` (+ presets), `SceneParticles`, `EpilogueView` |
 | `battle.jsx` | `BattleView`, `BattleRightPanel`, `BattleGrid`, `BattleParticleCanvas`, `PlotPlacementPanel` (+ `plotHash`/`plotNonce`) |
+| `battleFx.jsx` | Battle effects: `useBattleFx` hook, `HitOverlay`, `SpellCutin`, cell effects (`CellHitBurst`/`CellGhost`/`CellSparks`/`GrazeText`), `BATTLE_FX_CSS` keyframes. See "Battle effects". |
 | `phases.jsx` | `BonusPhaseView`, `GrowthCeremony`, `SessionEndView` |
 | `pcCard.jsx` | `PCCard`, `ActionRenderer`, `CharDetailModal`, `SkillActivateModal`, item modals |
 | `scenePanel.jsx` | `ScenePanel` |
@@ -529,12 +530,16 @@ Active overlay states in `SessionApp`: `cycleOverlay`, `questSolveFlash`, `clueF
 ### Animation keyframes location
 
 - **Global keyframes** (used across phases): defined in `SessionApp.jsx`'s top-level `<style>` block — `logSlideIn`, `modalIn`, `backdropIn`, `resFlashUp/Down`, `questSolveAnim`, `clueBannerAnim`, `cycleOverlayAnim`, `badStatusIn`, `battleFadeIn`, `spotTipIn`, `sceneStartAnim`, `phaseFlashAnim`, `phaseStripe`.
-- **Component-local keyframes**: defined in inline `<style>` blocks inside the component using them (e.g. `RightPanel` defines `scenePanelIn`, `diceIn`, `diceResultIn`; `BattleView` defines `spellFlashIn`, `phaseBannerAnim`, `brRing`/`brGlow`/`brCardIn` for the battle result cinematic).
+- **Component-local keyframes**: defined in inline `<style>` blocks inside the component using them (e.g. `RightPanel` defines `scenePanelIn`, `diceIn`, `diceResultIn`; `BattleView` defines `phaseBannerAnim`, `brRing`/`brGlow`/`brCardIn` for the battle result cinematic).
 - **MapView animations**: `mySpotGlow`, `myPortraitGlow`, `pulseRing` live in `MapView`'s local style.
 
 ### MapView PC layer
 
 PCs on the map are rendered in a **separate absolute-positioned layer** after the spot list, not as children of spot divs. Their `left`/`top` use CSS `transition: left 0.52s cubic-bezier(0.4,0,0.2,1), top 0.52s ...` with a stable `key={pc.uid}`, so React reuses the DOM node and the browser animates the move when `pc.currentSpot` changes. Multiple PCs on the same spot are horizontally offset via `(idx - (N-1)/2) * 26px`.
+
+### Battle effects (被弾・カットイン・回避)
+
+Detection is pure in [src/battleFx.js](src/battleFx.js): `fxSnapshot(gs)` summarizes the battle (participants' 残り人数/グレイズ, positions, `spellUsedBy`, phase, isFinal) and `detectFx(prev, cur)` returns `spell` (new `spellUsedBy` entry), `hit` (残り人数 decreased; `cell` = position before, `ko` at 0), `dodge` (position changed while the previous phase matched `_evade_(intro|move|result)` — hit-recovery moves don't count) and `graze` (グレイズ increased; `cell` only during evasion). Nothing fires on join or across battle start/end. `useBattleFx(gs)` in `src/session/battleFx.jsx` runs it on every client locally (**no gs writes**, like the cinematic overlays) and returns `{ cutin, dismissCutin, hit, shake, gridFx }`; `BattleView` renders `HitOverlay` + `SpellCutin` at its root (outside the shaken content div, whose `animation` is `shakeAnimation(shake)` — two identical keyframe names alternate so the shake restarts) and passes `fx={fx.gridFx[id]}` to each `BattleGrid` (hit ring+shards on the cell, the lost 残り人数 dot breaking, dodge afterimage + dash-in, graze sparks + 「GRAZE +N」). The cut-in (replaces the old small `spellFlash` box) uses the attacker's 描写モード立ち絵 matched by name, else `customPortrait`, else the sprite; PC enters from the left (blue), enemy from the right (red), final battle in gold; tap to skip. Sounds: `sfx.hit` / `sfx.ko` / `sfx.graze(n)` / `sfx.cutin` + `sfx.spell`. **Reduced motion**: the global CSS would jump animations to their (transparent) end state, so with `motion.reduced` the hook emits no shake/grid effects and marks hit/cut-in `still` (static, `pointer-events: none` cut-in). Tests: `battleFx.test.jsx`.
 
 ### Battle background particles
 

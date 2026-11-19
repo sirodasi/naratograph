@@ -1,6 +1,7 @@
 // SessionView から分割: 弾幕ごっこ（BattleView / BattleRightPanel / プロット配置）
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { CharSprite } from "../CharSprite";
+import { BATTLE_FX_CSS, useBattleFx, shakeAnimation, HitOverlay, SpellCutin, CellHitBurst, CellGhost, CellSparks, GrazeText } from "./battleFx";
 import { CHARACTERS } from "../data/characters";
 import { sfx } from "../audio";
 import { motion } from "../motion";
@@ -16,7 +17,8 @@ import { db } from "../firebase";
 import { ref as dbRef, set as dbSet, remove as dbRemove, onValue } from "firebase/database";
 import { BAD_STATUS_TABLE, KURUWASU_BOND, PHASE_LABELS, SPECIAL_BOND_CHEER, SpellCard, buildBattleNpc, buildSpellCard, gainIntimacy, isBadStatusImmune } from "./shared";
 
-export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick, lives, maxLives, sc, tokens = {} }) {
+// fx: 演出（battleFx.jsx の useBattleFx が返す gridFx[entityId]）。{ hit, life, ghost, graze } それぞれ key 付き
+export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick, lives, maxLives, sc, tokens = {}, fx = null }) {
   const cells = [1, 2, 3, 4, 5, 6];
   const campColor = isNpc ? C.red : C.blue;
   const borderColor = isCombatant ? campColor : C.border;
@@ -67,6 +69,7 @@ export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead
       <div style={{ fontSize: 10, color: isCombatant ? campColor : C.textDim, textAlign: "center", marginBottom: 5, fontWeight: "bold", letterSpacing: 1 }}>
         {name}
       </div>
+      {fx?.graze && <GrazeText key={`gz${fx.graze.key}`} amount={fx.graze.amount} />}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(2, 56px)", gap: 4 }}>
         {cells.map(num => {
@@ -112,10 +115,14 @@ export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead
               )}
 
               {hasChar && (
-                <div style={{ position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+                <div key={fx?.ghost ? `pc${fx.ghost.key}` : "pc"} style={{ position: "absolute", inset: 2, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, animation: fx?.ghost ? "fxDashIn 0.38s ease-out" : undefined }}>
                   {sprite}
                 </div>
               )}
+              {/* 演出: 回避の残像・グレイズの火花・被弾の衝撃 */}
+              {fx?.ghost?.from === num && !hasChar && <CellGhost key={`gh${fx.ghost.key}`} sprite={sprite} color={campColor} />}
+              {fx?.graze?.cell === num && <CellSparks key={`sp${fx.graze.key}`} color={C.gold} />}
+              {fx?.hit?.cell === num && <CellHitBurst key={`ht${fx.hit.key}`} color={campColor} />}
 
               {/* 駒のいるマス: 弾幕は数バッジ化して駒の上に重ねず常に視認できるようにする */}
               {hasChar && danmakuCount > 0 && (
@@ -142,7 +149,12 @@ export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead
           {lives !== undefined && (
             <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
               {[...Array(maxLives || 3)].map((_, i) => (
-                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < lives ? campColor : "rgba(255,255,255,0.1)", boxShadow: i < lives ? `0 0 5px ${campColor}99` : "none" }} />
+                <div key={i} style={{ position: "relative", width: 8, height: 8, borderRadius: "50%", background: i < lives ? campColor : "rgba(255,255,255,0.1)", boxShadow: i < lives ? `0 0 5px ${campColor}99` : "none" }}>
+                  {/* 被弾で失った残り人数のアイコンが割れて消える */}
+                  {fx?.life && i >= fx.life.index && i < fx.life.index + (fx.life.lost || 1) && (
+                    <div key={`lf${fx.life.key}`} data-testid="fx-life" style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#fff", boxShadow: `0 0 8px ${campColor}`, animation: "fxLifeBreak 0.7s ease-out forwards" }} />
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -607,30 +619,21 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
   const [sfxMuted, setSfxMuted] = useState(!sfx.enabled);
   const toggleSfx = () => { sfx.toggle(); setSfxMuted(!sfx.enabled); };
 
-  // ── スペルカード宣言フラッシュ ──────────────────────────────────────
-  const [spellFlash, setSpellFlash] = useState(null);
-  const flashKey = useRef({ round: -1, known: new Set() });
-  useEffect(() => {
-    const curr = b.spellUsedBy || {};
-    const fk = flashKey.current;
-    if (b.round !== fk.round) { fk.round = b.round; fk.known = new Set(); }
-    for (const [id, spellName] of Object.entries(curr)) {
-      if (!fk.known.has(id)) {
-        fk.known.add(id);
-        const attacker = pcs.find(p => p.uid === id) || npcs.find(n => n.id === id);
-        const isNpcAtk  = !pcs.find(p => p.uid === id);
-        const charMatch = isNpcAtk ? CHARACTERS.find(c => c.name === attacker?.name) : null;
-        setSpellFlash({ name: spellName, attackerName: attacker?.charName || attacker?.name || "???", color: isNpcAtk ? C.red : C.blue, spriteRow: attacker?.spriteRow ?? charMatch?.spriteRow ?? -1, spriteCol: attacker?.spriteCol ?? charMatch?.spriteCol ?? -1, customPortrait: attacker?.customPortrait || null });
-        sfx.spell(isNpcAtk);
-        break;
-      }
-    }
-  }, [b.spellUsedBy, b.round, pcs, npcs]);
-  useEffect(() => {
-    if (!spellFlash) return;
-    const t = setTimeout(() => setSpellFlash(null), 2800);
-    return () => clearTimeout(t);
-  }, [spellFlash]);
+  // ── 演出（スペルカードのカットイン・被弾・回避の残像・グレイズ）──────────
+  // gs の変化から各クライアントでローカルに再生する（src/battleFx.js / ./battleFx.jsx）
+  const fx = useBattleFx(gs);
+  // カットインの立ち絵: 描写モードで登録した立ち絵（名前一致）> カスタム画像 > キャラスプライト
+  const cutinPortrait = (() => {
+    if (!fx.cutin) return null;
+    const id = fx.cutin.id;
+    const ent = pcs.find(x => x.uid === id) || npcs.find(n => n.id === id);
+    const nm = ent?.charName || ent?.name || fx.cutin.who || "";
+    const sp = (sceneData?.portraits || []).find(x => x?.img && x.name && nm && (x.name === nm || nm.includes(x.name) || x.name.includes(nm)));
+    if (sp) return { img: sp.img };
+    if (ent?.customPortrait) return { img: ent.customPortrait };
+    const charMatch = !fx.cutin.pc ? CHARACTERS.find(c => c.name === ent?.name) : null;
+    return { spriteRow: ent?.spriteRow ?? charMatch?.spriteRow ?? -1, spriteCol: ent?.spriteCol ?? charMatch?.spriteCol ?? -1 };
+  })();
 
   // ── フェーズチェンジバナー ────────────────────────────────────────
   const [phaseBanner, setPhaseBanner] = useState(null);
@@ -3935,15 +3938,11 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
       {/* アトモスフィア層: 上部の妖光グラデーション＋下部ビネット（背景画像が無くても奥行きを出す） */}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 75% 55% at 50% 30%, rgba(60,40,90,0.35) 0%, transparent 62%), radial-gradient(ellipse 90% 60% at 50% 108%, rgba(0,0,0,0.65) 0%, transparent 55%)" }} />
       <BattleParticleCanvas />
-    <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto" }}>
-      <style>{`
-        @keyframes spellFlashIn {
-          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
-          12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
-          22%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-          75%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-          100% { opacity: 0; transform: translate(-50%, -50%) scale(1.04); }
-        }
+      {/* 演出: 被弾の閃光と、スペルカード宣言のカットイン（揺れの外側に置く） */}
+      <HitOverlay hit={fx.hit} />
+      <SpellCutin cutin={fx.cutin} portrait={cutinPortrait} onDone={fx.dismissCutin} />
+    <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "16px 20px 24px", boxSizing: "border-box", gap: 14, overflowY: "auto", animation: shakeAnimation(fx.shake) }}>
+      <style>{`${BATTLE_FX_CSS}
         @keyframes phaseBannerAnim {
           0%   { opacity: 0; transform: translateX(-50%) translateY(-8px) scaleX(0.92); }
           18%  { opacity: 1; transform: translateX(-50%) translateY(0)    scaleX(1); }
@@ -3971,27 +3970,6 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-
-      {/* スペルカード宣言フラッシュ */}
-      {spellFlash && (
-        <div style={{ position: "absolute", top: "50%", left: "50%", zIndex: 30, pointerEvents: "none", animation: "spellFlashIn 2.8s forwards", textAlign: "center" }}>
-          <div style={{ background: "rgba(4,4,12,0.92)", border: `2px solid ${spellFlash.color}`, borderRadius: 2, padding: "20px 40px", boxShadow: `0 0 48px ${spellFlash.color}55, 0 0 100px ${spellFlash.color}22, inset 0 0 32px rgba(0,0,0,0.7)` }}>
-            {[{ top: -6, left: 12 }, { top: -6, right: 12 }, { bottom: -6, left: 12 }, { bottom: -6, right: 12 }].map((pos, i) => (
-              <div key={i} style={{ position: "absolute", width: 10, height: 10, background: spellFlash.color, transform: "rotate(45deg)", ...pos }} />
-            ))}
-            <div style={{ fontSize: 9, color: spellFlash.color, letterSpacing: 5, marginBottom: 10, opacity: 0.9 }}>◆ SPELL CARD ◆</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 10 }}>
-              {spellFlash.customPortrait
-                ? <img src={spellFlash.customPortrait} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 2, border: `1px solid ${spellFlash.color}66` }} />
-                : <CharSprite spriteRow={spellFlash.spriteRow} spriteCol={spellFlash.spriteCol} size={48} style={{ borderRadius: 2, border: `1px solid ${spellFlash.color}66` }} />}
-              <div>
-                <div style={{ fontSize: 18, color: "#fff", fontWeight: "bold", letterSpacing: 2, whiteSpace: "nowrap", textShadow: `0 0 16px ${spellFlash.color}88` }}>{spellFlash.name}</div>
-                <div style={{ fontSize: 10, color: spellFlash.color, letterSpacing: 3, marginTop: 4, opacity: 0.85 }}>{spellFlash.attackerName}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* フェーズチェンジバナー */}
       {phaseBanner && (
@@ -4051,6 +4029,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
               isCombatant={isCombatant}
               grid={b.grids?.[n.id]}
               tokens={fieldTokenMap[n.id]}
+              fx={fx.gridFx[n.id]}
               pos={b.positions?.[n.id]}
               isDead={n.resources.残り人数?.cur <= 0}
               highlightCells={highlights}
@@ -4291,6 +4270,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
               isCombatant={isCombatant}
               grid={b.grids?.[p.uid]}
               tokens={fieldTokenMap[p.uid]}
+              fx={fx.gridFx[p.uid]}
               pos={currentPos}
               highlightCells={isMyTurn ? highlights : []}
               isDead={(p.resources?.残り人数?.cur || 0) <= 0}
