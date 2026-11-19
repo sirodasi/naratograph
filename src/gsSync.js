@@ -274,3 +274,16 @@ export function reconcileQuests(quests, scenarioQuests, onlyIds = null) {
   });
   return changed ? next : null;
 }
+
+// ─── 旧形式のタイミングのメモの移行（state.custom.reminders → roomSecrets/{code}/gm/custom/reminders/{id}） ──
+const reminderList = (v) => (Array.isArray(v) ? v : Object.values(v || {})).filter(r => r && r.id);
+// GM 用の場所に無い旧形式のメモだけを { [id]: メモ } で返す（既にあるメモ・別タブで足されたメモは上書きしない）
+export function legacyReminderPatch(legacy, onServer) {
+  const have = new Set(reminderList(onServer).map(r => String(r.id)));
+  return Object.fromEntries(reminderList(legacy).filter(r => !have.has(String(r.id))).map(r => [r.id, r]));
+}
+// 写した後のサーバーの値に、まだ無い旧形式のメモ（1件でもあれば state から消してはいけない）
+export function missingLegacyReminders(legacy, onServer) {
+  const have = new Set(reminderList(onServer).map(r => String(r.id)));
+  return reminderList(legacy).filter(r => !have.has(String(r.id)));
+}

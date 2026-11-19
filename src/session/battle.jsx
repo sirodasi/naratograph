@@ -17,6 +17,10 @@ import { db } from "../firebase";
 import { ref as dbRef, set as dbSet, remove as dbRemove, onValue } from "firebase/database";
 import { BAD_STATUS_TABLE, KURUWASU_BOND, PHASE_LABELS, SPECIAL_BOND_CHEER, SpellCard, buildBattleNpc, buildSpellCard, gainIntimacy, isBadStatusImmune } from "./shared";
 
+// 喰らいボムの予約が有効か（振っている間だけ。完了しなかった古い予約は一定時間で無効になり、取り直せる）
+export const LAST_RESORT_HOLD_MS = 15000;
+export const lastResortHeld = (tok, now = Date.now()) => !!tok && typeof tok === "object" && now - (tok.at || 0) < LAST_RESORT_HOLD_MS;
+
 // fx: 演出（battleFx.jsx の useBattleFx が返す gridFx[entityId]）。{ hit, life, ghost, graze } それぞれ key 付き
 export function BattleGrid({ name, grid, pos, isCombatant, isNpc, sprite, isDead, highlightCells = [], onCellClick, lives, maxLives, sc, tokens = {}, fx = null }) {
   const cells = [1, 2, 3, 4, 5, 6];
@@ -3399,7 +3403,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
             <div style={{ fontSize: 10, color: C.purple, marginBottom: 4 }}>💜 喰らいボム</div>
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>SCを1点消費してダイスを2つ振り足す。{count + 3}以上なら回避成功。</div>
             <button
-              disabled={(target?.resources?.スペルカード?.cur || 0) < 1 || !!b.lastResortToken?.[isPc ? "pc" : "npc"]}
+              disabled={(target?.resources?.スペルカード?.cur || 0) < 1 || lastResortHeld(b.lastResortToken?.[isPc ? "pc" : "npc"])}
               onClick={() => {
                 const targetValue = count + 3;
                 const defenderId = targetId;
@@ -3407,11 +3411,13 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                 const token = `lr${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
                 const hitPhase = isPc ? "pc_hit_check" : "npc_hit_check";
                 const side = isPc ? "pc" : "npc";
-                const reserved = (p) => p.battle?.lastResortToken?.[side] === token && p.battle?.phase === hitPhase;
-                Promise.resolve(upd(p => (p.battle?.phase !== hitPhase || p.battle?.lastResortToken?.[side] || (isPc ? p.battle?.pcLastResort : p.battle?.npcLastResort)) ? p
-                  : { ...p, battle: { ...p.battle, lastResortToken: { ...(p.battle.lastResortToken || {}), [side]: token } } }))
+                // 予約は { t: トークン, at: 時刻 }。振っている途中で再読み込みされる等で完了しなかった予約は、
+                // LAST_RESORT_HOLD_MS を過ぎたら取り直せる（古い予約の結果はトークンが一致しないので反映されない）
+                const reserved = (p) => p.battle?.lastResortToken?.[side]?.t === token && p.battle?.phase === hitPhase;
+                Promise.resolve(upd(p => (p.battle?.phase !== hitPhase || lastResortHeld(p.battle?.lastResortToken?.[side]) || (isPc ? p.battle?.pcLastResort : p.battle?.npcLastResort)) ? p
+                  : { ...p, battle: { ...p.battle, lastResortToken: { ...(p.battle.lastResortToken || {}), [side]: { t: token, at: Date.now() } } } }))
                 // 予約が確定し、自分のトークンが入っているときだけ振る（予約できなかった押下ではロールを始めない）
-                .then((r) => { if (!r?.committed || r.gs?.battle?.lastResortToken?.[side] !== token) return;
+                .then((r) => { if (!r?.committed || r.gs?.battle?.lastResortToken?.[side]?.t !== token) return;
                 animateDice(2, "喰らいボム", (res) => {
                   upd(p => {
                     if (!reserved(p) || (isPc ? p.battle.pcLastResort : p.battle.npcLastResort)) return p;

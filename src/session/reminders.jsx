@@ -9,6 +9,39 @@ import { getCustom, timingSnapshot, detectTimings, remindersFor } from "../custo
 const MAX_GROUPS = 6;
 const linkBtn = { fontSize: 9, cursor: "pointer", background: "none", border: "none", padding: "2px 0", fontFamily: "inherit", textDecoration: "underline" };
 
+// ─── クエストの公開記録の確認（旧形式の部屋・GM のみ） ─────────────────────
+// 公開記録（rooms/{code}/questGate）が無い部屋では、どのクエストが登場済みか・真相を公開済みかを GM に確かめてもらう。
+// candidates: [{ id, name, solved, start }]（秘匿シナリオにあるクエストだけ）。onSave(revealedIds, approvedIds)
+export function GmQuestGateInit({ candidates = [], onSave }) {
+  const [revealed, setRevealed] = useState(() => Object.fromEntries(candidates.map(q => [q.id, q.start])));
+  const [approved, setApproved] = useState({});
+  return (
+    <div data-testid="gate-init" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 142, width: "min(92vw, 380px)", background: "rgba(10,8,22,0.97)", border: `1px solid ${C.gold}`, borderRadius: 6, padding: "8px 10px", boxShadow: "0 6px 20px rgba(0,0,0,0.55)", fontFamily: "'Noto Serif JP', serif" }}>
+      <div style={{ fontSize: 10, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>📋 クエストの公開記録を作ってください（GM にだけ表示）</div>
+      <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.5, marginBottom: 6 }}>この部屋には公開記録がありません（以前の版で作った部屋）。登場済みのクエストと、真相を公開済みのクエストを確かめて記録してください。記録するまで、クエストの弾幕ごっこは敵の準備を待ちます。</div>
+      {candidates.length === 0 && <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>登場しているクエストはありません</div>}
+      {candidates.map(q => (
+        <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, color: C.text, marginBottom: 3 }}>
+          <span style={{ flex: 1 }}>「{q.name}」{q.solved ? "（解決済み）" : ""}</span>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+            <input type="checkbox" checked={!!revealed[q.id]} onChange={e => setRevealed(r => ({ ...r, [q.id]: e.target.checked }))} />登場済み
+          </label>
+          {q.solved && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+              <input type="checkbox" checked={!!approved[q.id]} onChange={e => setApproved(a => ({ ...a, [q.id]: e.target.checked }))} />真相公開済み
+            </label>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={() => {
+        const rev = candidates.filter(q => revealed[q.id] || approved[q.id]).map(q => q.id);
+        const app = candidates.filter(q => q.solved && approved[q.id]).map(q => q.id);
+        onSave(rev, app);
+      }} style={{ marginTop: 4, width: "100%", padding: "4px", fontSize: 10, cursor: "pointer", borderRadius: 3, background: C.goldBg, border: `1px solid ${C.goldDim}`, color: C.gold, fontFamily: "inherit" }}>この内容で記録する</button>
+    </div>
+  );
+}
+
 // ─── クエストの真相の公開待ち（GM のみ） ─────────────────────────────
 // PL も「解決済み」を書けるため、真相は自動では公開せず、GM の承認で公開する（設定で自動公開にもできる）。
 // pending: 公開待ちのクエスト（GM の公開記録で登場済み・未承認・解決済み。SessionApp が求める）

@@ -10,7 +10,7 @@ import { CHARACTERS, PERSONALITY_SKILLS } from "./data/characters";
 import { ConfirmModal, INIT_RESOURCES, INIT_ITEMS, buildBattleNpc } from "./session/shared";
 import { BackstoryScreen, EpilogueView, SceneStage } from "./session/scene";
 import { GmRequestOverlay } from "./session/gmPanel";
-import { GmReminderOverlay, GmTruthApproval } from "./session/reminders";
+import { GmReminderOverlay, GmTruthApproval, GmQuestGateInit } from "./session/reminders";
 import { getCustom } from "./customRules";
 
 // コード分割: セッションの大きな画面は必要になるまで読み込まない（Suspense は App.jsx のルートにある）
@@ -20,7 +20,7 @@ const BonusPhaseView = lazy(() => import("./session/phases").then(m => ({ defaul
 const SessionEndView = lazy(() => import("./session/phases").then(m => ({ default: m.SessionEndView })));
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
-import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView } from "./gsSync";
+import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders } from "./gsSync";
 import { fillAwaitingEnemies } from "./gmTools";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
@@ -528,6 +528,7 @@ export default function SessionApp({ roomCode, user }) {
   const reqDefsRef = useRef(null);
   const secretCustomRef = useRef(null);
   const amGmRef = useRef(false);
+  const gsRawRef = useRef(null); // 取り消しで、旧形式のメモ（まだ写していないもの）を残すために使う
   const legacyCopiedRef = useRef(false); // 旧形式のメモを GM 用の場所へ写したことをサーバーで確かめたか
   const gs = useMemo(() => {
     const view = viewOfState(gsRaw, { requestDefs: reqDefs, secretCustom: amGm ? secretCustom : null });
@@ -947,6 +948,7 @@ export default function SessionApp({ roomCode, user }) {
 
   // ─── GM の要求の定義・GM 用の独自要素・クエストの公開記録の購読 ──────────
   amGmRef.current = amGm;
+  gsRawRef.current = gsRaw;
   useEffect(() => {
     const unsub = onValue(ref(db, `rooms/${roomCode}/gmRequests`), snap => {
       const v = snap.exists() ? snap.val() : {};
@@ -1002,7 +1004,12 @@ export default function SessionApp({ roomCode, user }) {
         Object.entries(patch).forEach(([id, d]) => { if (d === null) delete cur[id]; else cur[id] = d; });
         reqDefsRef.current = cur;
         setReqDefs(cur);
-        update(ref(db, `rooms/${roomCode}/gmRequests`), patch).catch(failed("GM の要求"));
+        // 失敗したら保留にし、成功するまで数秒おきにやり直す（PL の画面に要求が届かないまま・閉じたのに残る、を防ぐ）
+        const saveDefs = (attempt = 0) => update(ref(db, `rooms/${roomCode}/gmRequests`), patch).catch(e => {
+          if (attempt === 0) failed("GM の要求")(e);
+          if (attempt < 20) setTimeout(() => saveDefs(attempt + 1), 3000);
+        });
+        saveDefs();
       }
     }
     if (parts.secretCustom) {
@@ -1101,13 +1108,13 @@ export default function SessionApp({ roomCode, user }) {
       try {
         if (!legacyCopiedRef.current) {
           const remRef = ref(db, `roomSecrets/${roomCode}/gm/custom/reminders`);
-          const onServer = (await get(remRef)).val() || {}; // サーバーの値
-          const have = new Set(Object.values(onServer).filter(r => r && r.id).map(r => String(r.id)));
           const legacy = gsRaw.custom.reminders;
           // GM 用の場所に無いメモだけを id ごとに足す（既にあるメモ・別タブで追加されたメモは上書きしない）
-          const patch = {};
-          (Array.isArray(legacy) ? legacy : Object.values(legacy)).filter(r => r && r.id && !have.has(String(r.id))).forEach(r => { patch[r.id] = stripUndefined(r); });
-          if (Object.keys(patch).length) await update(remRef, patch); // サーバーが受け付けるまで待つ
+          const patch = legacyReminderPatch(legacy, (await get(remRef)).val());
+          if (Object.keys(patch).length) await update(remRef, stripUndefined(patch)); // サーバーが受け付けるまで待つ
+          // 旧形式のメモが全件 GM 用の場所にあることをサーバーで確かめてから、写し終えた扱いにする
+          const missing = missingLegacyReminders(legacy, (await get(remRef)).val());
+          if (missing.length) throw new Error(`${missing.length} 件のメモを写せませんでした`);
           legacyCopiedRef.current = true;
         }
         const res = await upd(p => p); // 写しが確かめられたので、この書き込みで state から消える
@@ -1127,7 +1134,7 @@ export default function SessionApp({ roomCode, user }) {
   // それでも未登場なら少し待って数回読み直し、最後まで未登場のときだけ中止する。
   useEffect(() => {
     if (!amGm || mode !== "gm" || !gsRaw.battle?.active || !gsRaw.battle?.awaitingEnemies || !gmScenario?.quests) return;
-    if (questGate === undefined) return;
+    if (questGate === undefined || questGate === null) return; // 読込中・記録の確認待ち（GmQuestGateInit）は中止せずに待つ
     const qid = gsRaw.battle.questId;
     let cancelled = false;
     const fill = (revealed) => {
@@ -1223,21 +1230,22 @@ export default function SessionApp({ roomCode, user }) {
     revealTruths(pendingTruths.map(q => q.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoReveal, mode, pendingKey]);
-  // 公開記録が無い旧形式の部屋: PL が書ける gs.quests は信用せず、確かな情報だけから記録を始める
-  //   ・最初のクエスト（秘匿シナリオで unlockType が start）は登場済み
-  //   ・公開済みの真相が秘匿シナリオの真相と一致する解決済みクエストは承認済み（PL は真相の文を知らないので偽れない）
-  //   ・承認済みのクエストから解放される次のクエストは登場済み
-  useEffect(() => {
-    if (!amGm || mode !== "gm" || questGate !== null || !gmScenario?.quests || String(gsRaw.sessionPhase || "").startsWith("intro")) return;
-    const scQs = gmScenario.quests.filter(Boolean);
-    const secretTruth = new Map(scQs.map(q => [String(q.id), q.truth]));
+  // 公開記録が無い旧形式の部屋: 自動では作らない。旧形式の部屋ではシナリオ全文（真相を含む）が PL にも見えていた可能性があり、
+  // PL が書ける gs.quests の内容（真相の一致を含む）は承認の証拠にならないため、GM に登場済み・承認済みのクエストを確かめてもらう
+  const needGateInit = amGm && mode === "gm" && questGate === null && !!gmScenario?.quests && !String(gsRaw.sessionPhase || "").startsWith("intro") && !gsRaw.scenarioRevealed;
+  const gateInitCandidates = useMemo(() => {
+    if (!needGateInit) return [];
+    const scById = new Map(gmScenario.quests.filter(Boolean).map(q => [String(q.id), q]));
+    // 候補は秘匿シナリオにあるクエストだけ（PL が足した架空のクエストは出さない）
+    return (gsRaw.quests || []).filter(q => q && scById.has(String(q.id)))
+      .map(q => ({ id: q.id, name: scById.get(String(q.id)).name || q.name, solved: !!q.solved, start: (scById.get(String(q.id)).unlockType ?? "start") === "start" }));
+  }, [needGateInit, gmScenario, gsRaw.quests]);
+  const saveGateInit = useCallback((revealedIds, approvedIds) => {
     const patch = { createdAt: Date.now() };
-    scQs.filter(q => (q.unlockType ?? "start") === "start").forEach(q => { patch[`revealed/${q.id}`] = true; });
-    const approved = (gsRaw.quests || []).filter(q => q?.solved && q.truth && secretTruth.get(String(q.id)) === q.truth).map(q => q.id);
-    approved.forEach(id => { patch[`approved/${id}`] = true; patch[`revealed/${id}`] = true; });
-    scQs.filter(q => q.unlockType === "quest" && approved.some(id => String(id) === String(q.unlockQuestId))).forEach(q => { patch[`revealed/${q.id}`] = true; });
-    writeGate(patch);
-  }, [amGm, mode, questGate, gmScenario, gsRaw.sessionPhase, gsRaw.quests, writeGate]);
+    revealedIds.forEach(id => { patch[`revealed/${id}`] = true; });
+    approvedIds.forEach(id => { patch[`approved/${id}`] = true; });
+    update(ref(db, `rooms/${roomCode}/questGate`), patch).catch(e => { console.error(e); window.alert("クエストの公開記録を保存できませんでした。もう一度お試しください。"); });
+  }, [roomCode]);
   const setAutoRevealTruth = useCallback((on) => {
     update(ref(db, `rooms/${roomCode}/config`), { autoRevealTruth: !!on }).catch(e => console.error("設定の保存に失敗:", e));
   }, [roomCode]);
@@ -1260,7 +1268,7 @@ export default function SessionApp({ roomCode, user }) {
     const entry = stack[stack.length - 1]; // { view: 操作前のビュー, gmBefore / gmAfter: その操作の前後の GM 専用部分 }
     undoStackRef.current = stack.slice(0, -1);
     setUndoCount(undoStackRef.current.length);
-    const parts = splitView(sanitizeGsForWrite(entry.view), { authoritative: true });
+    const parts = splitView(sanitizeGsForWrite(entry.view), { authoritative: true, prevState: gsRawRef.current, keepSecretCustom: !legacyCopiedRef.current });
     setGs(normalizeGs(parts.state));
     set(ref(db, gsPath), stripUndefined(parts.state)).catch(console.error);
     // GM 専用部分（要求の定義・タイミングのメモ）は、取り消す操作で変えた分だけを戻す（その後の別の編集は残す）
@@ -1867,6 +1875,7 @@ export default function SessionApp({ roomCode, user }) {
 
       {/* タイミングのメモ（独自タブで登録。サイクル開始時・ラウンド終了時などに GM にだけ表示） */}
       {isParticipant && mode === "gm" && <GmReminderOverlay gs={gs} />}
+      {isParticipant && needGateInit && <GmQuestGateInit candidates={gateInitCandidates} onSave={saveGateInit} />}
       {isParticipant && mode === "gm" && !autoReveal && !gsRaw.scenarioRevealed && (
         <GmTruthApproval pending={pendingTruths} onReveal={revealTruths} onAuto={() => { setAutoRevealTruth(true); revealTruths(pendingTruths.map(q => q.id)); }} />
       )}
