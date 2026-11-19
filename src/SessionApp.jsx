@@ -20,7 +20,7 @@ const BonusPhaseView = lazy(() => import("./session/phases").then(m => ({ defaul
 const SessionEndView = lazy(() => import("./session/phases").then(m => ({ default: m.SessionEndView })));
 import { useIsMobile } from "./useIsMobile";
 import { dehydrateScene, hydrateScene } from "./sceneAssets";
-import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates } from "./gsSync";
+import { DEFAULT_GS, stripUndefined, normalizeScenario, normalizeGs, computeGsUpdate, sanitizeGsForWrite, publicScenario, mergeScenarioSecret, reconcileQuests, viewOfState, splitView, legacyReminderPatch, missingLegacyReminders, convertReminderKeys, insertReminderIfAbsent, questGateCandidates, clearOwnGatePending, gateRecoveryActions } from "./gsSync";
 import { fillAwaitingEnemies } from "./gmTools";
 import mapImg from "./assets/map.png";
 import { C } from "./styles/colors";
@@ -1220,11 +1220,12 @@ export default function SessionApp({ roomCode, user }) {
     Promise.all(Object.entries(patch).map(([k, v]) =>
       runTransaction(ref(db, `rooms/${roomCode}/questGate/${k}`), cur => (cur ? undefined : v))))
       .then(async () => {
-        if (!unlocked.length) return;
+        if (!unlocked.length || cancelledOpsRef.current.has(opId)) return; // 取り消した操作の完了処理はしない
         const ids = new Set(unlocked.map(String));
+        // 解除するのは、この操作（opId）が付けた確認待ちだけ（別の承認が付け直した確認待ちは触らない）
         const res = await upd(p => {
-          if (!(p.quests || []).some(q => q?.gatePending && ids.has(String(q.id)))) return p;
-          return { ...p, quests: p.quests.map(q => (q?.gatePending && ids.has(String(q.id))) ? (({ gatePending: _g, ...rest }) => rest)(q) : q) };
+          const quests = clearOwnGatePending(p.quests, [...ids], opId);
+          return quests === p.quests ? p : { ...p, quests };
         });
         if (!res?.committed) throw new Error("確認待ちの解除がコミットされませんでした");
       })
@@ -1243,13 +1244,30 @@ export default function SessionApp({ roomCode, user }) {
       const next = reconcileQuests(p.quests, scQs, solvedIds);
       // 新しく解放したクエストは、公開記録が保存されるまで「GM の確認待ち」（弾幕ごっこを始められない）
       const had = new Set((p.quests || []).map(q => String(q?.id)));
-      const quests = next ? next.map(q => (q && !had.has(String(q.id))) ? { ...q, gatePending: true } : q) : null;
+      const quests = next ? next.map(q => (q && !had.has(String(q.id))) ? { ...q, gatePending: opId } : q) : null;
       return { ...p, ...(quests ? { quests } : {}), log: [`🔓 GM: クエストの真相を公開した`, ...(p.log || [])] };
     }, { undoGateFor: (after) => gateForApproval(after, want, scQs, gate, opId).undo });
     if (!res?.committed) return;
     const { patch, unlocked } = gateForApproval(res.gs, want, scQs, gate, opId);
     if (Object.keys(patch).length) commitGate(patch, unlocked, opId);
   }, [amGm, gmScenario, questGate, upd, commitGate]);
+  // 再読み込み等で保存のやり直しが失われた場合の回復（GM のみ）: 確認待ち（gatePending）のクエストについて、
+  //   ・公開記録で既に登場済みなら、確認待ちを外す
+  //   ・元のクエストが公開記録で承認済みなら（GM の記録が根拠）、登場済みの記録を書いてから外す
+  //   ・どちらでもなければ（承認の記録が保存されていない）、元のクエストが承認待ちに戻るので、GM が再承認すれば進む
+  //   （確認待ちの値は付けた操作の opId。旧版の true もそのまま照合に使う。同じ確認待ちの回復は一度だけ始める）
+  const pendingGateKey = (gs.quests || []).filter(q => q?.gatePending).map(q => `${q.id}:${q.gatePending}`).join(",");
+  const recoveringGateRef = useRef(new Set());
+  useEffect(() => {
+    if (!amGm || mode !== "gm" || !questGate || !gmScenario?.quests || !pendingGateKey) return;
+    gateRecoveryActions(gs.quests, gmScenario.quests, questGate).forEach(({ id, opId, action }) => {
+      const key = `${id}:${opId}`;
+      if (recoveringGateRef.current.has(key)) return;
+      recoveringGateRef.current.add(key);
+      commitGate(action === "reveal" ? { [`revealed/${id}`]: typeof opId === "string" ? opId : true } : {}, [id], opId);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amGm, mode, questGate, gmScenario, pendingGateKey]);
   const autoReveal = !!room?.config?.autoRevealTruth;
   const pendingKey = pendingTruths.map(q => q.id).join(",");
   useEffect(() => {

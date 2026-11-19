@@ -1,0 +1,47 @@
+import { describe, it, expect } from "vitest";
+import { clearOwnGatePending, gateRecoveryActions } from "../gsSync";
+
+describe("clearOwnGatePending（承認で解放したクエストの確認待ちの解除）", () => {
+  it("指定の操作（opId）が付けた確認待ちだけを外す", () => {
+    const qs = [{ id: 2, gatePending: "op_a" }, { id: 3, gatePending: "op_b" }, { id: 4 }];
+    const out = clearOwnGatePending(qs, [2, 3], "op_a");
+    expect(out[0]).toEqual({ id: 2 });
+    expect(out[1]).toEqual({ id: 3, gatePending: "op_b" }); // 別の承認が付け直した確認待ちは残す
+    expect(out[2]).toBe(qs[2]);
+  });
+  it("取り消し後に別の承認が付け直した確認待ちを、古い操作の完了で外さない", () => {
+    const qs = [{ id: 2, gatePending: "op_new" }];
+    expect(clearOwnGatePending(qs, [2], "op_old")).toBe(qs);
+  });
+  it("対象外の id や変化が無いときは同じ配列を返す", () => {
+    const qs = [{ id: 2, gatePending: "op_a" }];
+    expect(clearOwnGatePending(qs, [9], "op_a")).toBe(qs);
+    expect(clearOwnGatePending(undefined, [2], "op_a")).toBeUndefined();
+  });
+});
+
+describe("gateRecoveryActions（再読み込み後の確認待ちの回復）", () => {
+  const sc = [
+    { id: 1, unlockType: "start" },
+    { id: 2, unlockType: "quest", unlockQuestId: 1 },
+    { id: 3, unlockType: "quest", unlockQuestId: 2 },
+  ];
+  it("公開記録で登場済みなら確認待ちを外すだけ", () => {
+    const gate = { revealed: { 1: true, 2: "op_a" }, approved: { 1: "op_a" } };
+    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "clear" }]);
+  });
+  it("元のクエストが承認済みで、登場済みの記録だけ失われていたら記録を書く", () => {
+    const gate = { revealed: { 1: true }, approved: { 1: "op_a" } };
+    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, gate)).toEqual([{ id: 2, opId: "op_a", action: "reveal" }]);
+  });
+  it("承認の記録が無ければ何もしない（PL が書いた gatePending や solved は根拠にしない）", () => {
+    const gate = { revealed: { 1: true }, approved: {} };
+    expect(gateRecoveryActions([{ id: 1, solved: true }, { id: 2, gatePending: "op_a" }], sc, gate)).toEqual([]);
+    expect(gateRecoveryActions([{ id: 2, gatePending: "op_a" }], sc, null)).toEqual([]);
+  });
+  it("秘匿シナリオに無いクエスト・旧版の true の確認待ちも扱える", () => {
+    const gate = { revealed: { 1: true, 2: true }, approved: { 1: true } };
+    expect(gateRecoveryActions([{ id: 99, gatePending: "x" }, { id: 2, gatePending: true }], sc, gate))
+      .toEqual([{ id: 2, opId: true, action: "clear" }]);
+  });
+});

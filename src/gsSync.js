@@ -318,3 +318,29 @@ export function questGateCandidates(publicQuests, scenarioQuests) {
   });
 }
 
+
+// 承認で解放したクエストの「確認待ち（gatePending = 付けた操作の opId）」を外す。
+// 外すのは、指定の操作（opId）が付けた確認待ちだけ（別の承認が付け直したものは触らない）。変化が無ければ同じ配列を返す
+export function clearOwnGatePending(quests, ids, opId) {
+  const want = new Set(toArray(ids).map(String));
+  const mine = (q) => q?.gatePending === opId && want.has(String(q.id));
+  const list = toArray(quests);
+  if (!list.some(mine)) return quests;
+  return list.map(q => (mine(q) ? (({ gatePending: _g, ...rest }) => rest)(q) : q));
+}
+
+// 再読み込み等で保存のやり直しが失われた確認待ちの回復の判定（GM の公開記録が根拠）。
+//   ・公開記録で既に登場済み → "clear"（確認待ちを外すだけ）
+//   ・元のクエストが公開記録で承認済み → "reveal"（登場済みの記録を書いてから外す）
+//   ・どちらでもない → 何もしない（元のクエストが承認待ちに戻るので、GM が再承認すれば進む）
+export function gateRecoveryActions(quests, scenarioQuests, gate) {
+  if (!gate) return [];
+  const scById = new Map(toArray(scenarioQuests).filter(Boolean).map(q => [String(q.id), q]));
+  return toArray(quests).filter(q => q?.gatePending).flatMap(q => {
+    const opId = q.gatePending;
+    if (gate.revealed?.[q.id]) return [{ id: q.id, opId, action: "clear" }];
+    const parent = scById.get(String(q.id))?.unlockQuestId;
+    if (parent != null && parent !== "" && gate.approved?.[parent]) return [{ id: q.id, opId, action: "reveal" }];
+    return [];
+  });
+}
