@@ -287,3 +287,22 @@ export function missingLegacyReminders(legacy, onServer) {
   const have = new Set(reminderList(onServer).map(r => String(r.id)));
   return reminderList(legacy).filter(r => !have.has(String(r.id)));
 }
+
+// 配列の番号をキーにして保存されたメモを id キーへ直す（トランザクションの更新関数。変更が無ければ undefined＝中止）。
+// 同じ id のキーが既にあれば、そちら（後から id キーで保存・編集されたもの）を優先し、番号キーの古い写しは消すだけにする
+export function convertReminderKeys(cur) {
+  if (!cur || typeof cur !== "object") return undefined;
+  let changed = false;
+  const next = { ...cur };
+  Object.entries(cur).forEach(([k, r]) => {
+    if (r && r.id && String(r.id) !== k) {
+      if (next[r.id] == null) next[r.id] = r;
+      delete next[k];
+      changed = true;
+    }
+  });
+  return changed ? next : undefined;
+}
+// id ごとの写し: 書き込む時点でまだ無いときだけ書く（別タブが先に写した・編集したメモは上書きしない）
+export const insertReminderIfAbsent = (item) => (cur) => (cur == null ? item : undefined);
+

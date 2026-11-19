@@ -100,6 +100,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
     // 敵データは秘匿（公開の gs には hasEnemy だけ）。GM の画面には秘匿シナリオから合成されている。
     // PL が始めた場合は敵なしで戦闘を作り（awaitingEnemies）、GM のクライアントが敵を補う（fillAwaitingEnemies）
     if (!enemy && !q?.hasEnemy) return;
+    if (q.gatePending) return; // GM の公開記録の保存待ち（保存されると始められる）
     const isMassQuest = !!q.massBattle;
     // 集団戦時は enemy + extraEnemies、その場（クエスト場所）にいる全PCが参加する。
     const enemyList = enemy ? [enemy, ...(isMassQuest ? (q.extraEnemies || []) : [])].filter(Boolean) : [];
@@ -1363,6 +1364,9 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
                       const enemy = q.enemy || q.hasEnemy;
                       if (!enemy) return (
                         <div style={{ fontSize: 11, color: C.red }}>敵データが設定されていません</div>
+                      );
+                      if (q.gatePending) return (
+                        <div style={{ fontSize: 11, color: C.textDim }}>GM の確認待ちです（少し待つと始められます）</div>
                       );
                       const flavor = getPreBattleFlavorRoll(q);
                       return (
