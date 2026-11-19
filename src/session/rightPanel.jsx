@@ -157,7 +157,7 @@ export function RightPanel({ gs, upd, sceneData, setSceneData, isGm, user, room,
   const tabsRef = useRef(TABS); tabsRef.current = TABS;
   // 弾幕ごっこ中は主要アクション（Enter）を使わない（戦闘画面では主要アクションのボタンも出していない）
   const battleRef = useRef(false); battleRef.current = !!gs.battle?.active;
-  const overlayRef = useRef(false); overlayRef.current = showShortcuts; // ショートカット一覧を表示中
+  const overlayRef = useRef(false); overlayRef.current = showShortcuts || !!paperModal; // ショートカット一覧・新聞を表示中
   useEffect(() => {
     const onKey = (e) => {
       // 入力欄フォーカス中・修飾キー併用時はショートカット無効

@@ -25,6 +25,15 @@
         "state": {
           ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || ( root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() && newData.exists() ) )",
           ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || ( newData.child('sessionPhase').val() === data.child('sessionPhase').val() && newData.child('scenarioRevealed').val() === data.child('scenarioRevealed').val() )",
+          "reqResponses": {
+            "$requestId": {
+              "$uid": {
+                "$field": {
+                  ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $uid === auth.uid || $field === 'dice' || $field === 'cheers' || newData.val() === data.val()"
+                }
+              }
+            }
+          },
           "sessionPhase": {
             ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || newData.val() === data.val()"
           },
@@ -38,7 +47,9 @@
               }
             },
             "plotRevealed": {
+              ".validate": "newData.hasChildren() || root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid",
               "$entityId": {
+                ".validate": "newData.hasChildren(['cell', 'nonce'])",
                 "$field": {
                   ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $entityId === auth.uid || newData.val() === data.val()"
                 }

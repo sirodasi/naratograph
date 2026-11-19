@@ -670,13 +670,7 @@ function TableSection({ c, gs, upd, prep = false }) {
   const [giveTo, setGiveTo] = useState({});      // { [resultKey]: uid }
   const [given, setGiven] = useState({});        // { [resultKey]: 渡したアイテムの iid }
   const [received, setReceived] = useState({});  // { [resultKey]: true } 所持品に入ったのを確かめた（その後に使って消えても「渡した」のまま）
-  const owned = (iid) => (gs.pcs || []).some(pc => pcCustom(pc).items.some(x => x.iid === iid));
-  const pcsNow = gs.pcs;
-  useEffect(() => {
-    const has = (iid) => (pcsNow || []).some(pc => pcCustom(pc).items.some(x => x.iid === iid));
-    const seen = Object.entries(given).filter(([k, iid]) => !received[k] && has(iid)).map(([k]) => k);
-    if (seen.length) setReceived(r => ({ ...r, ...Object.fromEntries(seen.map(k => [k, true])) }));
-  }, [given, received, pcsNow]);
+
 
   const reset = () => { setEditId(null); setName(""); setDice("d6"); setRowsText(""); };
   const parsed = parseTableRows(rowsText);
@@ -727,14 +721,22 @@ function TableSection({ c, gs, upd, prep = false }) {
                   <div key={r.key} style={{ ...row, marginBottom: 2 }}>
                     <span style={{ fontSize: 9, color: C.textFaint }}>[{r.rolled.join(",")}] {r.value}</span>
                     <span style={{ fontSize: 10, color: C.text }}>{r.text}</span>
-                    {item && (given[r.key] && (received[r.key] || owned(given[r.key]))
+                    {item && (given[r.key] && !received[r.key]
+                      ? <span style={{ fontSize: 8, color: C.textFaint, marginLeft: "auto" }}>渡しています…</span>
+                      : received[r.key]
                       ? <span style={{ fontSize: 8, color: C.green, marginLeft: "auto" }}>渡した</span>
                       : <span style={{ marginLeft: "auto", display: "inline-flex", gap: 3 }}>
                           <select value={giveTo[r.key] || ""} onChange={e => setGiveTo(g => ({ ...g, [r.key]: e.target.value }))} style={{ ...sel, fontSize: 9, padding: "2px 4px" }}>
                             <option value="">PC...</option>
                             {pcs.map(pc => <option key={pc.uid} value={pc.uid}>{pc.charName}</option>)}
                           </select>
-                          <button disabled={!giveTo[r.key]} onClick={() => { const to = giveTo[r.key]; const iid = newId("ii"); setGiven(g => ({ ...g, [r.key]: iid })); upd(p => giveItem(p, to, item.id, iid, `表「${c.tables.find(t => t.id === results.tableId)?.name || ""}」`)); }} style={tiny(C.gold)}>渡す</button>
+                          <button disabled={!giveTo[r.key]} onClick={() => { const to = giveTo[r.key]; const iid = newId("ii"); setGiven(g => ({ ...g, [r.key]: iid }));
+                            // 確定した結果で、実際に所持品に入ったかを確かめる（入らなければ「渡す」に戻す。押している間は再送しない）
+                            Promise.resolve(upd(p => giveItem(p, to, item.id, iid, `表「${c.tables.find(t => t.id === results.tableId)?.name || ""}」`))).then(res => {
+                              const ok = !!res?.committed && (res.gs?.pcs || []).some(pc => pcCustom(pc).items.some(x => x.iid === iid));
+                              if (ok) setReceived(rv => ({ ...rv, [r.key]: true }));
+                              else setGiven(g => { const n = { ...g }; delete n[r.key]; return n; });
+                            }); }} style={tiny(C.gold)}>渡す</button>
                         </span>)}
                   </div>
                 );

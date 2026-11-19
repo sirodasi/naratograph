@@ -68,8 +68,17 @@ describe("GM の要求の定義", () => {
     await assertSucceeds(db("gm").ref(`rooms/${ROOM}/gmRequests/r2`).set({ id: "r2", kind: "notice" }));
   });
 
-  it("PL は回答（state.reqResponses）を書ける", async () => {
+  it("PL は自分の回答（state.reqResponses）を書ける", async () => {
     await assertSucceeds(db("pl1").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 3 } }));
+  });
+
+  it("他人の回答は、応援（dice・cheers）以外を変えられない。GM は代理で変えられる", async () => {
+    await assertSucceeds(db("pl1").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 3 } }));
+    await assertSucceeds(db("pl2").ref(`${statePath}/reqResponses/r1/pl1/dice/1`).set(5)); // 応援の振り足し
+    await assertSucceeds(db("pl2").ref(`${statePath}/reqResponses/r1/pl1/cheers/0`).set({ by: "pl2", bond: "x" }));
+    await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1/confirmed`).set(true));
+    await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1/choice`).set(1));
+    await assertSucceeds(db("gm").ref(`${statePath}/reqResponses/r1/pl1/confirmed`).set(true));
   });
 });
 
@@ -92,6 +101,12 @@ describe("プロット配置", () => {
     await assertFails(db("pl2").ref(`${commits}/pl1`).set("偽"));
     await assertFails(db("pl1").ref(`${commits}/npc1`).set("偽"));
     await assertSucceeds(db("gm").ref(`${commits}/npc1`).set("hn2"));
+  });
+
+  it("公開は { cell, nonce } の形だけ（値を丸ごと別の値に置き換えられない）", async () => {
+    await assertFails(db("pl2").ref(`${revealed}/pl1`).set(true));
+    await assertFails(db("pl1").ref(`${revealed}/pl1`).set(true));
+    await assertFails(db("pl1").ref(revealed).set(true));
   });
 
   it("公開も自分のキャラだけ", async () => {

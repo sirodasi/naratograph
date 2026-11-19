@@ -59,7 +59,7 @@ firebase deploy --only database
 ## ルールのテスト（エミュレーター）
 
 [`tests/rules/database.rules.js`](../tests/rules/database.rules.js) にルールのテストがある（通常の `npm test` には含まれない）。
-firebase-tools と **Java 11 以上**が必要。
+firebase-tools と **Java 21 以上**（JDK 21+）が必要（現在の firebase-tools のエミュレーターは Java 21 未満では起動しない）。
 
 ```bash
 npm i -g firebase-tools

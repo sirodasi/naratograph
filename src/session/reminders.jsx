@@ -7,12 +7,12 @@ import { C } from "../styles/colors";
 import { getCustom, timingSnapshot, detectTimings, remindersFor } from "../customRules";
 
 const MAX_GROUPS = 6;
+const linkBtn = { fontSize: 9, cursor: "pointer", background: "none", border: "none", padding: "2px 0", fontFamily: "inherit", textDecoration: "underline" };
 
 // ─── クエストの真相の公開待ち（GM のみ） ─────────────────────────────
 // PL も「解決済み」を書けるため、真相は自動では公開せず、GM の承認で公開する（設定で自動公開にもできる）。
-// gs は GM の表示用（秘匿シナリオを合成済み）で、未公開の真相には truthPending が付いている。
-export function GmTruthApproval({ gs, onReveal, onAuto }) {
-  const pending = (gs.quests || []).filter(q => q?.solved && q.truthPending);
+// pending: 公開待ちのクエスト（GM の公開記録で登場済み・未承認・解決済み。SessionApp が求める）
+export function GmTruthApproval({ pending = [], onReveal, onAuto }) {
   if (!pending.length) return null;
   return (
     <div data-testid="truth-approval" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 141, width: "min(92vw, 360px)", background: "rgba(10,8,22,0.97)", border: `1px solid ${C.gold}`, borderRadius: 6, padding: "8px 10px", boxShadow: "0 6px 20px rgba(0,0,0,0.55)", fontFamily: "'Noto Serif JP', serif", animation: "modalIn 0.22s ease both" }}>
@@ -25,8 +25,8 @@ export function GmTruthApproval({ gs, onReveal, onAuto }) {
         </div>
       ))}
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-        {pending.length > 1 ? <span onClick={() => onReveal(pending.map(q => q.id))} style={{ fontSize: 9, color: C.gold, cursor: "pointer" }}>すべて公開する</span> : <span />}
-        <span onClick={() => window.confirm("以後、クエストが解決されたら真相を自動で公開しますか？（この部屋の設定。PL が解決済みを書き換えた場合も公開されます）") && onAuto()} style={{ fontSize: 9, color: C.textFaint, cursor: "pointer" }}>以後は自動で公開する</span>
+        {pending.length > 1 ? <button type="button" onClick={() => onReveal(pending.map(q => q.id))} style={{ ...linkBtn, color: C.gold }}>すべて公開する</button> : <span />}
+        <button type="button" onClick={() => window.confirm("以後、クエストが解決されたら真相を自動で公開しますか？（この部屋の設定。登場していないクエストは公開されません）") && onAuto()} style={{ ...linkBtn, color: C.textFaint }}>以後は自動で公開する</button>
       </div>
     </div>
   );

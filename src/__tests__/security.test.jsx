@@ -122,13 +122,12 @@ describe("段階3: クエストの真相は GM の承認で公開", () => {
     expect(all.find(q => q.id === 3)).toMatchObject({ revealed: true, solved: false });
   });
 
-  it("GM の表示では、未公開の真相に truthPending が付き、承認カードが出る", () => {
-    const view = mergeScenarioSecret({ quests }, { quests: scQs });
-    expect(view.quests.every(q => q.truthPending)).toBe(true);
+  it("公開待ちのクエストに承認カードが出る（真相の文が無いクエストも承認できる）", () => {
+    const pending = [{ id: 1, name: "Q1", solved: true }, { id: 2, name: "Q2", solved: true }];
     const onReveal = vi.fn();
     const onAuto = vi.fn();
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<GmTruthApproval gs={view} onReveal={onReveal} onAuto={onAuto} />);
+    render(<GmTruthApproval pending={pending} onReveal={onReveal} onAuto={onAuto} />);
     fireEvent.click(screen.getAllByText("公開する")[0]);
     expect(onReveal).toHaveBeenCalledWith([1]);
     fireEvent.click(screen.getByText("すべて公開する"));
@@ -139,7 +138,7 @@ describe("段階3: クエストの真相は GM の承認で公開", () => {
   });
 
   it("公開待ちが無ければ何も出さない", () => {
-    render(<GmTruthApproval gs={{ quests: [{ id: 1, solved: true, truth: "T" }] }} onReveal={() => {}} onAuto={() => {}} />);
+    render(<GmTruthApproval pending={[]} onReveal={() => {}} onAuto={() => {}} />);
     expect(screen.queryByTestId("truth-approval")).toBeNull();
   });
 });

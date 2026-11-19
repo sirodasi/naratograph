@@ -171,13 +171,12 @@ export function mergeScenarioSecret(gs, secret) {
   return {
     ...gs,
     scenarioData: { ...(gs.scenarioData || {}), ...secret },
-    // 公開版に無い真相（解決済みで公開済みのものは除く）と敵データを GM の表示用に戻す。
-    // 真相は GM の承認で公開するまで、GM の画面でも「未公開」と分かるよう truthPending を付ける
+    // 公開版に無い真相と敵データを GM の表示用に戻す（公開の承認状況は rooms/{code}/questGate で別に管理する）
     quests: toArray(gs.quests).map(q => {
       const sq = q && byId.get(String(q.id));
       if (!sq) return q;
       let out = q;
-      if (!q.truth && sq.truth) out = { ...out, truth: sq.truth, ...(q.solved ? { truthPending: true } : {}) };
+      if (!q.truth && sq.truth) out = { ...out, truth: sq.truth };
       if (!q.enemy && sq.enemy) out = { ...out, enemy: sq.enemy, extraEnemies: sq.extraEnemies };
       return out;
     }),
@@ -214,7 +213,9 @@ export function viewOfState(state, { requestDefs = null, secretCustom = null } =
 //   prevState: 更新前の state（このクライアントが定義を知らない要求の回答は、消さずにそのまま残す）
 //   knownIds: 更新前のビューにあった要求の id（このクライアントが定義を知っていたもの）
 //   authoritative: GM（定義の正本を持つ）なら、定義の無い回答を片付ける
-export function splitView(view, { prevState = null, knownIds = [], authoritative = false } = {}) {
+//   keepSecretCustom: true なら、state にある秘匿の独自要素（旧形式のタイミングのメモ）をそのまま残す。
+//     PL の書き込みと、GM 用の場所へ写し終える前の GM の書き込みで使う（写す前に消して失わないように）
+export function splitView(view, { prevState = null, knownIds = [], authoritative = false, keepSecretCustom = false } = {}) {
   if (!view || typeof view !== "object") return { state: view, requestDefs: null, secretCustom: null };
   const { gmRequests, ...rest } = view;
   const reqs = toArray(gmRequests).filter(r => r && r.id);
@@ -233,7 +234,11 @@ export function splitView(view, { prevState = null, knownIds = [], authoritative
   const custom = rest.custom && typeof rest.custom === "object" ? { ...rest.custom } : rest.custom;
   const secretCustom = {};
   if (custom && typeof custom === "object") {
-    SECRET_CUSTOM_KEYS.forEach(k => { secretCustom[k] = custom[k] ?? null; delete custom[k]; });
+    SECRET_CUSTOM_KEYS.forEach(k => {
+      secretCustom[k] = custom[k] ?? null;
+      delete custom[k];
+      if (keepSecretCustom && prevState?.custom?.[k] != null) custom[k] = prevState.custom[k];
+    });
   }
   const state = { ...rest, ...(custom !== undefined ? { custom } : {}), reqResponses: Object.keys(reqResponses).length ? reqResponses : null };
   return { state, requestDefs, secretCustom };

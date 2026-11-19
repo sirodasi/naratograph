@@ -8,7 +8,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function harness(Comp, initial, props = {}) {
   let gs = initial;
-  const upd = (fn) => { gs = fn(gs); view.rerender(<Comp gs={gs} upd={upd} {...props} />); };
+  const upd = (fn) => { gs = fn(gs); view.rerender(<Comp gs={gs} upd={upd} {...props} />); return Promise.resolve({ committed: true, gs }); };
   const view = render(<Comp gs={gs} upd={upd} {...props} />);
   return { get gs() { return gs; } };
 }
@@ -43,7 +43,7 @@ describe("独自タブ（GM）", () => {
     expect(screen.getByText("春度を集める")).toBeInTheDocument();
   });
 
-  it("表を作って振り、結果のアイテムをPCに渡せる", () => {
+  it("表を作って振り、結果のアイテムをPCに渡せる", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0); // 出目は全て 1
     let gs = upsertDef(gs0(), "items", { id: "red", name: "ベントラー赤" });
     gs = upsertDef(gs, "tables", { id: "t", name: "ベントラー決定表", dice: "d6", rows: parseTableRows("1-2 ベントラー赤\n3-6 その他") });
@@ -55,7 +55,7 @@ describe("独自タブ（GM）", () => {
     fireEvent.change(screen.getAllByDisplayValue("PC...").at(-1), { target: { value: "b" } });
     fireEvent.click(screen.getAllByText("渡す").at(-1));
     expect(pcCustom(h.gs.pcs[1]).items).toHaveLength(1);
-    expect(screen.getByText("渡した")).toBeInTheDocument();
+    expect(await screen.findByText("渡した")).toBeInTheDocument();
   });
 
   it("マップの独自コマをランダム配置（1スポット1つまで・夢の世界は除外）", () => {
