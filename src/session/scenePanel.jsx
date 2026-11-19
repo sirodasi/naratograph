@@ -1261,6 +1261,7 @@ export function ScenePanel({ gs, upd, user, isGm, getSpot, animateDice, SPOTS, r
           {sc.phase === "explore_apply_effect" && (
             <ActionRenderer 
               act={(sc.eventActions || [])[sc.currentActionIndex || 0]} 
+              actionIndex={sc.currentActionIndex || 0}
               pc={pc} gs={gs} upd={upd} animateDice={animateDice} 
               SPOTS={SPOTS} getSpot={getSpot} 
               isDone={(sc.currentActionIndex || 0) >= (sc.eventActions ||[]).length}

@@ -28,6 +28,7 @@
           "reqResponses": {
             "$requestId": {
               "$uid": {
+                ".validate": "newData.hasChildren() && (root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $uid === auth.uid || (newData.child('confirmed').val() === data.child('confirmed').val() && newData.child('choice').val() === data.child('choice').val() && newData.child('ack').val() === data.child('ack').val() && newData.child('given').val() === data.child('given').val() && newData.child('byGm').val() === data.child('byGm').val()))",
                 "$field": {
                   ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $uid === auth.uid || $field === 'dice' || $field === 'cheers' || newData.val() === data.val()"
                 }

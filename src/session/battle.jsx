@@ -3399,7 +3399,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
             <div style={{ fontSize: 10, color: C.purple, marginBottom: 4 }}>💜 喰らいボム</div>
             <div style={{ fontSize: 9, color: C.textFaint, marginBottom: 6 }}>SCを1点消費してダイスを2つ振り足す。{count + 3}以上なら回避成功。</div>
             <button
-              disabled={(target?.resources?.スペルカード?.cur || 0) < 1}
+              disabled={(target?.resources?.スペルカード?.cur || 0) < 1 || !!b.lastResortToken?.[isPc ? "pc" : "npc"]}
               onClick={() => {
                 const targetValue = count + 3;
                 const defenderId = targetId;
@@ -3408,8 +3408,10 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                 const hitPhase = isPc ? "pc_hit_check" : "npc_hit_check";
                 const side = isPc ? "pc" : "npc";
                 const reserved = (p) => p.battle?.lastResortToken?.[side] === token && p.battle?.phase === hitPhase;
-                upd(p => (p.battle?.phase !== hitPhase || p.battle?.lastResortToken?.[side] || (isPc ? p.battle?.pcLastResort : p.battle?.npcLastResort)) ? p
-                  : { ...p, battle: { ...p.battle, lastResortToken: { ...(p.battle.lastResortToken || {}), [side]: token } } });
+                Promise.resolve(upd(p => (p.battle?.phase !== hitPhase || p.battle?.lastResortToken?.[side] || (isPc ? p.battle?.pcLastResort : p.battle?.npcLastResort)) ? p
+                  : { ...p, battle: { ...p.battle, lastResortToken: { ...(p.battle.lastResortToken || {}), [side]: token } } }))
+                // 予約が確定し、自分のトークンが入っているときだけ振る（予約できなかった押下ではロールを始めない）
+                .then((r) => { if (!r?.committed || r.gs?.battle?.lastResortToken?.[side] !== token) return;
                 animateDice(2, "喰らいボム", (res) => {
                   upd(p => {
                     if (!reserved(p) || (isPc ? p.battle.pcLastResort : p.battle.npcLastResort)) return p;
@@ -3441,6 +3443,7 @@ export function BattleView({ gs, upd, user, isGm, animateDice, sceneData, room, 
                   const combatant = isPc ? combatantPc : combatantNpc;
                   const currentDice = [...(gs.battle?.evadeRoll?.dice || []), ...res];
                   resolveEvadeApply(isPc, currentDice, targetValue, combatant, false, reserved);
+                });
                 });
               }}
               style={btnFull("rgba(171,71,188,0.2)", "#7b1fa2", C.purple, { opacity: (target?.resources?.スペルカード?.cur || 0) >= 1 ? 1 : 0.35 })}>

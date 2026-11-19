@@ -231,15 +231,16 @@ export function splitView(view, { prevState = null, knownIds = [], authoritative
     Object.entries(prevState?.reqResponses || {}).forEach(([id, resp]) => { if (!known.has(id) && !requestDefs[id]) keep[id] = resp; });
   }
   const reqResponses = { ...keep, ...fromView };
-  const custom = rest.custom && typeof rest.custom === "object" ? { ...rest.custom } : rest.custom;
+  let custom = rest.custom && typeof rest.custom === "object" ? { ...rest.custom } : rest.custom;
   const secretCustom = {};
-  if (custom && typeof custom === "object") {
-    SECRET_CUSTOM_KEYS.forEach(k => {
-      secretCustom[k] = custom[k] ?? null;
-      delete custom[k];
-      if (keepSecretCustom && prevState?.custom?.[k] != null) custom[k] = prevState.custom[k];
-    });
-  }
+  SECRET_CUSTOM_KEYS.forEach(k => {
+    secretCustom[k] = (custom && typeof custom === "object") ? (custom[k] ?? null) : null;
+    if (custom && typeof custom === "object") delete custom[k];
+    // 旧形式の値は、更新後のビューの custom がどんな形（null・無し）でも残す
+    if (keepSecretCustom && prevState?.custom?.[k] != null) {
+      custom = { ...((custom && typeof custom === "object") ? custom : {}), [k]: prevState.custom[k] };
+    }
+  });
   const state = { ...rest, ...(custom !== undefined ? { custom } : {}), reqResponses: Object.keys(reqResponses).length ? reqResponses : null };
   return { state, requestDefs, secretCustom };
 }

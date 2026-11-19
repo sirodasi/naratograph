@@ -80,6 +80,14 @@ describe("GM の要求の定義", () => {
     await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1/choice`).set(1));
     await assertSucceeds(db("gm").ref(`${statePath}/reqResponses/r1/pl1/confirmed`).set(true));
   });
+
+  it("他人の回答の確定などを消したり、回答を別の値に丸ごと置き換えたりできない", async () => {
+    await assertSucceeds(db("pl1").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 3 }, confirmed: true }));
+    await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1/confirmed`).remove());
+    await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1`).set(true));
+    await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 6 } })); // confirmed が消える
+    await assertSucceeds(db("pl2").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 3, 1: 6 }, confirmed: true, cheers: { 0: { by: "pl2" } } }));
+  });
 });
 
 describe("GM 用の独自要素（タイミングのメモ）", () => {

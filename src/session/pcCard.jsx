@@ -1851,7 +1851,8 @@ export function PCCard({ pc, gs, isGm, onUpdatePc, upd, animateDice, getSpot, SP
 }
 
 // ─── ActionRenderer (イベント効果実行エンジン) ─────────────────────────
-export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone }) {
+// actionIndex: このアクションの番号（currentScene.currentActionIndex）。完了の書き込みは、シーンがまだこのアクションにあるときだけ行う
+export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, isDone, actionIndex = null }) {
   const [selectedLose, setSelectedLose] = useState(null);
 
   if (isDone) {
@@ -1868,6 +1869,10 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
   const proceed = (logs =[], extraUpdates = {}) => {
     setSelectedLose(null);
     upd(p => {
+      // 同じアクションの完了が二重に届いた・シーンが先へ進んだ場合は何もしない（交換の二重消費・次の効果の飛ばしを防ぐ）
+      if (p.currentScene?.phase !== "explore_apply_effect") return p;
+      if (actionIndex != null && (p.currentScene.currentActionIndex || 0) !== actionIndex) return p;
+      let aborted = false;
       const newPcs = p.pcs.map(x => {
         if (x.uid !== pc.uid) return x;
         const base = { ...x };
@@ -1877,9 +1882,12 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
             const sumQty = m => Object.values(m || {}).reduce((s, v) => s + (typeof v === "number" ? v : 1), 0);
             const oldQty = sumQty(base.items);
             // 関数なら現在の所持品から計算する（振っている間に所持品が変わっても、その時点の値で処理する）
-            base.items = typeof extraUpdates.pc.items === "function"
+            // 関数が null を返したら（手放すアイテムが無くなっていた等）、このアクションは行わない
+            const nextItems = typeof extraUpdates.pc.items === "function"
               ? extraUpdates.pc.items(base.items || {})
               : { ...base.items, ...extraUpdates.pc.items };
+            if (nextItems == null) { aborted = true; return x; }
+            base.items = nextItems;
             const gained = Math.max(0, sumQty(base.items) - oldQty);
             if (gained > 0) { const ca = base.ach || {}; base.ach = { ...ca, items: (ca.items || 0) + gained }; }
           }
@@ -1906,6 +1914,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
         if (extraUpdates.achInc) base.ach = extraUpdates.achInc({ ...(base.ach || {}) });
         return base;
       });
+      if (aborted) return p;
       // 交流（他者への絆の新規獲得）を検出 → 特別な絆の親密度 +1D6（acting pc を対象に持つ保持者）
       const acquiredKouryu = extraUpdates.pc?.bonds && extraUpdates.pc.bonds.some(b => !(pc.bonds || []).includes(b) && !b.includes("自身への絆"));
       let finalPcs = newPcs, intimacyLogs = [];
@@ -1918,7 +1927,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
       return {
         ...p3,
         currentScene: { ...p3.currentScene, currentActionIndex: (p3.currentScene.currentActionIndex || 0) + 1 },
-        log:[...intimacyLogs, ...logs.reverse(), ...p3.log]
+        log:[...intimacyLogs, ...[...logs].reverse(), ...p3.log] // 更新関数は再実行されるので元の配列は並べ替えない
       };
     });
   };
@@ -2175,7 +2184,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
             {ITEM_NAMES.map(itemName => (
               <button key={itemName} onClick={() => {
                 proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
-                  pc: { items: (items) => ((items?.[selectedLose] || 0) > 0 ? tradeItems(items, selectedLose, itemName) : items) }
+                  pc: { items: (items) => ((items?.[selectedLose] || 0) > 0 ? tradeItems(items, selectedLose, itemName) : null) }
                 });
               }} style={btnFull("rgba(255,255,255,0.05)", C.border, C.text)}>{itemName}</button>
             ))}
@@ -2188,7 +2197,7 @@ export function ActionRenderer({ act, pc, gs, upd, animateDice, SPOTS, getSpot, 
           <button onClick={() => animateDice(1, "アイテム交換", res => {
             const itemName = ITEM_NAMES[res[0] - 1];
             proceed([`${pc.charName} は【${selectedLose}】を手放し、【${itemName}】を獲得した`], {
-              pc: { items: (items) => ((items?.[selectedLose] || 0) > 0 ? tradeItems(items, selectedLose, itemName) : items) }
+              pc: { items: (items) => ((items?.[selectedLose] || 0) > 0 ? tradeItems(items, selectedLose, itemName) : null) }
             });
           })} style={btnFull(C.goldBg, C.goldDim, C.gold)}>🎲 ランダムなアイテムを獲得する</button>
         </div>
