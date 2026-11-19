@@ -47,8 +47,9 @@ describe("フェイズと公開フラグは GM だけ", () => {
   });
 
   it("PL が state 全体を書くとき、sessionPhase を変えていなければ通る", async () => {
-    const snap = await env.withSecurityRulesDisabled(ctx => ctx.database().ref(statePath).get());
-    const cur = snap.val();
+    // withSecurityRulesDisabled はコールバックの戻り値を返さないので、中で受け取る
+    let cur = null;
+    await env.withSecurityRulesDisabled(async ctx => { cur = (await ctx.database().ref(statePath).get()).val(); });
     await assertSucceeds(db("pl1").ref(statePath).set({ ...cur, log: { 0: "start", 1: "x" } }));
     await assertFails(db("pl1").ref(statePath).set({ ...cur, sessionPhase: "epilogue" }));
   });
@@ -87,6 +88,20 @@ describe("GM の要求の定義", () => {
     await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1`).set(true));
     await assertFails(db("pl2").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 6 } })); // confirmed が消える
     await assertSucceeds(db("pl2").ref(`${statePath}/reqResponses/r1/pl1`).set({ dice: { 0: 3, 1: 6 }, confirmed: true, cheers: { 0: { by: "pl2" } } }));
+  });
+});
+
+describe("クエストの公開記録（questGate）", () => {
+  it("PL は読めるが、登場済み・承認済みの記録を書けない。GM は書ける", async () => {
+    const gate = `rooms/${ROOM}/questGate`;
+    await assertFails(db("pl1").ref(`${gate}/revealed/q2`).set(true));
+    await assertFails(db("pl1").ref(`${gate}/approved/q1`).set("op_x"));
+    await assertFails(db("pl1").ref(gate).set({ revealed: { q1: true, q2: true }, approved: { q1: true } }));
+    await assertSucceeds(db("gm").ref(`${gate}/revealed/q2`).set("op_a"));
+    await assertSucceeds(db("gm").ref(`${gate}/approved/q1`).set("op_a"));
+    await assertSucceeds(db("pl1").ref(gate).get());
+    // PL は GM の記録を消すこともできない
+    await assertFails(db("pl1").ref(`${gate}/approved/q1`).remove());
   });
 });
 
