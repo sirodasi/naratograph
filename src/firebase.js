@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAML65bhu_Kf_oQxOI2zvUE5G_9XVC-evE",
@@ -16,5 +15,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 export const auth = getAuth(app);
-export const storage = getStorage(app);
+// Storage は SCENE_IMG_USE_STORAGE が true のときだけ使う（Blaze プラン限定）。既定では読み込まない。
+export async function getStorageLazy() {
+  const { getStorage } = await import("firebase/storage");
+  return getStorage(app);
+}
 export const googleProvider = new GoogleAuthProvider();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hashAssetId, dehydrateScene, hydrateScene } from "../sceneAssets";
+import { hashAssetId, dehydrateScene, hydrateScene, collectSceneAssetIds, hasInlineImages } from "../sceneAssets";
 
 const DATA = "data:image/webp;base64,AAAA";
 const DATA2 = "data:image/jpeg;base64,BBBBBB";
@@ -91,5 +91,27 @@ describe("round-trip", () => {
     const { scene: raw, newAssets } = dehydrateScene(scene, {});
     const back = hydrateScene(raw, newAssets);
     expect(back).toEqual(scene);
+  });
+});
+
+describe('プリセットのアセット分離ヘルパー', () => {
+  it('collectSceneAssetIds: id だけを重複なく集める（data URL / http / 空は除く）', () => {
+    const scene = { bg: 'a1', portraits: [{ img: 'a2', faces: ['a2', 'a3', 'data:image/png;base64,xx'] }, { img: 'https://x/y.png' }, { img: null }] };
+    expect(collectSceneAssetIds(scene).sort()).toEqual(['a1', 'a2', 'a3']);
+    expect(collectSceneAssetIds(null)).toEqual([]);
+  });
+  it('hasInlineImages: 旧形式（inline data URL）を検出する', () => {
+    expect(hasInlineImages({ bg: 'data:image/jpeg;base64,xx', portraits: [] })).toBe(true);
+    expect(hasInlineImages({ bg: 'a1', portraits: [{ img: 'a2', faces: ['data:image/png;base64,yy'] }] })).toBe(true);
+    expect(hasInlineImages({ bg: 'a1', portraits: [{ img: 'a2' }] })).toBe(false);
+  });
+  it('dehydrate → collect → hydrate で元の画像に戻る', () => {
+    const url = 'data:image/png;base64,AAAA';
+    const { scene, newAssets } = dehydrateScene({ bg: url, portraits: [{ img: url, faces: [url] }] });
+    const ids = collectSceneAssetIds(scene);
+    expect(ids).toHaveLength(1);
+    const back = hydrateScene(scene, Object.fromEntries(ids.map(id => [id, newAssets[id]])));
+    expect(back.bg).toBe(url);
+    expect(back.portraits[0].faces[0]).toBe(url);
   });
 });

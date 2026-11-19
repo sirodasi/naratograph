@@ -4,12 +4,17 @@
     ".write": false,
 
     "rooms": {
+      ".read": "auth != null && query.orderByChild === 'gmUid' && query.equalTo === auth.uid",
+      ".indexOn": ["gmUid"],
       "$roomCode": {
         ".read": "auth != null",
-        ".write": "auth != null && ( (!data.exists() && newData.child('gmUid').val() === auth.uid && auth.token.email === 'sora1225n@gmail.com') || (data.exists() && data.child('gmUid').val() === auth.uid) )",
+        ".write": "auth != null && ( (!data.exists() && newData.child('gmUid').val() === auth.uid && root.child('admins').child(auth.uid).val() === true) || (data.exists() && data.child('gmUid').val() === auth.uid) )",
         "players": {
           "$uid": {
-            ".write": "auth != null && $uid === auth.uid"
+            ".write": "auth != null && $uid === auth.uid",
+            "role": {
+              ".validate": "newData.val() === 'pl' || newData.parent().parent().parent().child('gmUid').val() === auth.uid"
+            }
           }
         },
         "presence": {
@@ -18,14 +23,71 @@
           }
         },
         "state": {
-          ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
+          ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || ( root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() && newData.exists() ) )",
+          ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || ( newData.child('sessionPhase').val() === data.child('sessionPhase').val() && newData.child('scenarioRevealed').val() === data.child('scenarioRevealed').val() )",
+          "reqResponses": {
+            "$requestId": {
+              "$uid": {
+                ".validate": "newData.hasChildren() && (root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $uid === auth.uid || (newData.child('confirmed').val() === data.child('confirmed').val() && newData.child('choice').val() === data.child('choice').val() && newData.child('ack').val() === data.child('ack').val() && newData.child('given').val() === data.child('given').val() && newData.child('byGm').val() === data.child('byGm').val()))",
+                "$field": {
+                  ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $uid === auth.uid || $field === 'dice' || $field === 'cheers' || newData.val() === data.val()"
+                }
+              }
+            }
+          },
+          "sessionPhase": {
+            ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || newData.val() === data.val()"
+          },
+          "scenarioRevealed": {
+            ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || newData.val() === data.val()"
+          },
+          "battle": {
+            "plotCommits": {
+              "$entityId": {
+                ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $entityId === auth.uid || newData.val() === data.val()"
+              }
+            },
+            "plotRevealed": {
+              ".validate": "newData.hasChildren() || root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid",
+              "$entityId": {
+                ".validate": "newData.hasChildren(['cell', 'nonce'])",
+                "$field": {
+                  ".validate": "root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || $entityId === auth.uid || newData.val() === data.val()"
+                }
+              }
+            }
+          }
         },
         "scene": {
+          ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || ( root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() && newData.exists() ) )"
+        },
+        "logArchive": {
           ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
         },
         "sceneAssets": {
           ".write": "auth != null && ( root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(auth.uid).exists() )"
         }
+      }
+    },
+
+    "roomSecrets": {
+      "$roomCode": {
+        ".write": "auth != null && root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid",
+        "plot": {
+          "$uid": {
+            ".read": "auth != null && $uid === auth.uid",
+            ".write": "auth != null && $uid === auth.uid && root.child('rooms').child($roomCode).child('players').child(auth.uid).exists()"
+          }
+        },
+        "gm": {
+          ".read": "auth != null && root.child('rooms').child($roomCode).child('gmUid').val() === auth.uid"
+        }
+      }
+    },
+
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && $uid === auth.uid"
       }
     },
 

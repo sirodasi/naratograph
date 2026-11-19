@@ -13,7 +13,6 @@ npm run dev          # Vite dev server with HMR
 npm run build        # Production build
 npm run lint         # ESLint (flat config)
 npm run preview      # Preview production build locally
-npm run normalize-db # Node script to normalize Firebase DB schema
 npm test             # Vitest in watch mode
 npm run test:run     # Vitest single run
 ```
@@ -43,16 +42,16 @@ Lobby → PrepRoom → Intro → Explore → Battle → (Bonus) → Epilogue →
 ```
 
 1. **Lobby** (`Lobby.jsx`): Auth, room creation/joining, character + skill selection
-2. **PrepRoom** (inside `App.jsx`): GM loads scenario; PLs confirm ready
+2. **PrepRoom** (inside `Lobby.jsx`): GM loads scenario; PLs confirm ready
 3. **Intro**: Backstory narrative screen
 4. **Explore**: Map movement, resource management, quest/clue discovery
 5. **Battle**: Turn-based danmaku (bullet pattern) mini-game
 6. **Bonus** (optional, config-gated): Extra actions if solving before the time limit
-7. **Epilogue** (`sessionPhase: "epilogue"`, `EpilogueView`): after the **final** battle (any outcome, `isFinal`), a 終幕 depiction shown to all before the end screen. Uses the **same scene-mode UI as explore's 描写** — `SceneStage` (bg + 立ち絵 + text) + GM-side `SceneEditor` (both exported from `SessionView.jsx`, also used by `MapView`/`RightPanel`); data flows through `sceneData` (`rooms/{roomCode}/scene` — `{ bg, portraits, fx }`; the scene listener in App.jsx must read **all three** back) + `gs.sceneText`. `finishBattle` routes `isFinal ? "epilogue" : "explore"`. Images are encoded transparency-preserving (webp→PNG fallback) for portraits, JPEG for bg (`loadImage(..., transparent)`).
+7. **Epilogue** (`sessionPhase: "epilogue"`, `EpilogueView`): after the **final** battle (any outcome, `isFinal`), a 終幕 depiction shown to all before the end screen. Uses the **same scene-mode UI as explore's 描写** — `SceneStage` (bg + 立ち絵 + text) + GM-side `SceneEditor` (in `src/session/scene.jsx`, re-exported via `SessionView.jsx`; also used by `MapView`/`RightPanel`); data flows through `sceneData` (`rooms/{roomCode}/scene` — `{ bg, portraits, fx }`; the scene listener in SessionApp.jsx must read **all three** back) + `gs.sceneText`. `finishBattle` routes `isFinal ? "epilogue" : "explore"`. Images are encoded transparency-preserving (webp→PNG fallback) for portraits, JPEG for bg (`loadImage(..., transparent)`).
    - **Portraits** (`{ img, name, x, y, h, flip, hidden, faces[], face }`, x,y = bottom-center %, h = height %, max 8; legacy `{img,name}` falls back to a centered-bottom spread): GM-only `editable` `SceneStage` lets the GM **drag** to place (local state during drag, commits on pointer-up to avoid Firebase spam) + a per-portrait toolbar (size/flip/layer/隠す/delete/表情). `hidden` skips render; **expressions** = `faces[]` of images with `img` always synced to the current `face`. `SceneEditor` lists portraits with 👁 visibility + a 表情 strip (select/add/remove).
    - **Effects** (`sceneData.fx = { particles, tone }`): `SceneParticles` CSS layer (桜/雪/光粒/雨) + a tone overlay (夕焼け/夜/セピア/暗転/暖色), rendered above portraits / below the text box.
-   - **Scene presets** (`users/{uid}/scenePresets/{id}` = `{ name, bg, portraits, fx, text }`): `SceneEditor` (given `user`) saves the current composition and reloads it (overwrites sceneData + `gs.sceneText`) — set up scenes in advance, reuse across sessions.
-8. **End** (`SessionEndView`): result + 成長 ceremony; the GM's end button exports the log (.txt) and **deletes the Firebase room** (`remove(rooms/{roomCode})`) — clients then hit `roomPhase: "error"`.
+   - **Scene presets** (`users/{uid}/scenePresets/{id}` = `{ name, bg, portraits, fx, text }`): `SceneEditor` (given `user`) saves the current composition and reloads it (overwrites sceneData + `gs.sceneText`) — set up scenes in advance, reuse across sessions. Image fields are **asset ids** (`dehydrateScene`); bytes live in `users/{uid}/presetAssets/{id}` (deduped across presets, orphaned ones removed on delete, fetched per preset on load via `collectSceneAssetIds`). Legacy inline presets (`hasInlineImages`) are migrated when the list loads.
+8. **End** (`SessionEndView`): result + 成長 ceremony; the GM's end button exports the log (.txt) and **deletes the Firebase room** (`remove(rooms/{roomCode})` + `roomSecrets/{roomCode}`) — clients return to the lobby.
 
 Phase is tracked as `gs.sessionPhase` and transitions are explicit with confirmation modals.
 
@@ -62,31 +61,34 @@ Phase is tracked as `gs.sessionPhase` and transitions are explicit with confirma
 
 ### State Management
 
-Firebase Realtime Database is the **only** source of truth. The `gs` (game state) object is synced to `rooms/{roomCode}/state`. All mutations go through the `upd()` callback:
+Firebase Realtime Database is the **only** source of truth. The `gs` (game state) object is synced to `rooms/{roomCode}/state`. All mutations go through the `upd()` callback, which runs a **`runTransaction`** on the state node (SessionApp.jsx):
 
 ```javascript
-// upd() in App.jsx — optimistic local update + async Firebase write
 const upd = useCallback((fn) => {
-  let fired = false;  // prevents double Firebase write (React StrictMode / Concurrent Mode)
-  setGs(prev => {
-    const next = typeof fn === "function" ? fn(prev) : fn;
-    if (!fired) { fired = true; set(ref(db, gsPath), next).catch(console.error); }
-    return next;
-  });
-}, [gsPath]);
+  if (!isParticipantRef.current) return;            // view-only clients never write
+  let last = null;
+  runTransaction(ref(db, gsPath), raw => {
+    const prev = normalizeGs(raw);                   // same shape the onValue listener produces
+    if (!prev) return raw;                           // cache miss → SDK retries with server data
+    last = { prev, ...computeGsUpdate(prev, fn) };   // log cap/archive + sanitizeGsForWrite
+    return stripUndefined(last.next);
+  }).then(({ committed }) => { /* undo snapshot (last.prev) + logArchive write */ });
+}, [gsPath, roomCode]);
 ```
+
+Because a transaction **re-runs `fn` against the server value on conflict**, concurrent GM/PL writes no longer clobber each other (the old `setGs`+`set(whole gs)` was last-write-wins). Consequences: **updaters must be pure** (they may run more than once — randomness inside is fine, side effects/closure assignments are not), and `fn` receives the **public** gs (`normalizeGs` of the raw value), never the GM's merged view. `applyLocally` (default) fires the `onValue` listener immediately, so the UI stays optimistic. The pure helpers (`DEFAULT_GS`, `normalizeGs`, `normalizePc`, `normalizeScenario`, `computeGsUpdate`, `stripUndefined`, scenario-secrecy helpers) live in [src/gsSync.js](src/gsSync.js) and are unit-tested in `src/__tests__/gsSync.test.js`.
 
 Local React state is only used for UI-only concerns (hover, modals, animation frames). Never write game state to local state directly — always go through `upd()`.
 
 Firebase strips empty arrays on write — always guard array reads with `|| []`. `upd()` also runs `stripUndefined(next)` before the Firebase write (Firebase throws on `undefined`; empty objects/arrays get stripped on write and read back as `undefined`, which then fails to re-write).
 
-**Undo** (GM): `upd()` snapshots `prev` into `undoStackRef` (cap 20) whenever `next.log.length > prev.log.length` (a meaningful, log-producing action — dice-animation frames don't log so they're skipped); `undo()` restores the last snapshot + writes it. ↩ button in `RightPanel`'s tab bar (`undoCount` gates it).
+**Undo** (GM): after a committed transaction, `upd()` pushes the pre-update state into `undoStackRef` (cap 20) when the log grew (`computeGsUpdate().logGrew`, measured **before** the LOG_CAP trim; dice-animation frames don't log so they're skipped); `undo()` restores the last snapshot with a plain `set` (intentionally overwrites — it also discards PL actions taken since). ↩ button in `RightPanel`'s tab bar (`undoCount` gates it).
 
 **Free dice** (任意ダイス): `RightPanel` 進行 tab has a GM-ruling roller (nD6 / D66) that logs the result; not tied to game actions.
 
-**Images → data URL (Spark) / Firebase Storage (Blaze)**: scene images (bg/portraits/expressions, via `SceneEditor.loadImage`) are resized (bg ≤960px, 立ち絵/表情 ≤420px) → `toBlob` (webp transparent / jpeg, slightly lower quality). The `SCENE_IMG_USE_STORAGE` module flag (SessionView.jsx, **default `false`**) decides storage: when **`false` (Spark plan — Storage requires Blaze)** the image is stored **inline as a data URL** in `sceneData`; when `true` it is **uploaded to `sceneImages/{uid}/...`** (`storage` from firebase.js) storing the **download URL** (keeps RTDB light), falling back to a data URL on failure. **Asset decoupling (RTDB load)**: image bytes are **not** stored inline in the `scene` node. `setSceneDataAndSync`/the scene listener (App.jsx) run `dehydrateScene`/`hydrateScene`: each image data URL is stored once under `rooms/{code}/sceneAssets/{id}` (`id` = content hash, so identical images dedupe; `update()` writes only **new** assets), and the `scene` node holds only the `id` + geometry. So a立ち絵 drag rewrites a tiny `scene` node, not the image bytes. Clients subscribe to assets via **`onChildAdded`** (incremental, not whole-map). Local `sceneData` stays hydrated (real URLs) so `SceneStage`/`SceneEditor`/presets are unchanged; legacy inline-data-URL scenes pass through `hydrate` untouched and auto-migrate to assets on next write. Assets are room-scoped and cleaned up when the room is removed at session end. To enable Storage: upgrade to Blaze, provision the bucket, apply CORS (`cors.json` / [docs/firebase-storage-cors.md](docs/firebase-storage-cors.md)), set Storage rules (authenticated write+read on `sceneImages/`), then flip the flag. (128px char/NPC `PortraitUpload` icons in ScenarioEditor are also data URLs — small.)
+**Images → data URL (Spark) / Firebase Storage (Blaze)**: scene images (bg/portraits/expressions, via `SceneEditor.loadImage`) are resized (bg ≤960px, 立ち絵/表情 ≤420px) → `toBlob` (webp transparent / jpeg, slightly lower quality). The `SCENE_IMG_USE_STORAGE` module flag (`src/session/shared.jsx`, **default `false`**) decides storage: when **`false` (Spark plan — Storage requires Blaze)** the image is stored **inline as a data URL** in `sceneData`; when `true` it is **uploaded to `sceneImages/{uid}/...`** (`getStorageLazy()` from firebase.js — `firebase/storage` is only loaded when the flag is on) storing the **download URL** (keeps RTDB light), falling back to a data URL on failure. **Asset decoupling (RTDB load)**: image bytes are **not** stored inline in the `scene` node. `setSceneDataAndSync`/the scene listener (SessionApp.jsx) run `dehydrateScene`/`hydrateScene`: each image data URL is stored once under `rooms/{code}/sceneAssets/{id}` (`id` = content hash, so identical images dedupe; `update()` writes only **new** assets), and the `scene` node holds only the `id` + geometry. So a立ち絵 drag rewrites a tiny `scene` node, not the image bytes. Clients subscribe to assets via **`onChildAdded`** (incremental, not whole-map). Local `sceneData` stays hydrated (real URLs) so `SceneStage`/`SceneEditor` are unchanged; legacy inline-data-URL scenes pass through `hydrate` untouched and auto-migrate to assets on next write. Assets are room-scoped and cleaned up when the room is removed at session end. To enable Storage: upgrade to Blaze, provision the bucket, apply CORS (`cors.json` / [docs/firebase-storage-cors.md](docs/firebase-storage-cors.md)), set Storage rules (authenticated write+read on `sceneImages/`), then flip the flag. (128px char/NPC `PortraitUpload` icons in ScenarioEditor are also data URLs — small.)
 
-**Double-write / log duplication**: Because React batches multiple `setGs` calls, if `upd()` is called twice quickly the second updater receives the first's result as `prev`, causing the same log entry to be appended twice and written to Firebase. Guard against this at the UI level:
+**Double-firing UI**: a fast double click still issues two `upd()` calls (each is applied, now without lost updates). Guard one-shot UI at the UI level:
 - Clear guard state **before** calling `upd()` (e.g. `setSceneSelect("")` then `upd(...)`)
 - Use `useRef(false)` as a one-shot flag for full-screen clickable areas (see `BackstoryScreen`)
 
@@ -95,16 +97,40 @@ Firebase strips empty arrays on write — always guard array reads with `|| []`.
 ```
 rooms/{roomCode}/
 ├── gmUid, gmName, phase
-├── players/{uid}/{ charId, charName, personalitySkill, role, ready }
-├── scenario, scenarioData
+├── players/{uid}/{ charId, charName, personalitySkill, role, ready, grownBase? }
+├── scenario, scenarioData   ← PUBLIC projection only (publicScenario); full text is in roomSecrets
 ├── config/{ useAdditionalActions, useClueEvents, useRandomPlacement, useLastResort }
 ├── state   ← gs object (entire game state)
 ├── scene   ← background/portrait data for scene mode (image fields hold asset ids, not data URLs)
 ├── sceneAssets/{id}  ← scene image bytes (data URL), keyed by content hash; write-once
+├── logArchive/{e0000000}  ← gs.log entries evicted past LOG_CAP (400), keyed "e"+zero-padded absolute index
 └── presence/{uid}/{ online, name, ts }  ← live presence (onDisconnect-managed)
+
+roomSecrets/{roomCode}/       ← OUTSIDE rooms/ because a readable parent cannot hide a child in RTDB rules
+├── gm/scenarioData           ← full scenario (answers, enemies, locked quests, GM notes); GM-only read
+└── plot/{uid}/{entityId}     ← { cell, nonce } plot-placement choice; readable ONLY by {uid} (not even the GM)
+
+admins/{uid}: true            ← GM (room creation) allow-list; set by hand in the console; user can read own entry
+users/{uid}/scenePresets/{id} ← scene presets (image fields hold asset ids)
+users/{uid}/presetAssets/{id} ← preset image bytes (data URL), content-hash keyed, shared across presets
+users/{uid}/ihenPresets/{id}  ← GM-made 異変再現 presets { name, desc, defs, createdAt, updatedAt } (owner read/write via the generic users/$uid rule)
 ```
 
-`config` lives at `rooms/{roomCode}/config`, **not** inside `gs`. Components that need config must receive `room` as a prop (not just `gs`).
+**Subscriptions**: never `onValue(rooms/{code})` as a whole (it drags in state, scene assets and the log archive). The root `App` watches only `rooms/{code}/phase` (missing ⇒ room deleted); `SessionApp` subscribes to `ROOM_META_KEYS` (`gmUid, players, config, scenarioData, limit, phase`) individually and builds `room` once all have arrived.
+
+**State ↔ view split (security)**: the `gs` that components and updaters see is a **view** built by `viewOfState(state, { requestDefs, secretCustom })`; `upd()` builds it from the transaction's raw state, runs `fn`, then `splitView(next, { prevState, knownIds, authoritative })` → `{ state, requestDefs, secretCustom }`. Only `state` goes into the transaction; the GM client then writes `requestDefs` to **`rooms/{code}/gmRequests`** (GM-only write via the room rule; everyone reads) and `secretCustom` (`SECRET_CUSTOM_KEYS` = `reminders`) to **`roomSecrets/{code}/gm/custom`** (`writeGmParts`, only when changed). In the view, `gs.gmRequests = [{ ...def, responses }]` (responses live in `state.reqResponses[id][uid]`, participant-writable) — so `gmTools` is unchanged. A legacy `state.gmRequests` is ignored (a PL can't spoof requests). Responses for ids a client doesn't know yet are preserved; the GM (authoritative) drops orphans. Undo stores the view and re-splits. Rules (`database.rules.json`) also: `state/sessionPhase` + `scenarioRevealed` GM-only (`.validate` at `state` and on the fields), `battle.plotCommits/{entityId}` + `plotRevealed/{entityId}` only by the owner (PC uid) or GM. Rules tests: `tests/rules/database.rules.js` via `npm run test:rules` (emulator; firebase-tools + **Java 21+** — current firebase-tools refuses older JDKs; not part of `npm test`). Tests of the split: `security.test.jsx`.
+
+**Scenario secrecy**: `sanitizeGsForWrite` (applied inside `computeGsUpdate`, so on **every** client's write) strips `SECRET_SCENARIO_KEYS` (`quests, finalBattleEnemies, finalBattleOptionalEnemies, phaseNotes, notes`) from `gs.scenarioData` (adding `questCount`) and `truth` from **unsolved** `gs.quests`. The GM client subscribes to `roomSecrets/{code}/gm/scenarioData` (`gmScenario`) and SessionApp exposes `gs = mergeScenarioSecret(gsRaw, gmScenario)` to its children, so GM-side code reading `gs.scenarioData.quests` etc. works unchanged. **Quest unlock + truth reveal** is done on the GM client via `reconcileQuests(gs.quests, gmScenario.quests, onlyIds)` (do NOT unlock inside updaters — `p.scenarioData` there is public). Because PLs can write `solved`, it is **GM-approved by default**: `mergeScenarioSecret` marks solved-but-unpublished quests `truthPending` in the GM view, `GmTruthApproval` (reminders.jsx, top-center, GM only) offers 公開する / すべて公開する → `revealTruths(ids)`; `room.config.autoRevealTruth` (Lobby extra rule, or 「以後は自動で公開する」) restores the automatic effect. Dependent quests unlock only with their parent's approval. **Quest enemies are secret too**: `publicQuest` strips `enemy`/`extraEnemies` (keeps `hasEnemy`/`extraEnemyCount`); the GM view gets them back from `mergeScenarioSecret`. A PL-started quest battle is created with `battle.awaitingEnemies: true` and no NPCs; the GM client's effect fills them with `fillAwaitingEnemies` (gmTools; aborts and restores the scene if the quest has no enemy) and BattleView shows a waiting screen meanwhile. At `epilogue`/`end` the GM effect writes the full scenario with `gs.scenarioRevealed = true` (sanitizing stops). Lobby writes `publicScenario(sc)` to the room and the full text to roomSecrets on create/scenario change; legacy rooms are migrated by a GM effect.
+
+`config` lives at `rooms/{roomCode}/config`, **not** inside `gs`. Components that need config must receive `room` as a prop (not just `gs`). `BattleView` takes `room` and reads `roomConfig = room?.config` (never `gs.config`, which does not exist).
+
+**Log cap / archive**: `upd()` caps `gs.log` at `LOG_CAP` (400). Overflowing (oldest) entries are written to `rooms/{code}/logArchive` keyed by absolute index (`gs.logBase` = number archived so far), so re-archiving after an undo is idempotent. The undo snapshot test uses the **pre-cap** length. `SessionEndView.exportLog` (async) merges the archive + `gs.log` for the full .txt.
+
+**Profile room list** queries `rooms` with `orderByChild("gmUid").equalTo(uid)`; the rules allow `rooms` reads only for exactly that query (+ `.indexOn: ["gmUid"]`).
+
+### GM permission & write-side rules
+
+Room creation (GM) is allowed for users with `admins/{uid} === true` (set manually in the Firebase console; ProfilePage's アカウント tab shows the user's UID and GM status). `useIsAllowedGm(user)` ([src/useIsAllowedGm.js](src/useIsAllowedGm.js)) only drives UI; `database.rules.json` enforces it. No e-mail address is hard-coded anywhere. GM-ness inside a room is `room.gmUid === user.uid` (never `players/{uid}/role`, which the player can write); rules `.validate` that a player can only set `role: "pl"` for themselves, and only the GM may delete `state`/`scene`. Rejoining via the join form does not overwrite an existing player entry. Rules changes are **not** deployed automatically — run `firebase deploy --only database` (see [docs/firebase-security-rules.md](docs/firebase-security-rules.md)).
 
 ### Connection & Presence
 
@@ -128,33 +154,45 @@ A class-based `ErrorBoundary` ([src/ErrorBoundary.jsx](src/ErrorBoundary.jsx)) w
 | `log[]` | Session event log (prepend new entries: `[newMsg, ...p.log]`) |
 | `diceHistory[]` | Roll history `{ label, results[], max, t }`; written by `animateDice` on roll-confirm (prepend, capped at 50). Surfaced in `RightPanel`'s 進行 tab (collapsible) and exported by `SessionEndView`. |
 | `bgm` | GM-set BGM track URLs `{ explore, battle, end }`. Each client plays the phase-appropriate track locally (see BGM section). |
+| `gmRequests[]` | GM → PL requests (dice / choice / notice), see "GM intervention tools". Capped at `MAX_REQUESTS` (12). |
+| `custom` | GM-built custom elements (異変再現 etc.): stat/item/table/token/state/rule **definitions** + global stat values + placed map tokens. See "Custom elements". |
 
 ### Major Components
 
 | File | Responsibility |
 |---|---|
-| [App.jsx](src/App.jsx) | Root: Firebase listeners, phase routing, BFS pathfinding (`getDistances`), map rendering |
-| [SessionView.jsx](src/SessionView.jsx) | **~7200-line monolith**: multiple exported functions (see below) |
+| [App.jsx](src/App.jsx) | Root only: auth, the `rooms/{code}/phase` watch, Lobby/SessionApp routing (both lazy) + the single `<Suspense>`. Keep it tiny — it is the initial chunk with React + Firebase. |
+| [SessionApp.jsx](src/SessionApp.jsx) | The session screen (lazy-loaded from App): Firebase room listeners, `upd()`, phase screens, BFS pathfinding (`getDistances`), `MapView`, cinematic overlays. Tests import `getDistances`/`normalizeScenario` from here. |
+| [SessionView.jsx](src/SessionView.jsx) | Compatibility barrel: `export *` from every `src/session/*.jsx` module (tests and old imports use it) |
+| [src/session/](src/session/) | The former ~11,600-line SessionView monolith, split by screen (see below) |
+| [gsSync.js](src/gsSync.js) | Pure gs sync logic: normalization, update computation, log cap, scenario secrecy |
+| [CharSprite.jsx](src/CharSprite.jsx) | Sprite-sheet portrait (`sprite.webp`); split out so session code doesn't import Lobby |
 | [Lobby.jsx](src/Lobby.jsx) | Auth flow, room prep, character + skill selection, extra rule toggles |
-| [ScenarioEditor.jsx](src/ScenarioEditor.jsx) | GM tool for authoring scenarios, quests, enemies, danmaku skills |
-| [firebase.js](src/firebase.js) | Firebase init + auth providers |
+| [ScenarioEditor.jsx](src/ScenarioEditor.jsx) | GM tool for authoring scenarios, quests, enemies, danmaku skills; ProfilePage |
+| [firebase.js](src/firebase.js) | Firebase init + auth providers; `getStorageLazy()` |
 
-`SessionView.jsx` exports several independent top-level functions (approximate line numbers — drift as the file evolves):
+`src/session/` modules (generated by splitting on top-level declarations; each declaration is `export`ed and cross-module references are explicit imports):
 
-| Function | Approx. line | Responsibility |
-|---|---|---|
-| `BattleView` | ~680 | Danmaku combat UI and phase state machine |
-| `CharDetailModal` | ~3930 | Read-only character sheet (spell cards full text, skills, bonds, 変調); opened via the 🔍 button on `PCCard` |
-| `BonusPhaseView` | ~3650 | Post-solve bonus action phase |
-| `SessionEndView` | ~3790 | End-of-session summary |
-| `PCCard` | ~4010 | Per-PC card with scene/action UI |
-| `ScenePanel` | ~5050 | Scene player action panel (move, explore, quest, etc.) |
-| `RightPanel` | ~6400 | GM sidebar: newspaper, cycle control, scene launching, log search/filter, keyboard shortcuts |
-| `BattleRightPanel` | ~7050 | Battle info sidebar rendered inside `RightPanel` |
+| Module | Contents |
+|---|---|
+| `shared.jsx` | Constants, pure helpers (`buildSpellCard`, `hasOfficialSkill`, `INIT_RESOURCES`/`INIT_ITEMS`, …), `SpellCard`, `ConfirmModal`. **Must not import other session modules** (init-order safety); non-function top-level values live here. |
+| `scene.jsx` | `BackstoryScreen`, `SceneStage`, `SceneEditor` (+ presets), `SceneParticles`, `EpilogueView` |
+| `battle.jsx` | `BattleView`, `BattleRightPanel`, `BattleGrid`, `BattleParticleCanvas`, `PlotPlacementPanel` (+ `plotHash`/`plotNonce`) |
+| `battleFx.jsx` | Battle effects: `useBattleFx` hook, `HitOverlay`, `SpellCutin`, cell effects (`CellHitBurst`/`CellGhost`/`CellSparks`/`GrazeText`), `BATTLE_FX_CSS` keyframes. See "Battle effects". |
+| `phases.jsx` | `BonusPhaseView`, `GrowthCeremony`, `SessionEndView` |
+| `pcCard.jsx` | `PCCard`, `ActionRenderer`, `CharDetailModal`, `SkillActivateModal`, item modals |
+| `scenePanel.jsx` | `ScenePanel` |
+| `rightPanel.jsx` | `RightPanel` |
+| `gmPanel.jsx` | GM intervention UI: `GmToolsPanel` (RightPanel "GM" tab; collapsible above `BattleRightPanel` during battle), `GmRequestOverlay` (PL-side cards, rendered by `SessionApp`), `GmPcEditor` (PCCard GM編集). Imported directly by SessionApp — must not import lazily loaded session modules. |
+| `reminders.jsx` | `GmReminderOverlay` — GM-only timing memos (bottom-left), rendered by `SessionApp` for the GM. Imported directly by SessionApp — keep it free of lazily loaded modules. |
+| `customPanel.jsx` | Custom-element UI: `CustomRulesEditor` (RightPanel GM「独自」tab), `CustomBoard` (rule board + global/battle stats, top of 進行 tab and above `BattleRightPanel`, visible to all), `CustomPcSection` (PCCard), `GmFieldEditor` (GM battle-field editing, above `CustomBoard` during battle), `PresetDefsEditor` (defs-only editing for a sandbox `{ custom, pcs: [], log: [] }`; sections take `prep` to hide runtime ops — give to PC / roll / place tokens). |
+| `presetManager.jsx` | `IhenPresetManager` (ProfilePage「異変再現」tab, outside sessions) + `PresetEditor` (name/desc/clock + `PresetDefsEditor`). Lazily loaded via ScenarioEditor. |
+
+**Code splitting**: the root `App` lazy-loads `Lobby` (which lazy-loads `ScenarioEditor`) and `SessionApp`; `SessionApp` lazy-loads `BattleView`, `RightPanel`, `BonusPhaseView`, `SessionEndView`. A single `<Suspense>` in the root `App` covers them all. The initial chunk is essentially React + Firebase (~450KB / ~140KB gzip); do **not** import session/data modules from `SessionApp.jsx` or they move back into it. Keep `shared.jsx`/`scene.jsx` free of imports from the lazily loaded session modules.
 
 `RightPanel` registers a `window` keydown listener (GM-operation shortcuts): `1`–`4` switch tabs, `Enter` runs the current `getMainAction()` (`ma`) result, `M` toggles sfx, `?` opens the shortcut help modal. The handler reads `ma`/`TABS` through refs (`maRef`/`tabsRef`) updated every render so the listener (registered once on mount) always sees current values; it no-ops while an `INPUT`/`TEXTAREA`/`SELECT`/contentEditable is focused or a modifier key is held. The log tab has a text search box + category filter chips (combat/player/success/reward) driven by emoji-prefix classification.
 
-`BattleRightPanel` is a **separate top-level function**, not a closure inside `BattleView`. Functions defined inside `BattleView` are not accessible from `BattleRightPanel`; shared logic must be defined at module level or passed as props.
+`BattleRightPanel` is a **separate top-level function** (in `battle.jsx`), not a closure inside `BattleView`. Functions defined inside `BattleView` are not accessible from `BattleRightPanel`; shared logic must be defined at module level or passed as props.
 
 `BattleRightPanel`'s log tab snapshots `gs.log.length` on mount via `useRef((gs.log || []).length)`, then renders only `log.slice(0, currentLen - snapshot)` to scope display to entries added during the current battle (logs are prepended, so newer entries are at the front).
 
@@ -202,14 +240,14 @@ Key battle state fields (`gs.battle.*`):
 | `slowBulletProtect` | `{ [entityId]: cellNum[] }` — cells protected by 低速弾. `confirmSlowBullet` records (does **not** mutate grid); `handleCleanup`'s decay does `min(val, decayed+1)` on protected cells so one would-be-removed bullet stays. Reset each round. |
 | `extraInterventionPool` | Extra 援護/かばう rights from spells like 忿怒のレッドUFO襲来: `{ remaining: N, usedDice: [], withDieChoice: bool }`. `withDieChoice: true` lets spectators pick any unused die face instead of rolling. Reset to `null` in `handleCleanup`. |
 
-Danmaku skill utilities (module-level exports in `SessionView.jsx`):
+Danmaku skill utilities (module-level exports in `src/session/shared.jsx`, re-exported from `SessionView.jsx`):
 - `hasOfficialSkill(entity, skillName)` — checks `entity.ds.name` / `entity.dsName` / `entity.skillName` / `entity.ps.name` against `OFFICIAL_DANMAKU_SKILLS` (ds.name takes precedence)
 - `isSkillUsed(usedds, attackerId, skillName)` — checks `usedds[attackerId]` array
 - `markSkillUsed(usedds, attackerId, skillName)` — returns a new `usedds` map with the skill appended (immutable)
 
 `BattleView` also defines instance-scoped wrappers `isDanmakuUsed(id, name)` / `markDanmakuUsed(id, name)` that read/write `b.usedds` via the closure's `upd`. Use the module-level versions from outside `BattleView`.
 
-Skill data on enemies is stored as `ds: { name, desc }` (normalized from legacy flat fields via `normalizeScenario()` in `App.jsx`).
+Skill data on enemies is stored as `ds: { name, desc }` (normalized from legacy flat fields via `normalizeScenario()` in `SessionApp.jsx`).
 
 ### Spell-card data flow
 
@@ -243,7 +281,7 @@ The canonical spell-card representation is **`{ name, desc }`** (PC, from `chara
 
 **Cell-placement constraint** (`condition_on_placement.exclude_enemy_cell: true` in `SPELL_CARD_EFFECTS`): propagated into `spellChoose.excludeEnemyCell`. The CHOOSE UI disables the defender's current cell.
 
-**`structured.effects` auto-handling vs manual fallback** (`AUTO_HANDLED_EFFECTS` set in `SessionView.jsx`): only effect types in this set are auto-applied by `declareSpell`; everything else is **not silently dropped** — `buildSpellCard` collects them into `spellCard.manualEffects` and `SpellDeclareItem` shows a "⚠ 配置以外の効果はGMが手動で処理してください" warning (with the spell's `note`). Currently auto-handled: `extra_support_cover*` / `enemy_*move*` / `shift_non_25_horizontal`; post-random grid removals `remove_from_enemy_cell` (写真「籠もりパパラッチ」) / `remove_if_hit_enemy_cell` (天星馬「ペガサスクロス」); and **evasion changes** `reduce_enemy_evasion` / `increase_enemy_evasion` / `reduce_own_evasion` / `costs_own_evasion`. When you automate one, add its type here and the warning disappears automatically.
+**`structured.effects` auto-handling vs manual fallback** (`AUTO_HANDLED_EFFECTS` set in `src/session/`): only effect types in this set are auto-applied by `declareSpell`; everything else is **not silently dropped** — `buildSpellCard` collects them into `spellCard.manualEffects` and `SpellDeclareItem` shows a "⚠ 配置以外の効果はGMが手動で処理してください" warning (with the spell's `note`). Currently auto-handled: `extra_support_cover*` / `enemy_*move*` / `shift_non_25_horizontal`; post-random grid removals `remove_from_enemy_cell` (写真「籠もりパパラッチ」) / `remove_if_hit_enemy_cell` (天星馬「ペガサスクロス」); and **evasion changes** `reduce_enemy_evasion` / `increase_enemy_evasion` / `reduce_own_evasion` / `costs_own_evasion`. When you automate one, add its type here and the warning disappears automatically.
 
 **Instant resource effects** (`computeResourceEffects` in `declareSpell`): applied at declaration. Returns `{ pcs, npcs, evRestore }`; the caller applies them to `p` before `mergeConsumeWithBattle` so SC-consume and the resource change coexist. Wired into all three placement paths (full-deterministic, full-random, designated-choose). Covers:
 - **Evasion** (`reduce_enemy_evasion` / `increase_enemy_evasion` / `reduce_own_evasion` / `costs_own_evasion`): mutate `resources.回避力.cur` ±1 so `getDefaultEvadeDice` picks it up without touching the evade step. Saved in `gs.battle.evasionRestore[entityId]` and **restored in `handleCleanup`** (round-scoped) — **all four incl. `costs_own_evasion`** (杞人地). 回避力 recovers to max at round end by design, so 杞人地's "回避力 -1" is a current-value (not max) reduction biting only that round (先攻→後攻 evade starts at 2 / 後攻→fewer moves).
@@ -252,6 +290,41 @@ The canonical spell-card representation is **`{ name, desc }`** (PC, from `chara
 - **`no_sc_cost`** (幻想春花): handled in `consumeSpell` itself (returns `p` unchanged when present).
 
 **Still manual** (remaining): costs_rei is done; remaining are the post-dodge / on-hit / round-end timing effects (`random_3d_after_first_dodge`, `mirror_graze_gain`, `cancel_hp_reduction`, etc.) and the move-selection effects (`enemy_move_adjacent`, `self_move_*`, `pre_self_move_adjacent`, `optional_*`).
+
+### GM intervention tools (GM 操作)
+
+Policy: instead of adding a ScenarioEditor feature for every scenario-specific rule (custom tables, ambushes, branching events), the GM handles them **at the table** with generic tools. Pure logic lives in [src/gmTools.js](src/gmTools.js) (updaters `p => next`, randomness rolled by the caller and passed in; tested in `gmTools.test.js`), UI in `src/session/gmPanel.jsx` (tested in `gmPanel.test.jsx`). Nothing is auto-applied — tools produce results/logs and the GM rules on them.
+
+- **Requests** (`gs.gmRequests[] = { id, kind: "dice"|"choice"|"notice", title, text, targets[uid], dice?: { count, mode: "nd6"|"d66", target? }, table?, options?, responses: { [uid]: { dice?, cheers?, confirmed?, choice?, ack?, byGm?, given? } } }`). **Custom-table dice requests**: `table = { id, name, dice, rows, give? }` is a **snapshot** of a `gs.custom` table taken at request time (dice count/mode derived from it, no target); `describeDice`/`tableResult` look the result up in it. With `give`, `respondDice(…, iid)` hands the same-named custom item to the roller via `giveTableItem` (once, `responses[uid].given`); otherwise the GM monitor shows a 渡す button. The PL overlay keeps a local result card (target-less rolls confirm instantly, so the request card disappears). `GmRequestOverlay` (fixed bottom card, every screen incl. battle; collapsible) shows each PL their unanswered requests (`pendingFor`). Dice **with a target** is a 行為判定 (`evalJudgment`: max ≥ target, all-1 fumble, any-6 special, 不運 honoured): after rolling, eligible cheerers (same spot, `cheerOptions` = normal bonds + special bond + the **fragile** ones — `getFragileCheerBonds` 魂の弱い所 / `getKuruwasuCheer` 人を狂わす, shared with ScenePanel) get a 応援 card on their own screen (fragile = purple 🩸); `addCheerDice(…, fragile)` appends dice, records `cheers[{ by, bond, fragile? }]` and consumes the slot (`cheerConsumePatch(x, bond, judgeUid)`: `kuruwasuUsed[judge]` for 人を狂わす); `evalJudgment(dice, target, unlucky, fragile)` turns a failure into a fumble when `isFragileResp(resp)`; the judge presses 確定 (`confirmDice`). Without a target the roll is final immediately. The GM monitor can roll/confirm/choose **on behalf** of offline PLs, and closes (removes) requests. `getCheerBonds`/`getSpecialBondCheer` were moved here from ScenePanel (shared).
+- **Ad-hoc battle** (`startAdhocBattle`): enemies picked from `scenarioEnemies(gs.scenarioData)` (GM's merged view: quest enemies, extra enemies, final/optional) and/or created on the spot; participants chosen; `battle = { adhoc: true, title, participantPcUids, scenePcUid?, resumeScene?, … }` (`mass` if >1 enemy or PC). The running `currentScene` is stashed in `battle.resumeScene`; **every battle close goes through `closeBattlePatch(p)`** (finishBattle + GM 強制終了) which restores it. Ad-hoc battles don't change `sessionPhase`, don't solve quests or mark PCs acted; lives-0 recovery applies to every non-final battle. The form's participants **follow the current scene PC** until the GM picks (`chosen === null`), with 「シーンと同じスポットの全員」/「シーンの PC に戻す」 shortcuts.
+- **PC GM編集** (`GmPcEditor`, under PCCard's GM編集 toggle): 変調付与, 絆 add/remove + 応援欄 (`bondUsed`) toggle, forced move, 行動済み toggle, `abilityUse` reset, resource max ±.
+
+### Custom elements (独自要素 — 異変再現 support, A-1/A-2/B)
+
+Official 異変再現 (expansion rules) and GM-made ones keep adding new stats / items / tables / tokens / states. Rather than coding each, the GM **defines generic parts in-session** and runs them by hand (nothing auto-triggers). Pure logic in [src/customRules.js](src/customRules.js) (tested in `customRules.test.js`) and [src/gmBattle.js](src/gmBattle.js) (battle field), UI in `src/session/customPanel.jsx` (`customPanel.test.jsx`, `gmFieldEditor.test.jsx`).
+
+- **Definitions** live in `gs.custom` (`stats`, `cats`, `items`, `tables`, `tokens`, `states`, `rules`, `reminders`, plus `global` values and placed `mapTokens`). Always read via `getCustom(gs)` (Firebase array guards). `removeDef` also cleans up referencing values/instances/tokens/states.
+- **Values**: stat `scope` is `pc` (→ `pc.custom.vals[id]`), `global` (→ `gs.custom.global[id]`) or `battle` (→ `gs.battle.customVals[id]`, naturally reset when a new battle object is built; edits ignored outside battle). `setStat`/`adjustStat` clamp to min/max; unset = `init`.
+- **Items**: instances `pc.custom.items = [{ iid, def, used? }]`; category `cap` is a soft limit (over-cap is allowed but logged ⚠ — the rules say "choose one to discard"). Owner (`PCCard` `myUid`) can use/toggle 使用済/discard/pass to a same-spot PC; GM can do all and give from the tab.
+- **Tables** (`d6`/`2d6`/`d66`, rows `{min,max,text}` parsed from "1-2 赤" lines): rolled by the GM, logged; a result whose text equals a custom item name gets a 渡す button.
+- **Map tokens**: kinds `{ name, color, unique }`; `placeTokens` honours `unique` (one per spot); random placement excludes `dream`. Rendered in `MapView` (SessionApp.jsx) as small colored dots above spots; `CustomBoard` (needs `getSpot`) lists a legend (name, count, spots) for all players because the dot tooltips are hover-only.
+- **Timing memos** (`reminders: [{ id, timing, text, finalOnly? }]`, 「独自」tab › タイミングのメモ): nothing is automated, so the GM registers "what to do when". `REMINDER_TIMINGS` = day_start / cycle_start / scene_start / scene_end / cycle_end (all PCs acted, no scene) / battle_start / round_start / round_end (entering `round_end_check`/`cleanup`, or the round advancing without them) / battle_end; `finalOnly` filters battle timings to the final battle. `timingSnapshot(gs)` + `detectTimings(prev, cur)` (pure, tested in `reminders.test.jsx`) compare consecutive gs summaries — scene stash/restore around battles is ignored; a cycle "starts" on intro→explore, a clock change, or a `gs.cycleSeq` bump (`repeatCycle` / `setClock` / 永遠と須臾's night repeat — acted counts are not used). `GmReminderOverlay` runs this on the GM client only and keeps fired/checked state **locally** (no gs writes; nothing fires on join/reload). Built-in presets carry reminders too.
+- **States**: `pc.custom.states = [stateId]`, toggled by the GM (PCCard or tab).
+- **Time control**: `setClock` (resets acted/scene/reiryoku; newspaper on day change), `repeatCycle` (same cycle again, no return / やる気 loss — 永夜異変), `setLimit` (`gs.limit`).
+- **Battle-field editing (A-2)** — pure logic in [src/gmBattle.js](src/gmBattle.js) (`gmBattle.test.js`), UI `GmFieldEditor` (`gmFieldEditor.test.jsx`), GM-only, collapsible above the battle panel:
+  - bullets ± per cell / random N (dice → cells) / clear field (霊撃), move a piece, 残り人数 ± (PC and NPC).
+  - **Hit cancel** (`cancelHit`): only in `pc_hit_check`/`npc_hit_check` (before damage); jumps to `afterDefense`.
+  - **Field tokens** `battle.fieldTokens = [{ id, owner, cell, kind }]` (kinds reuse `gs.custom.tokens`), drawn on `BattleGrid` via the `tokens` prop. `fieldTokenAlerts` (piece standing on it / bullets placed on it — チェリー / UFO) are shown to the GM even when collapsed, with 獲得 (owner or opponent) / 取り除く.
+  - **Extra evade step** (`startExtraEvade`, ラストスペル): places dice-rolled bullets on a combatant's field, sets `pc|npc_evade_intro` and `battle.extraEvade = { entityId, returnTo: "round_end_check" }`. `afterDefensePhase` in BattleView now delegates to `gmBattle.afterDefense`, which returns `extraEvade.returnTo` when set, so the evade/hit/recovery path ends at round_end_check instead of the next shot. **Every update that ends a defense must also set `extraEvade: null`** (evade dice exhausted, recovery, SAFE, 不死身, `cancelHit`) so the next normal defense doesn't reuse it. Evasion dice use `回避力.cur ?? 3` (an explicit 0 stays 0).
+  - **Temporary danmaku skill** (`grantSkill`, アビリティカード「装備」): `battle.grantedDs[entityId] = [name]`. `hasOfficialSkill` also accepts `entity.battleGrantDs`; BattleView's `pcs`/`npcs`, the 使い魔 auto-support updaters and `BattleRightPanel` cards wrap entities with `withGrants(b, e)`. **Any new `hasOfficialSkill` call on an entity read from `p.pcs`/`participants` must wrap it with `withGrants`** or granted skills are ignored there.
+  - `handleCleanup` spreads `ROUND_RESET` (`grantedDs`, `extraEvade` → null); `fieldTokens` persist for the battle.
+- **異変再現 presets (B)** — a preset is `{ name, desc, defs: { stats, cats, items, tables, tokens, states, rules }, clock? }`. Built-ins (春雪/永夜/弾幕撮影/宝船を追って/月虹の市場) live in [src/data/ihenPresets.js](src/data/ihenPresets.js); rule texts and card descriptions there are **own-words summaries, not transcriptions of the book** — keep it that way. GM-made ones are saved to `users/{uid}/ihenPresets/{id}` from the current `gs.custom` (`presetFromGs`, values/placed tokens excluded). UI: `PresetSection` at the top of the 「独自」 tab (`CustomRulesEditor` needs `user`; per-row JSON export + 「JSON を読み込んで保存」).
+  - **Before a session**: ProfilePage「異変再現」tab (`IhenPresetManager`) creates / edits / duplicates (built-ins as templates) / deletes saved presets; edits run on a local sandbox and save via `presetFromGs` → `sanitizePreset` (same id on edit, `createdAt` kept).
+  - **JSON files** (`presetToFile` / `parsePresetFile`, format `PRESET_FILE_FORMAT` v`PRESET_FILE_VERSION`, browser helpers in [src/fileTransfer.js](src/fileTransfer.js)): imported content is untrusted — `sanitizePreset` keeps only known fields per kind, makes ids Firebase-safe without `__` (`safeDefId`; stat ids become keys of `global`/`vals`), dedupes ids, drops unknown reminder timings / dangling `cat` refs, validates colors, clamps clock and sizes. The profile tab opens imports in the editor for review; the in-session button saves directly after a confirm.
+  - `applyPreset(p, preset, key, { pcCount, withClock })` copies every def into `gs.custom` with id **`${key}__${baseId}`** (`PRESET_SEP`; item `cat` refs remapped too), so several presets coexist, re-applying **replaces** that key's defs (defs dropped from the preset are removed via `removeDef`; remaining values are kept), and `unapplyPreset(p, key)` removes exactly that preset's defs (and, via `removeDef`, their values/instances/tokens/states). `gs.custom.applied = [{ key, name }]`. Built-in keys are the preset `key`; saved ones are `u${firebaseId}`.
+  - Stat `initFromPcCount: true` (刻符ノルマ) seeds the global value with the PC count on first apply. `clock` (永夜: 1日目の夜, limit 1日目の夜) is applied only when the GM keeps the checkbox on; applied during `intro*` it is also stored as `gs.custom.startClock` and `doTransitionToExplore` starts exploration at that time (instead of day 1 morning). `presetFromGs` keeps colliding base ids distinct (`key_id`).
+  - Tests: `ihenPresets.test.jsx` (logic, data integrity — table results must match item names, the D66 table covers all 21 values, 【装備】 skills are official names — and the UI with an in-memory `firebase/database` mock); `presetFile.test.jsx` (JSON round-trip of every built-in, rejection/sanitizing, profile-tab create/edit/duplicate/import/export, in-session import).
+- **Later**: C = code hooks for official ones (弾幕撮影 battle variant etc.). 完全憑依 (one player, two PCs) needs a dedicated PC-model change and is out of scope.
 
 ### Quest Resolution Types
 
@@ -267,11 +340,11 @@ When starting a 弾幕ごっこ quest battle, set `battle.scenePcUid` to `curren
 
 ### Map & Movement
 
-`getDistances(startSpotId)` in `App.jsx` runs BFS over the spot graph (defined in `gameData.js`) to compute shortest paths. Results gate which spots a PC can move to in one turn.
+`getDistances(startSpotId)` in `SessionApp.jsx` runs BFS over the spot graph (defined in `gameData.js`) to compute shortest paths. Results gate which spots a PC can move to in one turn.
 
 ### 能力スキル (Ability Skills) — ★全120能力 自動化完了
 
-Each character has a base ability `pc.as = { name, type, desc }` and a grown version `pc.growthAbility` (same shape). `type` is `アクション` / `サポート` / `オート`. Built onto the PC object in `App.jsx` (both `as` and `growthAbility` are carried). There are **120** abilities (60 chars × {as, growthAbility}); 2 share a name (「魔法を使う程度の能力」＝霧雨魔理沙[アクション] / 聖白蓮[オート]) — disambiguated by `type`.
+Each character has a base ability `pc.as = { name, type, desc }` and a grown version `pc.growthAbility` (same shape). `type` is `アクション` / `サポート` / `オート`. Built onto the PC object in `SessionApp.jsx` (both `as` and `growthAbility` are carried). There are **120** abilities (60 chars × {as, growthAbility}); 2 share a name (「魔法を使う程度の能力」＝霧雨魔理沙[アクション] / 聖白蓮[オート]) — disambiguated by `type`.
 
 **Architecture mirrors spell cards**: declarative data in [src/data/abilityEffects.js](src/data/abilityEffects.js) (`ABILITY_EFFECTS` map + `getAbilityEffect(ability)` which resolves `byType` collisions via `ability.type`), handlers in `activateAbility` (PCCard). Each entry: `{ freq, auto, kind, params, passive?, note? }`.
 - `freq`: usage limit `"day"` / `"session"` / `"scene"` / `null`. Tracked on `pc.abilityUse = { [name]: { day, session, sceneId } }`; `abilityUsedUp(ability)` gates the button, `withAbilityUse(base,name,freq)` records.
@@ -283,13 +356,13 @@ Each character has a base ability `pc.as = { name, type, desc }` and a grown ver
 
 **成長 (growth)**: `growthAbilityUnlocked` (ability→＋) and `growthSpellUnlocked` (additional spell card) are **separate** unlock flags, each also toggleable in PCCard's GM-edit panel. `activeAbility = growthAbilityUnlocked ? growthAbility : as`.
 
-The **session-end 成長 ceremony** (`GrowthCeremony` in `SessionView.jsx`, opened from `SessionEndView`'s 🌟 button): each player (GM: all PCs) chooses **成長** (both ok) — 弾幕スキル再修得 (pick from the session's appeared-character `ds` pool) + タグ獲得 (free text) — and **強化** (one of, each once-per-campaign) — 追加スペカ (`spell`) / 能力スキル＋ (`ability`) / 特別な絆 (`bond`, → `pc.specialBond = { target, targetUid, intimacy, word }`).
+The **session-end 成長 ceremony** (`GrowthCeremony` in `src/session/phases.jsx`, opened from `SessionEndView`'s 🌟 button): each player (GM: all PCs) chooses **成長** (both ok) — 弾幕スキル再修得 (pick from the session's appeared-character `ds` pool) + タグ獲得 (free text) — and **強化** (one of, each once-per-campaign) — 追加スペカ (`spell`) / 能力スキル＋ (`ability`) / 特別な絆 (`bond`, → `pc.specialBond = { target, targetUid, intimacy, word }`).
 
-**Grown-character instances**: growth is persisted **per instance** to **Firebase `grownChars/{uid}/{instanceId}`** = `{ charId, charName, ds, tags[], enhancementsUsed[], specialBond, createdAt, updatedAt }` (NOT one-per-character). The ceremony writes to `pc.grownInstanceId` if the player joined as a grown char (updates it) or a **new id** if they joined ungrown (so the same base character grown in different playthroughs becomes **separate** selectable instances). `Lobby` lists the player's `grownChars` as a "★成長済みキャラクター" section alongside the ungrown base grid; selecting one sets `player.grownInstanceId` + writes the grown fields (tags = base+acquired, ds override, growth flags from `enhancementsUsed`, specialBond). PC build in App.jsx carries `specialBond` + `grownInstanceId`. `ProfilePage` (ScenarioEditor) has a "成長キャラ" tab to view/delete instances. The 特別な絆 "feeling word" is free-text (`specialBond.word`, default 敬意) → 《target への word》. **Session end** (`SessionEndView` delete-room button) returns clients to the lobby: App's `roomRef` listener clears `roomCode` + the `?room` URL param when the room no longer exists.
+**Grown-character instances**: growth is persisted **per instance** to **Firebase `grownChars/{uid}/{instanceId}`** = `{ charId, charName, ds, tags[], enhancementsUsed[], specialBond, createdAt, updatedAt }` (NOT one-per-character). Only the owner may write `grownChars/{uid}` (rules), so when the **GM applies growth for another PC** the record is stored in gs as `pc.pendingGrowthRecord = { instanceId, record }` and the owner's `SessionEndView` effect persists it, then clears the field (the GM's end-session confirm warns while any are pending). The once-per-campaign check reads `pc.grownBase = { tags, enhancementsUsed, createdAt }` (snapshotted by Lobby at join and updated on apply) because the GM cannot read others' `grownChars`; `pc.growthApplied` prevents re-applying after reopening the modal. The ceremony writes to `pc.grownInstanceId` if the player joined as a grown char (updates it) or a **new id** if they joined ungrown (so the same base character grown in different playthroughs becomes **separate** selectable instances). `Lobby` lists the player's `grownChars` as a "★成長済みキャラクター" section alongside the ungrown base grid; selecting one sets `player.grownInstanceId` + writes the grown fields (tags = base+acquired, ds override, growth flags from `enhancementsUsed`, specialBond). PC build in SessionApp.jsx carries `specialBond` + `grownInstanceId`. `ProfilePage` (ScenarioEditor) has a "成長キャラ" tab to view/delete instances. The 特別な絆 "feeling word" is free-text (`specialBond.word`, default 敬意) → 《target への word》. **Session end** (`SessionEndView` delete-room button) exports the log, removes `roomSecrets/{code}` and `rooms/{code}`, which returns clients to the lobby (App's `phase` listener clears `roomCode` + the `?room` URL param when the room no longer exists). Before that, the GM sees a per-PL status panel (成長 ✓/⏳保存待ち, 実績 ✓/未記録 — `pc.growthApplied`, `pc.pendingGrowthRecord`, `pc.achRecorded` set when the player records achievements) and the confirm dialog warns about pending growth records and unrecorded achievements.
 
 **親密度 (intimacy) live mechanics** (`pc.specialBond = { target, targetUid, intimacy, word, used }`): module-level `gainIntimacy(pcs, targetUid, amount, reason)` raises intimacy (1→10) of every holder whose `specialBond.targetUid` is that PC, and refreshes the cheer slot (`used=false`) each increase. Triggers: target's スペシャル (+1, in `explore_result` special reward + `confirmQuestRoll`) and 交流 (+1D6, in `proceed` when a non-self bond is newly acquired). The special bond **cheers** like a 《target への絆》 via `SPECIAL_BOND_CHEER` pseudo-label woven into `getSpecialBondCheer`→`renderCheerSection` (explore/quest) and `renderEvadeCheer` (danmaku); `cheerConsumePatch`/`applyCheer`/`applyCheerQuest`/evade-apply consume `specialBond.used` and roll **2 dice at intimacy 10** (1 otherwise).
 
-**手下 (minion) subsystem**: `gs.minions = [{ id, ownerUid, ownerName, currentSpot }]`. `spawn_minion` adds one (人形/偶像 at spot, 式神 at base + SC cost). Rendered as a small 「手」 token layer in `MapView` (App.jsx). PCCard shows an owner-only panel to move (spot picker) / log an action / remove each minion. Minion-acts-in-scene re-processing is GM-run.
+**手下 (minion) subsystem**: `gs.minions = [{ id, ownerUid, ownerName, currentSpot }]`. `spawn_minion` adds one (人形/偶像 at spot, 式神 at base + SC cost). Rendered as a small 「手」 token layer in `MapView` (SessionApp.jsx). PCCard shows an owner-only panel to move (spot picker) / log an action / remove each minion. Minion-acts-in-scene re-processing is GM-run.
 
 **★ All 120/120 automated (累計~59 commits)**. Notable infra built: `gs.unluckyPhase` (紫苑 phase-wide fumble), `gs.reiBoostTargets`→`doReiryoku` (隠岐奈), `gs.itemSwapTargets` (千亦), `gs.eternityNight`→`doAdvanceCycle` night re-run + `shortenLimit` (輝夜), `consume_others_item` reusing `ITEM_DATA.use` (女苑), newspaper `windReroll` in RightPanel (文), `pc.untargetable` toggle excluded from target pickers (ぬえ), `pc.offMap`→random placement at `startScene` (菫子), `immortalCost` (妹紅), minion scene (`currentScene.minionId`+`sceneSpot`), and **table-roll reroll woven into `animateDice`** (霊夢 空を飛ぶ): a 空を飛ぶ holder rolling アイテム/変調/ペナルティ/ハプニング/手がかりイベント表 gets a reroll prompt (`pendingReroll` state + `pendingRerollCb` ref in `SessionApp`; cb deferred until 確定; `pc.soraFlewDay` = once/day). Per-entry `note`s flag the only residual GM bits (＋-only "行為判定以外" extra rolls beyond the 5 tables). All effect-less/contextual `note`-only entries are still real automations living in ScenePanel/BattleView/RightPanel.
 
@@ -340,6 +413,9 @@ Toggled by GM in Lobby; stored at `rooms/{roomCode}/config`:
 | `useClueEvents` | Enables clue event table when no quest slots are available |
 | `useRandomPlacement` | Initial danmaku positions are D6-random instead of fixed at cell 5 |
 | `useLastResort` | 喰らいボム: spend 1 SC after failed dodge to roll 2 extra dice |
+| `usePlotPlacement` | プロット配置: initial danmaku positions are chosen secretly and revealed simultaneously |
+
+**Plot placement (commit–reveal)**: `PlotPlacementPanel` (battle.jsx). Each chooser writes `{ cell, nonce }` to `roomSecrets/{code}/plot/{ownUid}/{entityId}` (owner-only read; the GM owns NPC entries) and publishes only `gs.battle.plotCommits[entityId] = SHA-256("entityId:cell:nonce")`. When all committed the GM sets `phase: "plot_reveal"`; every owner's client copies its secrets into `gs.battle.plotRevealed` and deletes its secret node; the GM client verifies each hash against the commit, logs `⚠` on mismatch, and starts `round_start`. A GM fallback button places anyone who never revealed (disconnected) at random. BattleView needs `room` (config) and `roomCode` props.
 
 ### 実績 (Achievements)
 
@@ -408,7 +484,7 @@ New entries are prepended: `[newMsg, ...p.log]`.
 `sfx` exports browser-synthesized methods using Web Audio API — no external files. Methods include `bullet`, `spell`, `phase(name)`, `diceRoll`, `diceResult(maxDie)`, `hit`, `victory`, `defeat`, `questSolve`, `cluePlaced`, `sceneStart`, `sceneEnd`, `skillActivate`, `itemUse`, `cycle(idx)`. `_enabled` is persisted in `localStorage["sfxMuted"]` and toggled via `sfx.toggle()`.
 
 **Scene / skill / item sfx routing**:
-- **Scene start/end**: fired in `SessionApp`'s scene-detection `useEffect` (App.jsx) — `sfx.sceneStart()` when `currentScene.pcUid` goes null→value, `sfx.sceneEnd()` when it goes value→null. Battle-active guard suppresses both.
+- **Scene start/end**: fired in `SessionApp`'s scene-detection `useEffect` (SessionApp.jsx) — `sfx.sceneStart()` when `currentScene.pcUid` goes null→value, `sfx.sceneEnd()` when it goes value→null. Battle-active guard suppresses both.
 - **Once-per-session skill activation**: `PCCard` has a `useEffect` watching `pc[PS_ONCE_FLAG]`; fires `sfx.skillActivate()` on the false→true transition, capturing all once-skills (カリスマ/不夜城/ご執心/用意周到/直感) in one place regardless of which button triggered them.
 - **Item use**: `sfx.itemUse()` fired at the top of `PCCard`'s `useItem`.
 
@@ -426,11 +502,11 @@ Background music is **GM-supplied URLs, played locally per client** (not synced 
 
 ### Font size (`src/fontScale.js`)
 
-Because font sizes are **hardcoded px in inline styles** (~283 sites at 8–9px), readability is handled with a single global **`zoom` on `document.body`** rather than touching each site. `fontScale` is a 3-level setting (`1.0`/`1.15`/`1.3` = 標準/大/特大) persisted in `localStorage["fontScale"]`; **default `1.0` sets no zoom = pixel-identical to before** (opt-in). `fontScale.init()` (once in `App`) applies it; `fontScale.cycle()` advances the level. Toggle UI is the **`A` button in the `RightPanel` tab bar** (the glyph itself grows with the level as a cue). `zoom` reflows (so it scales the whole UI incl. portaled modals, which attach to `body`); at >1.0 the viewport-locked `height:100vh` roots exceed the viewport and the page scrolls. Mobile pinch-zoom is also available (the viewport meta does not set `user-scalable=no`).
+Because font sizes are **hardcoded px in inline styles** (~283 sites at 8–9px), readability is handled with a single global **`zoom` on `document.body`** rather than touching each site. `fontScale` is a 3-level setting (`1.0`/`1.15`/`1.3` = 標準/大/特大) persisted in `localStorage["fontScale"]`; **default `1.0` sets no zoom = pixel-identical to before** (opt-in). `fontScale.init()` (once in `App`) applies it; `fontScale.cycle()` advances the level. Toggle UI is the **`A` button in the `RightPanel` tab bar** (the glyph itself grows with the level as a cue). `zoom` reflows (so it scales the whole UI incl. portaled modals, which attach to `body`); at >1.0 the viewport-locked `height:100vh` roots exceed the viewport and the page scrolls. Mobile pinch-zoom is also available (the viewport meta does not set `user-scalable=no`). **GM panels on phones**: `fontScale.apply()` also sets `<html data-font-scale="0|1|2">` and injects `#touch-ui-style`: under `(pointer: coarse), (max-width: 820px)` every `[data-touch-zoom]` element gets `zoom: 1.2` (1.08 / 1 when the body zoom is already 大 / 特大; nested ones stay 1) and, on touch, buttons/selects/inputs get `min-height: 26px`. Marked roots: `GmToolsPanel`, `CustomRulesEditor`, `GmFieldEditor`, `GmPcEditor` — add the attribute to new dense GM-only panels (not to `position: fixed` overlays, whose width would grow past the viewport).
 
 ### Cinematic overlay pattern
 
-`SessionApp` (in `App.jsx`) detects game events and shows transient full-screen overlays. The pattern is consistent:
+`SessionApp` (in `SessionApp.jsx`) detects game events and shows transient full-screen overlays. The pattern is consistent:
 
 ```javascript
 const [flash, setFlash] = useState(null);
@@ -455,14 +531,18 @@ Active overlay states in `SessionApp`: `cycleOverlay`, `questSolveFlash`, `clueF
 
 ### Animation keyframes location
 
-- **Global keyframes** (used across phases): defined in `App.jsx`'s top-level `<style>` block — `logSlideIn`, `modalIn`, `backdropIn`, `resFlashUp/Down`, `questSolveAnim`, `clueBannerAnim`, `cycleOverlayAnim`, `badStatusIn`, `battleFadeIn`, `spotTipIn`, `sceneStartAnim`, `phaseFlashAnim`, `phaseStripe`.
-- **Component-local keyframes**: defined in inline `<style>` blocks inside the component using them (e.g. `RightPanel` defines `scenePanelIn`, `diceIn`, `diceResultIn`; `BattleView` defines `spellFlashIn`, `phaseBannerAnim`, `brRing`/`brGlow`/`brCardIn` for the battle result cinematic).
+- **Global keyframes** (used across phases): defined in `SessionApp.jsx`'s top-level `<style>` block — `logSlideIn`, `modalIn`, `backdropIn`, `resFlashUp/Down`, `questSolveAnim`, `clueBannerAnim`, `cycleOverlayAnim`, `badStatusIn`, `battleFadeIn`, `spotTipIn`, `sceneStartAnim`, `phaseFlashAnim`, `phaseStripe`.
+- **Component-local keyframes**: defined in inline `<style>` blocks inside the component using them (e.g. `RightPanel` defines `scenePanelIn`, `diceIn`, `diceResultIn`; `BattleView` defines `phaseBannerAnim`, `brRing`/`brGlow`/`brCardIn` for the battle result cinematic).
 - **MapView animations**: `mySpotGlow`, `myPortraitGlow`, `pulseRing` live in `MapView`'s local style.
 
 ### MapView PC layer
 
 PCs on the map are rendered in a **separate absolute-positioned layer** after the spot list, not as children of spot divs. Their `left`/`top` use CSS `transition: left 0.52s cubic-bezier(0.4,0,0.2,1), top 0.52s ...` with a stable `key={pc.uid}`, so React reuses the DOM node and the browser animates the move when `pc.currentSpot` changes. Multiple PCs on the same spot are horizontally offset via `(idx - (N-1)/2) * 26px`.
 
+### Battle effects (被弾・カットイン・回避)
+
+Detection is pure in [src/battleFx.js](src/battleFx.js): `fxSnapshot(gs)` summarizes the battle (participants' 残り人数/グレイズ, positions, `spellUsedBy`, phase, isFinal) and `detectFx(prev, cur)` returns `spell` (new `spellUsedBy` entry), `hit` (残り人数 decreased; `cell` = position before, `ko` at 0), `dodge` (position changed while the previous phase matched `_evade_(intro|move|result)` — hit-recovery moves don't count) and `graze` (グレイズ increased; `cell` only during evasion). Nothing fires on join or across battle start/end. `useBattleFx(gs)` in `src/session/battleFx.jsx` runs it on every client locally (**no gs writes**, like the cinematic overlays) and returns `{ cutin, dismissCutin, hit, shake, gridFx }`; `BattleView` renders `HitOverlay` + `SpellCutin` at its root (outside the shaken content div, whose `animation` is `shakeAnimation(shake)` — two identical keyframe names alternate so the shake restarts) and passes `fx={fx.gridFx[id]}` to each `BattleGrid` (hit ring+shards on the cell, the lost 残り人数 dot breaking, dodge afterimage + dash-in, graze sparks + 「GRAZE +N」). The cut-in (replaces the old small `spellFlash` box) uses the attacker's 描写モード立ち絵 matched by name, else `customPortrait`, else the sprite; PC enters from the left (blue), enemy from the right (red), final battle in gold; tap to skip. Sounds: `sfx.hit` / `sfx.ko` / `sfx.graze(n)` / `sfx.cutin` + `sfx.spell`. **Reduced motion**: the global CSS would jump animations to their (transparent) end state, so with `motion.reduced` the hook emits no shake/grid effects and marks hit/cut-in `still` (static, `pointer-events: none` cut-in). Tests: `battleFx.test.jsx`.
+
 ### Battle background particles
 
-`BattleParticleCanvas` (module-level in `SessionView.jsx`) is a 48-bullet canvas particle system rendered inside `BattleView`'s main return at `zIndex: 0`. Battle content is wrapped in a sibling div with `zIndex: 1` so it stacks above. The canvas uses `requestAnimationFrame` + `ResizeObserver`; cleanup cancels both on unmount.
+`BattleParticleCanvas` (module-level in `src/session/battle.jsx`) is a 48-bullet canvas particle system rendered inside `BattleView`'s main return at `zIndex: 0`. Battle content is wrapped in a sibling div with `zIndex: 1` so it stacks above. The canvas uses `requestAnimationFrame` + `ResizeObserver`; cleanup cancels both on unmount.

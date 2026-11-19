@@ -612,7 +612,7 @@ describe('applyStep: 選択ステップ → needsChoice', () => {
 describe('applyRandomResult: 通常ランダム', () => {
   it('ダイス結果のセルに1ずつ追加する', () => {
     const { defGrid, placedCells } = applyRandomResult(
-      emptyGrid(), [1, 3, 3, 6]
+      emptyGrid(), emptyGrid(), [1, 3, 3, 6]
     );
     expect(defGrid[0]).toBe(1);  // セル1: 1回
     expect(defGrid[2]).toBe(2);  // セル3: 2回
@@ -621,13 +621,13 @@ describe('applyRandomResult: 通常ランダム', () => {
   });
 
   it('既存の弾幕に加算される', () => {
-    const { defGrid } = applyRandomResult([2, 0, 0, 0, 0, 0], [1, 1]);
+    const { defGrid } = applyRandomResult([2, 0, 0, 0, 0, 0], emptyGrid(), [1, 1]);
     expect(defGrid[0]).toBe(4); // 既存2 + 2回
   });
 
   it('afterList を適用する', () => {
     const after = [{ type: "vertical_of_placed", count: 1 }];
-    const { defGrid } = applyRandomResult(emptyGrid(), [2], { afterList: after });
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [2], { afterList: after });
     expect(defGrid[1]).toBe(1); // セル2: ランダム配置
     expect(defGrid[4]).toBe(1); // セル5: vertical of 2
   });
@@ -636,7 +636,7 @@ describe('applyRandomResult: 通常ランダム', () => {
 describe('applyRandomResult: exclude_fill', () => {
   it('出た目のセル以外に fillCount ずつ配置する', () => {
     // ダイス=[2,5] → 2と5以外に配置: [1,3,4,6]
-    const { defGrid } = applyRandomResult(emptyGrid(), [2, 5], {
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [2, 5], {
       specialType: "exclude_fill", fillCount: 1,
     });
     expect(defGrid[0]).toBe(1); // セル1
@@ -651,7 +651,7 @@ describe('applyRandomResult: exclude_fill', () => {
 describe('applyRandomResult: clear_then_double', () => {
   it('各ダイス目のセルを2個に置き直す', () => {
     const startGrid = [3, 0, 0, 0, 5, 0];
-    const { defGrid } = applyRandomResult(startGrid, [1, 5], {
+    const { defGrid } = applyRandomResult(startGrid, emptyGrid(), [1, 5], {
       specialType: "clear_then_double",
     });
     expect(defGrid[0]).toBe(2); // セル1: 3→2
@@ -660,13 +660,13 @@ describe('applyRandomResult: clear_then_double', () => {
 });
 
 describe('applyRandomResult: clear_neighbors', () => {
-  it('各ダイス目のセルを除去→その全隣接に+1', () => {
-    // ダイス=[2]: セル2除去→隣接(1,3,5)に+1
+  it('各ダイス目のセルから1つ除去→その上下左右隣接に+1', () => {
+    // ダイス=[2]: セル2から1つ除去(3→2)→隣接(1,3,5)に+1（カード文「弾幕を1つずつ取り除き」）
     const startGrid = [0, 3, 0, 0, 0, 0];
-    const { defGrid } = applyRandomResult(startGrid, [2], {
+    const { defGrid } = applyRandomResult(startGrid, emptyGrid(), [2], {
       specialType: "clear_neighbors",
     });
-    expect(defGrid[1]).toBe(0); // セル2: 除去
+    expect(defGrid[1]).toBe(2); // セル2: 3→2
     expect(defGrid[0]).toBe(1); // セル1: +1
     expect(defGrid[2]).toBe(1); // セル3: +1
     expect(defGrid[4]).toBe(1); // セル5: +1
@@ -778,7 +778,7 @@ describe('統合テスト: 視符「ナズーリンペンデュラム」 (random
     const atkGrid = [2, 0, 2, 0, 0, 0];
     const after = [{ type: "remove_attacker_mirror", count: 1 }];
     const { defGrid: afterDef, placedCells } = applyRandomResult(
-      emptyGrid(), [1, 1, 3], { afterList: [] }
+      emptyGrid(), emptyGrid(), [1, 1, 3], { afterList: [] }
     );
     // after-effect は applyAfterEffects で別途適用
     const { atkGrid: finalAtk } = applyAfterEffects(after, afterDef, atkGrid, placedCells);
@@ -977,7 +977,7 @@ describe('統合テスト: 狂符「マインドストーム」 (random_2d_exclu
       { type: "random_2d_exclude_then_fill", count: 1 },
       emptyGrid(), emptyGrid(), 2, 5
     );
-    const { defGrid } = applyRandomResult(emptyGrid(), [1, 4], {
+    const { defGrid } = applyRandomResult(emptyGrid(), emptyGrid(), [1, 4], {
       specialType: hint.specialType, fillCount: hint.fillCount,
     });
     expect(defGrid[0]).toBe(0); // セル1: 除外
@@ -1005,17 +1005,11 @@ describe('統合テスト: 邪符「ナズーリン・ダウザー」 (clear_ene
 });
 
 describe('統合テスト: 「妖怪弾幕バリア」 (random_3d_clear_then_all_neighbors + applyRandomResult)', () => {
-  it('ダイス=[1,3,5] → 各セル除去 → 隣接ユニークセットに+1', () => {
-    // unique=[1,3,5]除去 → neighbors=union([2,4],[2,6],[2,4,6])→unique=[2,4,6]→各+1
+  it('ダイス=[1,3,5] → 各セルから1つ除去 → 各隣接に+1（重複配置あり）', () => {
+    // 1: 2→1, 隣接[2,4]+1 / 3: 3→2, 隣接[2,6]+1 / 5: 1→0, 隣接[2,4,6]+1
     const startGrid = [2, 1, 3, 0, 1, 0];
-    const { defGrid } = applyRandomResult(startGrid, [1, 3, 5], { specialType: "clear_neighbors" });
-    expect(defGrid[0]).toBe(0); // セル1: 除去
-    expect(defGrid[2]).toBe(0); // セル3: 除去
-    expect(defGrid[4]).toBe(0); // セル5: 除去
-    // unique neighbor set → 各+1（重複は1回のみ）
-    expect(defGrid[1]).toBe(2); // セル2: 既存1+1
-    expect(defGrid[3]).toBe(1); // セル4: 既存0+1
-    expect(defGrid[5]).toBe(1); // セル6: 既存0+1
+    const { defGrid } = applyRandomResult(startGrid, emptyGrid(), [1, 3, 5], { specialType: "clear_neighbors" });
+    expect(defGrid).toEqual([1, 4, 2, 2, 0, 2]);
   });
 });
 

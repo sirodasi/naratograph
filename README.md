@@ -1,16 +1,38 @@
-# React + Vite
+# 幻想ナラトグラフ セッション支援ツール
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+東方Project 二次創作 TRPG「幻想ナラトグラフ」のオンラインセッションを支援する Web アプリ。
+GM と PL が同じ部屋に入り、探索（マップ移動・手がかり・クエスト）から弾幕ごっこ（戦闘）、
+終幕・成長処理までをリアルタイムに共有しながら進行できる。
 
-Currently, two official plugins are available:
+- React 19 + Vite 8
+- Firebase Realtime Database（状態の唯一の正）＋ Google 認証
+- スタイルはインライン、UI 文言・コメントは日本語
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## セットアップ
 
-## React Compiler
+```bash
+npm install
+npm run dev        # 開発サーバー
+npm run build      # 本番ビルド
+npm run lint       # ESLint
+npm run test:run   # Vitest（単発実行）
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Firebase の接続先は `src/firebase.js`。データベースのセキュリティルールは `database.rules.json` にあり、
+**サーバーへの反映は手動**（`firebase deploy --only database`）。GM 権限の付与方法や確認手順は
+[docs/firebase-security-rules.md](docs/firebase-security-rules.md) を参照。
 
-## Expanding the ESLint configuration
+## ディレクトリ
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| パス | 内容 |
+|---|---|
+| `src/App.jsx` | ルート・部屋の購読・フェイズ遷移・マップ・`upd()`（gs 更新） |
+| `src/gsSync.js` | gs 同期の純粋ロジック（正規化・ログ上限・シナリオ秘匿） |
+| `src/session/` | セッション画面（戦闘・PC カード・シーン・サイドバー・終了処理など） |
+| `src/Lobby.jsx` | ログイン・部屋作成/参加・キャラ選択 |
+| `src/ScenarioEditor.jsx` | シナリオ編集・プロフィール |
+| `src/data/` | キャラクター・スポット・スペルカード効果などのデータ |
+| `src/scenarios/` | 収録シナリオと Hard/Lunatic 用フック |
+| `src/__tests__/` | Vitest のテスト（Firebase はモック） |
+
+開発時の設計メモ・規約は [CLAUDE.md](CLAUDE.md) にまとめている。
